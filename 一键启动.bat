@@ -1,41 +1,41 @@
-ï»¿chcp 65001 >nul
+chcp 936 >nul
 @echo off
-title RuoBai å¯åŠ¨
+title RuoBai Æô¶¯
 cd /d "%~dp0"
 
 echo.
 echo ====================================
-echo   RuoBai å¯åŠ¨ä¸­...
+echo   RuoBai Æô¶¯ÖÐ...
 echo ====================================
 echo.
 
-echo [1/3] å¯åŠ¨æ•°æ®åº“
+echo [1/3] Æô¶¯Êý¾Ý¿â
 tasklist /FI "IMAGENAME eq mysqld.exe" 2>NUL | find /I "mysqld.exe" >NUL
 if errorlevel 1 (
     start "MariaDB" /MIN "D:\Program Files (x86)\Mysql\bin\mysqld.exe" --defaults-file="D:\Program Files (x86)\Mysql\data\my.ini"
     timeout /t 5 /nobreak >nul
-    echo   OK æ•°æ®åº“å·²å¯åŠ¨ ^(æœ€å°åŒ–åœ¨ä»»åŠ¡æ ^)
+    echo   OK Êý¾Ý¿âÒÑÆô¶¯ ^(×îÐ¡»¯ÔÚÈÎÎñÀ¸^)
 ) else (
-    echo   OK æ•°æ®åº“å·²åœ¨è¿è¡Œ
+    echo   OK Êý¾Ý¿âÒÑÔÚÔËÐÐ
 )
 
-echo [2/3] å¯åŠ¨ç½‘ç«™
+echo [2/3] Æô¶¯ÍøÕ¾
 cd /d "%~dp0server"
 start "RuoBai Site" /MIN cmd /k "node server.js"
 timeout /t 3 /nobreak >nul
-echo   OK ç½‘ç«™å·²å¯åŠ¨ ^(æœ€å°åŒ–åœ¨ä»»åŠ¡æ ^)
+echo   OK ÍøÕ¾ÒÑÆô¶¯ ^(×îÐ¡»¯ÔÚÈÎÎñÀ¸^)
 
-echo [3/3] æ‰“å¼€æµè§ˆå™¨
+echo [3/3] ´ò¿ªä¯ÀÀÆ÷
 start "" "http://127.0.0.1:3000/"
-echo   OK æµè§ˆå™¨å·²æ‰“å¼€
+echo   OK ä¯ÀÀÆ÷ÒÑ´ò¿ª
 
 echo.
 echo ====================================
-echo   ç½‘å€: http://127.0.0.1:3000/
-echo   å…³é—­: åŒå‡» ä¸€é”®å…³é—­.bat
+echo   ÍøÖ·: http://127.0.0.1:3000/
+echo   ¹Ø±Õ: Ë«»÷ Ò»¼ü¹Ø±Õ.bat
 echo ====================================
 echo.
-echo è¿™ä¸ªçª—å£ 3 ç§’åŽè‡ªåŠ¨å…³é—­
-echo ï¼ˆæ•°æ®åº“å’Œç½‘ç«™ç»§ç»­åœ¨åŽå°è¿è¡Œï¼‰
+echo Õâ¸ö´°¿Ú 3 Ãëºó×Ô¶¯¹Ø±Õ
+echo £¨Êý¾Ý¿âºÍÍøÕ¾¼ÌÐøÔÚºóÌ¨ÔËÐÐ£©
 timeout /t 3 >nul
 exit

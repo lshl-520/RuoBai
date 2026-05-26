@@ -1,37 +1,37 @@
-ï»¿chcp 65001 >nul
+chcp 936 >nul
 @echo off
-title RuoBai å…³é—­
+title RuoBai ¹Ø±Õ
 
 echo.
 echo ====================================
-echo   RuoBai å…³é—­ä¸­...
+echo   RuoBai ¹Ø±ÕÖÐ...
 echo ====================================
 echo.
 
-echo [1/3] åœæ­¢ç½‘ç«™
+echo [1/3] Í£Ö¹ÍøÕ¾
 taskkill /F /IM node.exe >nul 2>nul
 if errorlevel 1 (
-    echo   - ç½‘ç«™æ²¡åœ¨è¿è¡Œ
+    echo   - ÍøÕ¾Ã»ÔÚÔËÐÐ
 ) else (
-    echo   OK ç½‘ç«™å·²åœæ­¢
+    echo   OK ÍøÕ¾ÒÑÍ£Ö¹
 )
 
-echo [2/3] å…³é—­åŽå°å‘½ä»¤è¡Œçª—å£
+echo [2/3] ¹Ø±ÕºóÌ¨ÃüÁîÐÐ´°¿Ú
 taskkill /F /FI "WINDOWTITLE eq RuoBai Site*" >nul 2>nul
 taskkill /F /FI "WINDOWTITLE eq MariaDB*" >nul 2>nul
-echo   OK åŽå°çª—å£å·²å…³é—­
+echo   OK ºóÌ¨´°¿ÚÒÑ¹Ø±Õ
 
-echo [3/3] åœæ­¢æ•°æ®åº“
+echo [3/3] Í£Ö¹Êý¾Ý¿â
 taskkill /F /IM mysqld.exe >nul 2>nul
 if errorlevel 1 (
-    echo   - æ•°æ®åº“æ²¡åœ¨è¿è¡Œ
+    echo   - Êý¾Ý¿âÃ»ÔÚÔËÐÐ
 ) else (
-    echo   OK æ•°æ®åº“å·²åœæ­¢
+    echo   OK Êý¾Ý¿âÒÑÍ£Ö¹
 )
 
 echo.
 echo ====================================
-echo   å…¨éƒ¨å…³é—­ï¼Œå¯ä»¥æ”¾å¿ƒå…³ç”µè„‘äº†
+echo   È«²¿¹Ø±Õ£¬¿ÉÒÔ·ÅÐÄ¹ØµçÄÔÁË
 echo ====================================
 echo.
 timeout /t 2 >nul

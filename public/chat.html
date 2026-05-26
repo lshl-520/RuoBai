@@ -135,6 +135,27 @@
       gap: 8px;
     }
     .chat-name { font-family: var(--serif); font-size: 15px; font-weight: 500; }
+    .chat-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .chat-tag {
+      font-size: 10px;
+      color: var(--pink-400);
+      background: rgba(244, 192, 209, .3);
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-weight: 500;
+    }
+    .chat-desc {
+      font-size: 12px;
+      color: var(--subtle);
+      opacity: .8;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .intimacy {
       display: flex;
       align-items: center;
@@ -297,7 +318,11 @@
             <a href="chat-room.html?id=${char.id}&name=${encodeURIComponent(char.name)}" class="chat-card${isFeatured}" data-reveal style="--delay:${delay}ms">
               <div class="avatar">${avatarHtml}</div>
               <div class="chat-info">
-                <span class="chat-name">${escapeHtml(char.name)}</span>
+                <div class="chat-top">
+                  <span class="chat-name">${escapeHtml(char.name)}</span>
+                  ${char.tag ? `<span class="chat-tag">${escapeHtml(char.tag)}</span>` : ''}
+                </div>
+                ${char.persona ? `<div class="chat-desc">${escapeHtml(String(char.persona).slice(0, 32))}${String(char.persona).length > 32 ? '…' : ''}</div>` : ''}
                 <div class="intimacy" aria-label="亲密度 ${intimacy}">
                   <div class="intimacy-bar">
                     <div class="intimacy-fill" style="width:${intimacy}%"></div>

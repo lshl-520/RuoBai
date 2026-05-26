@@ -1222,7 +1222,7 @@
       <div class="panel-head">
         <div class="panel-heading">
           <div class="panel-title"><span class="emoji">🔑</span><span>我连的供应商</span></div>
-          <div class="panel-subtitle">同一个 key 只加一次。后面聊天、看图、画图、说话、通话都从这里往下配。</div>
+          <div class="panel-subtitle">填一次就行。聊天、看图、画图、说话都从这里调用。</div>
         </div>
         <button class="add-supplier-btn" type="button"><span class="plus">＋</span><span>添加新供应商</span></button>
       </div>
@@ -1359,7 +1359,7 @@
         <div id="supplierConfigStep">
           <div class="form-field">
             <label for="configName">给它起个名字</label>
-            <input type="text" id="configName" placeholder="比如：千问官方、gpt5x 中转" required>
+            <input type="text" id="configName" placeholder="比如：千问、我的中转" required>
           </div>
 
           <div class="form-field" id="apiBaseReadonlyField" hidden>
@@ -1370,8 +1370,8 @@
 
           <div class="form-field" id="apiBaseEditableField">
             <label for="apiBase">接口地址</label>
-            <input type="url" id="apiBase" placeholder="https://ai98pro.xyz" required>
-            <div class="form-help">一般填到根域名就行，系统会自己去试模型列表和聊天接口。</div>
+            <input type="url" id="apiBase" placeholder="https://你的接口地址" required>
+            <div class="form-help">填你自己的接口地址。一般填到根域名就行,系统会自己去试模型列表。</div>
           </div>
 
           <div class="form-field">
@@ -2000,7 +2000,7 @@
       { id: 'volcengine', label: '火山豆包', apiBase: 'https://ark.cn-beijing.volces.com/api/v3', icon: '🌋', note: '国产，活人感 +++', isCustom: false },
       { id: 'grok', label: 'Grok 官方', apiBase: 'https://api.x.ai/v1', icon: '⚡', note: '体验好，要美区 key', isCustom: false },
       { id: 'openai', label: 'OpenAI 官方', apiBase: 'https://api.openai.com/v1', icon: '✨', note: '贵，被墙', isCustom: false },
-      { id: 'custom', label: '自定义 / 中转', apiBase: '', icon: '🛠', note: 'gpt5x 中转、Grok2API 等', isCustom: true }
+      { id: 'custom', label: '自定义 / 中转', apiBase: '', icon: '🛠', note: '填你自己的接口地址', isCustom: true }
     ];
   };
 
