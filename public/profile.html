@@ -1,0 +1,3178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>我的 · 若白 RuoBai</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --pink-50:  #FBEAF0;
+      --pink-100: #F4C0D1;
+      --pink-200: #ED93B1;
+      --pink-400: #D4537E;
+      --pink-500: #B73D67;
+      --pink-900: #4B1528;
+      --cream:    #fffaf6;
+      --bg-page:  #fdf7f6;
+      --muted:    #993556;
+      --subtle:   #b8607e;
+      --line:     rgba(244, 192, 209, .55);
+      --glass:    rgba(255, 255, 255, .72);
+      --shadow-float: 0 18px 36px rgba(212, 83, 126, .14);
+      --serif: 'Noto Serif SC', "PingFang SC", "Microsoft YaHei", serif;
+      --sans:  'Sora', "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: var(--sans);
+      color: var(--pink-900);
+      background:
+        radial-gradient(circle at 100% 0%, rgba(212, 83, 126, .08), transparent 32%),
+        radial-gradient(circle at 0% 100%, rgba(244, 192, 209, .12), transparent 38%),
+        var(--bg-page);
+      background-attachment: fixed;
+      -webkit-font-smoothing: antialiased;
+      display: flex; flex-direction: column;
+    }
+    .app-body { flex: 1; overflow-y: auto; padding: 0 16px 100px; -webkit-overflow-scrolling: touch; }
+
+    .page-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 24px 0 16px;
+    }
+    .page-header h1 { font-family: var(--serif); font-size: 24px; font-weight: 500; }
+
+    /* Profile hero */
+    .profile-hero {
+      display: flex; align-items: center; gap: 14px;
+      background: var(--glass); backdrop-filter: blur(16px);
+      border: 1px solid var(--line); border-radius: 20px;
+      padding: 18px; margin-bottom: 16px;
+      transition: transform .24s, box-shadow .24s;
+    }
+    .profile-hero:hover { transform: translateY(-2px); box-shadow: var(--shadow-float); }
+    .avatar-lg {
+      width: 56px; height: 56px; border-radius: 18px;
+      background: linear-gradient(135deg, var(--pink-100), var(--pink-200));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; font-weight: 700; color: #fff; flex-shrink: 0;
+    }
+    .profile-hero .nm { font-family: var(--serif); font-size: 18px; font-weight: 500; margin-bottom: 4px; }
+    .profile-hero .id { font-size: 12px; color: var(--subtle); margin-bottom: 6px; }
+    .profile-hero .badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 10px; border-radius: 999px;
+      background: var(--pink-50); color: var(--pink-400);
+      font-size: 11px; font-weight: 500;
+    }
+
+    /* Stats row */
+    .stats-row {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+      margin-bottom: 16px;
+    }
+    .stat-card {
+      background: var(--glass); backdrop-filter: blur(16px);
+      border: 1px solid var(--line); border-radius: 16px;
+      padding: 14px 10px; text-align: center;
+      transition: transform .24s, box-shadow .24s;
+    }
+    .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-float); }
+    .stat-card .n { font-family: var(--serif); font-size: 22px; font-weight: 600; color: var(--pink-400); margin-bottom: 4px; }
+    .stat-card .l { font-size: 11px; color: var(--subtle); }
+    .add-supplier-btn {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 36px;
+      padding: 0 14px;
+      border: 1px solid rgba(244, 192, 209, .72);
+      border-radius: 999px;
+      background: linear-gradient(180deg, rgba(255,255,255,.96), rgba(251, 234, 240, .88));
+      color: var(--pink-400);
+      font-size: 12px;
+      font-weight: 500;
+      font-family: var(--sans);
+      box-shadow: 0 8px 18px rgba(212, 83, 126, .08);
+      cursor: pointer;
+      transition: transform .2s, box-shadow .2s, border-color .2s, background .2s;
+    }
+    .add-supplier-btn:hover {
+      transform: translateY(-1px);
+      border-color: rgba(237, 147, 177, .9);
+      background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(251, 234, 240, .98));
+      box-shadow: 0 12px 22px rgba(212, 83, 126, .12);
+    }
+    .add-supplier-btn .plus {
+      font-size: 15px;
+      line-height: 1;
+      font-weight: 600;
+    }
+
+    /* Settings blocks */
+    .settings-block {
+      background: var(--glass); backdrop-filter: blur(16px);
+      border: 1px solid var(--line); border-radius: 18px;
+      padding: 14px; margin-bottom: 14px;
+    }
+    .block-title {
+      font-size: 11px; font-weight: 600; color: var(--subtle);
+      letter-spacing: .06em; margin-bottom: 8px; padding: 0 6px;
+    }
+    .setting-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 6px; border-radius: 12px;
+      cursor: pointer; transition: .2s;
+    }
+    .setting-row:hover { background: rgba(255,255,255,.5); }
+    .setting-row .row-icon {
+      width: 36px; height: 36px; border-radius: 12px;
+      background: var(--pink-50);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; flex-shrink: 0;
+      transition: transform .24s;
+    }
+    .setting-row:hover .row-icon { transform: rotate(-8deg); }
+    .setting-row .lb { flex: 1; font-size: 14px; font-weight: 500; }
+    .setting-row .vl { font-size: 12px; color: var(--subtle); }
+    .setting-row .arrow { font-size: 16px; color: var(--subtle); transition: transform .24s; }
+    .setting-row:hover .arrow { transform: translateX(3px); color: var(--pink-400); }
+    .setting-row.logout { color: var(--pink-400); }
+    .setting-row.logout .row-icon { background: rgba(212, 83, 126, .1); }
+
+    .account-block { margin-bottom: 14px; }
+    .panel-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .panel-heading {
+      min-width: 0;
+      flex: 1;
+    }
+    .panel-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--serif);
+      font-size: 18px;
+      font-weight: 500;
+      color: var(--pink-900);
+      line-height: 1.2;
+    }
+    .panel-title .emoji {
+      font-size: 18px;
+      line-height: 1;
+    }
+    .panel-subtitle {
+      margin-top: 6px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--subtle);
+    }
+    .supplier-block,
+    .capability-block {
+      scroll-margin-top: 28px;
+    }
+    .cred-list,
+    .cap-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .cred-card,
+    .cap-card {
+      border-radius: 18px;
+      border: 1px solid rgba(244, 192, 209, .6);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.9), rgba(255,250,246,.74));
+      box-shadow: 0 14px 32px rgba(212, 83, 126, .08);
+      padding: 14px;
+      transition: transform .22s, box-shadow .22s, border-color .22s;
+    }
+    .cred-card:hover,
+    .cap-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-float);
+      border-color: rgba(237, 147, 177, .7);
+    }
+    .cred-card-head,
+    .cap-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .cred-card-main {
+      min-width: 0;
+      flex: 1;
+    }
+    .cred-card-name {
+      font-family: var(--serif);
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--pink-900);
+    }
+    .cred-card-base {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .cred-card-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .meta-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: rgba(251, 234, 240, .85);
+      color: var(--pink-400);
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .meta-note {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.76);
+      color: var(--subtle);
+      font-size: 11px;
+    }
+    .cred-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .action-text-btn {
+      border: none;
+      border-radius: 999px;
+      padding: 8px 12px;
+      background: rgba(255,255,255,.88);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+      box-shadow: 0 4px 10px rgba(212, 83, 126, .08);
+      cursor: pointer;
+      transition: transform .2s, box-shadow .2s, background .2s;
+      font-family: inherit;
+    }
+    .action-text-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 18px rgba(212, 83, 126, .12);
+      background: rgba(255,255,255,.98);
+    }
+    .action-text-btn.danger {
+      background: rgba(255, 241, 245, .96);
+      color: #bf5f7d;
+    }
+    .cap-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      flex: 1;
+    }
+    .cap-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(251, 234, 240, .96), rgba(255,255,255,.78));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      flex-shrink: 0;
+      border: 1px solid rgba(244, 192, 209, .45);
+    }
+    .cap-title-group {
+      min-width: 0;
+    }
+    .cap-name {
+      font-family: var(--serif);
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--pink-900);
+    }
+    .cap-note-top {
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--subtle);
+    }
+    .cap-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 68px;
+      min-height: 34px;
+      padding: 0 12px;
+      border: 1px solid rgba(244, 192, 209, .55);
+      border-radius: 999px;
+      background: linear-gradient(135deg, rgba(212, 83, 126, .94), rgba(244, 140, 174, .9));
+      box-shadow: 0 8px 18px rgba(212, 83, 126, .18);
+      flex-shrink: 0;
+      font-size: 12px;
+      color: #fff;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: transform .2s, box-shadow .2s, background .2s, color .2s;
+    }
+    .cap-toggle:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 22px rgba(212, 83, 126, .24);
+    }
+    .cap-toggle.off {
+      background: rgba(255,255,255,.88);
+      color: var(--subtle);
+      box-shadow: none;
+    }
+    .cap-current {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .cap-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      border-radius: 14px;
+      background: rgba(255,255,255,.86);
+      border: 1px solid rgba(244, 192, 209, .5);
+      color: var(--pink-900);
+      font-size: 12px;
+      font-weight: 500;
+      min-height: 36px;
+    }
+    .cap-pill-static {
+      pointer-events: none;
+    }
+    .cap-helper {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .cap-helper-row {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .cap-select {
+      width: 100%;
+      min-height: 40px;
+      padding: 0 12px;
+      border: 1px solid rgba(244, 192, 209, .56);
+      border-radius: 14px;
+      background: rgba(255,255,255,.9);
+      color: var(--pink-900);
+      font-size: 12px;
+      font-family: inherit;
+      box-shadow: 0 4px 12px rgba(212, 83, 126, .06);
+    }
+    .cap-select:focus {
+      outline: none;
+      border-color: rgba(212, 83, 126, .66);
+      box-shadow: 0 0 0 3px rgba(212, 83, 126, .12);
+    }
+    .cap-select-wrap {
+      flex: 1 1 220px;
+      min-width: 0;
+    }
+    .cap-empty {
+      padding: 18px 16px;
+      border-radius: 18px;
+      border: 1px dashed rgba(244, 192, 209, .8);
+      background: rgba(255,255,255,.6);
+      text-align: center;
+      color: var(--subtle);
+      line-height: 1.7;
+      font-size: 13px;
+    }
+    .cap-ghost-btn {
+      border: none;
+      border-radius: 999px;
+      padding: 8px 12px;
+      background: rgba(251, 234, 240, .92);
+      color: var(--pink-400);
+      font-size: 12px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      transition: transform .2s, box-shadow .2s;
+    }
+    .cap-ghost-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 18px rgba(212, 83, 126, .12);
+    }
+    .quick-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: rgba(251, 234, 240, .85);
+      color: var(--pink-400);
+      font-size: 11px;
+      font-weight: 500;
+      border: 1px solid rgba(244, 192, 209, .35);
+    }
+    .quick-chip.active {
+      background: linear-gradient(135deg, rgba(212, 83, 126, .92), rgba(244, 140, 174, .88));
+      color: #fff;
+      border-color: transparent;
+    }
+    .tts-preset-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.9);
+      color: var(--pink-900);
+      font-size: 12px;
+      font-weight: 600;
+      font-family: inherit;
+      border: 1px solid rgba(244, 192, 209, .56);
+      cursor: pointer;
+      transition: transform .2s, box-shadow .2s, background .2s;
+    }
+    .tts-preset-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 18px rgba(212, 83, 126, .12);
+    }
+    .tts-preset-btn.active {
+      background: linear-gradient(135deg, rgba(212, 83, 126, .92), rgba(244, 140, 174, .88));
+      color: #fff;
+      border-color: transparent;
+      box-shadow: 0 10px 22px rgba(212, 83, 126, .16);
+    }
+    .cap-tip {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--subtle);
+      line-height: 1.6;
+    }
+    .cap-status-line {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .cap-inline-link {
+      color: var(--pink-400);
+      font-weight: 500;
+    }
+
+    .tab-bar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: rgba(255, 255, 255, .88); backdrop-filter: blur(20px);
+      border-top: 1px solid var(--line);
+      display: flex; justify-content: space-around; align-items: center;
+      padding: 10px 0 env(safe-area-inset-bottom, 8px); z-index: 100;
+    }
+    .tab-item { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: var(--subtle); text-decoration: none; padding: 4px 12px; transition: color .2s; }
+    .tab-item.active { color: var(--pink-400); }
+    .tab-item svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .tab-item.active svg { stroke-width: 2.2; }
+
+    [data-reveal] { opacity: 0; transform: translateY(18px); }
+    [data-reveal].is-visible { opacity: 1; transform: translateY(0); transition: opacity .5s ease, transform .5s ease; transition-delay: var(--delay, 0ms); }
+
+    /* 卡片样式选择面板 */
+    .style-picker-overlay {
+      position: fixed; inset: 0;
+      background: rgba(75, 21, 40, .35);
+      backdrop-filter: blur(4px);
+      z-index: 500;
+      opacity: 0; pointer-events: none;
+      transition: opacity .25s;
+    }
+    .style-picker-overlay.show { opacity: 1; pointer-events: auto; }
+    .style-picker-panel {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: #fff;
+      border-radius: 24px 24px 0 0;
+      padding: 20px 16px calc(env(safe-area-inset-bottom, 8px) + 16px);
+      z-index: 501;
+      transform: translateY(100%);
+      transition: transform .3s cubic-bezier(.32,.72,.24,1);
+      max-height: 70vh;
+      overflow-y: auto;
+    }
+    .style-picker-overlay.show .style-picker-panel { transform: translateY(0); }
+    .style-picker-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 16px;
+    }
+    .style-picker-header h3 { font-family: var(--serif); font-size: 17px; font-weight: 500; }
+    .style-picker-close {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--pink-50); border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; color: var(--muted);
+    }
+    .style-options { display: flex; flex-direction: column; gap: 10px; }
+    .style-option {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 14px; border-radius: 14px;
+      border: 2px solid var(--line);
+      cursor: pointer; transition: .2s;
+      background: #fff;
+    }
+    .style-option:hover { border-color: var(--pink-200); }
+    .style-option.active { border-color: var(--pink-400); background: var(--pink-50); }
+    .style-option-preview {
+      width: 48px; height: 48px; border-radius: 10px;
+      background: var(--pink-50);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; flex-shrink: 0;
+    }
+    .style-option-info { flex: 1; }
+    .style-option-name { font-size: 14px; font-weight: 500; margin-bottom: 2px; }
+    .style-option-desc { font-size: 11px; color: var(--subtle); }
+    .style-option-check {
+      width: 20px; height: 20px; border-radius: 50%;
+      border: 2px solid var(--pink-100);
+      display: flex; align-items: center; justify-content: center;
+      transition: .2s; flex-shrink: 0;
+    }
+    .style-option.active .style-option-check {
+      border-color: var(--pink-400);
+      background: var(--pink-400);
+    }
+    .style-option.active .style-option-check::after {
+      content: '✓'; color: #fff; font-size: 11px; font-weight: 700;
+    }
+
+    /* 引导提示（轻量 toast） */
+    .onboard-toast {
+      position: fixed;
+      left: 50%;
+      top: 16px;
+      transform: translateX(-50%) translateY(-20px);
+      background: linear-gradient(135deg, rgba(212, 83, 126, .96), rgba(244, 140, 174, .92));
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: 0 12px 28px rgba(212, 83, 126, .32);
+      z-index: 999;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .35s, transform .35s cubic-bezier(.32,.72,.24,1);
+      max-width: calc(100vw - 32px);
+      text-align: center;
+      line-height: 1.5;
+    }
+    .onboard-toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* 模型配置板块被引导时高亮 */
+    .settings-block.onboard-highlight {
+      animation: blockPulse 1.6s ease-in-out 2;
+      box-shadow: 0 0 0 2px var(--pink-200), 0 14px 32px rgba(212, 83, 126, .18);
+    }
+    @keyframes blockPulse {
+      0%, 100% { box-shadow: 0 0 0 2px var(--pink-200), 0 14px 32px rgba(212, 83, 126, .18); }
+      50%      { box-shadow: 0 0 0 6px rgba(244, 192, 209, .55), 0 18px 40px rgba(212, 83, 126, .28); }
+    }
+
+    /* 模型配置弹窗 */
+    .model-config-overlay {
+      position: fixed; inset: 0;
+      background: rgba(75, 21, 40, .35);
+      backdrop-filter: blur(4px);
+      z-index: 500;
+      opacity: 0; pointer-events: none;
+      transition: opacity .25s;
+    }
+    .model-config-overlay.show { opacity: 1; pointer-events: auto; }
+    .model-config-panel {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: #fff;
+      border-radius: 24px 24px 0 0;
+      padding: 20px 16px calc(env(safe-area-inset-bottom, 8px) + 16px);
+      z-index: 501;
+      transform: translateY(100%);
+      transition: transform .3s cubic-bezier(.32,.72,.24,1);
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .model-config-overlay.show .model-config-panel { transform: translateY(0); }
+    .model-config-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 16px;
+    }
+    .model-config-header h3 { font-family: var(--serif); font-size: 17px; font-weight: 500; }
+    .model-config-close {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--pink-50); border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; color: var(--muted);
+    }
+    .form-field {
+      margin-bottom: 14px;
+    }
+    .form-field label {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+    .form-help {
+      margin-top: 6px;
+      font-size: 11px;
+      line-height: 1.6;
+      color: var(--subtle);
+    }
+    .form-field input, .form-field select {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      font-size: 14px;
+      background: var(--cream);
+      color: var(--pink-900);
+      transition: .2s;
+      font-family: inherit;
+    }
+    .form-field input:focus, .form-field select:focus {
+      outline: none;
+      border-color: var(--pink-400);
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(212, 83, 126, .10);
+    }
+    .form-field input::placeholder {
+      color: var(--pink-200);
+    }
+    .key-input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .key-input-wrap input {
+      flex: 1;
+    }
+    .key-visibility-btn {
+      flex: 0 0 auto;
+      min-width: 58px;
+      padding: 0 12px;
+      height: 44px;
+      border: 1px solid rgba(244, 192, 209, .65);
+      border-radius: 12px;
+      background: rgba(255,255,255,.92);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: transform .2s, box-shadow .2s;
+      font-family: inherit;
+    }
+    .key-visibility-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 18px rgba(212, 83, 126, .1);
+    }
+    .form-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 18px;
+    }
+    .form-actions[hidden] {
+      display: none !important;
+    }
+    .btn {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: .2s;
+      font-family: inherit;
+    }
+    .btn-primary {
+      background: var(--pink-400);
+      color: #fff;
+      box-shadow: 0 8px 16px rgba(212, 83, 126, .22);
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: var(--pink-500);
+      transform: translateY(-1px);
+      box-shadow: 0 12px 20px rgba(212, 83, 126, .28);
+    }
+    .btn-primary:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+    .btn-secondary {
+      background: var(--pink-50);
+      color: var(--pink-400);
+    }
+    .btn-secondary:hover {
+      background: var(--pink-100);
+    }
+    .config-list {
+      margin-top: 12px;
+    }
+    .config-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: var(--pink-50);
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: .2s;
+    }
+    .config-item:hover {
+      background: var(--pink-100);
+    }
+    .config-item.active {
+      background: var(--pink-400);
+      color: #fff;
+    }
+    .config-item-info {
+      flex: 1;
+    }
+    .config-item-name {
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 2px;
+    }
+    .config-item-detail {
+      font-size: 11px;
+      opacity: .7;
+    }
+    .config-item-badge {
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.3);
+      font-size: 10px;
+      font-weight: 500;
+    }
+    .config-item.active .config-item-badge {
+      background: rgba(255,255,255,.25);
+    }
+    .config-item-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .config-item-btn {
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 500;
+      border: none;
+      cursor: pointer;
+      transition: .2s;
+      background: rgba(255,255,255,.5);
+      color: var(--pink-900);
+    }
+    .config-item-btn:hover {
+      background: rgba(255,255,255,.8);
+      transform: translateY(-1px);
+    }
+    .config-item.active .config-item-btn {
+      background: rgba(255,255,255,.2);
+      color: #fff;
+    }
+    .config-item.active .config-item-btn:hover {
+      background: rgba(255,255,255,.35);
+    }
+    .config-item-btn.btn-delete {
+      background: rgba(212, 83, 126, .15);
+      color: var(--pink-400);
+    }
+    .config-item-btn.btn-delete:hover {
+      background: rgba(212, 83, 126, .25);
+    }
+    .config-item.active .config-item-btn.btn-delete {
+      background: rgba(255,255,255,.2);
+      color: #fff;
+    }
+    .config-item.active .config-item-btn.btn-delete:hover {
+      background: rgba(255,255,255,.35);
+    }
+    .supplier-empty {
+      padding: 18px 16px;
+      border-radius: 18px;
+      border: 1px dashed rgba(244, 192, 209, .8);
+      background: rgba(255,255,255,.6);
+      text-align: center;
+      color: var(--subtle);
+      line-height: 1.7;
+      font-size: 13px;
+    }
+    .summary-intro {
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+    .summary-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .summary-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(244, 192, 209, .55);
+      background: rgba(255,250,246,.7);
+    }
+    .summary-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 12px;
+      font-weight: 500;
+      background: rgba(255,255,255,.92);
+      color: var(--muted);
+      border: 1px solid rgba(244, 192, 209, .5);
+      margin-top: 2px;
+    }
+    .summary-item.available .summary-icon {
+      color: var(--pink-400);
+      border-color: rgba(237, 147, 177, .75);
+    }
+    .summary-copy {
+      min-width: 0;
+      flex: 1;
+    }
+    .summary-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--pink-900);
+    }
+    .summary-desc {
+      margin-top: 4px;
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--subtle);
+    }
+
+    /* 供应商选择卡片 */
+    .provider-selection {
+      margin-bottom: 16px;
+      position: relative;
+    }
+    .provider-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 8px;
+      max-height: 280px;
+      overflow: auto;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 14px 32px rgba(92, 38, 58, .14);
+    }
+    .provider-dropdown {
+      width: 100%;
+      min-height: 48px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      color: var(--pink-900);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: .2s;
+    }
+    .provider-dropdown:hover {
+      border-color: var(--pink-200);
+      box-shadow: 0 8px 18px rgba(212, 83, 126, .10);
+    }
+    .provider-dropdown-main {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .provider-dropdown-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .provider-dropdown-arrow {
+      color: var(--subtle);
+      font-size: 12px;
+    }
+    .provider-card {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      background: #fff;
+      cursor: pointer;
+      transition: .2s;
+      text-align: left;
+      display: grid;
+      grid-template-columns: 30px 1fr;
+      gap: 10px;
+      align-items: center;
+    }
+    .provider-card:hover {
+      border-color: var(--pink-200);
+      box-shadow: 0 8px 16px rgba(212, 83, 126, .12);
+    }
+    .provider-card.active {
+      border-color: var(--pink-300);
+      background: linear-gradient(180deg, rgba(255, 244, 248, .98), rgba(255, 255, 255, .98));
+      box-shadow: 0 10px 24px rgba(212, 83, 126, .14);
+    }
+    .provider-card:active {
+      transform: translateY(0);
+    }
+    .provider-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      background: rgba(255, 244, 248, .95);
+    }
+    .provider-icon.deepseek-icon { color: #1E88E5; }
+    .provider-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--pink-900);
+    }
+    .provider-desc {
+      font-size: 11px;
+      color: var(--subtle);
+      line-height: 1.4;
+    }
+
+    /* ===== 头像选择器 v2 ===== */
+    .avatar-picker-intro {
+      font-size: 13px;
+      color: var(--subtle);
+      text-align: center;
+      margin: -4px 0 18px;
+      line-height: 1.5;
+    }
+    .avatar-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 4px;
+    }
+    @media (max-width: 380px) {
+      .avatar-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+      }
+    }
+    .avatar-tile {
+      position: relative;
+      aspect-ratio: 1 / 1;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #fff;
+      border: 2px solid transparent;
+      padding: 0;
+      cursor: pointer;
+      transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+      box-shadow: 0 2px 8px rgba(212, 83, 126, .06);
+    }
+    .avatar-tile img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .avatar-tile:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 18px rgba(212, 83, 126, .14);
+    }
+    .avatar-tile:active {
+      transform: translateY(0);
+    }
+    .avatar-tile.active {
+      border-color: var(--pink-400);
+      box-shadow: 0 0 0 3px rgba(212, 83, 126, .25), 0 10px 22px rgba(212, 83, 126, .18);
+    }
+    .avatar-tile.active::after {
+      content: '✓';
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--pink-400);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      box-shadow: 0 2px 6px rgba(212, 83, 126, .35);
+    }
+    .avatar-tile-badge {
+      position: absolute;
+      bottom: 6px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px;
+      font-weight: 500;
+      padding: 2px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .92);
+      backdrop-filter: blur(6px);
+      color: var(--pink-500);
+      pointer-events: none;
+      letter-spacing: .3px;
+      box-shadow: 0 2px 6px rgba(212, 83, 126, .12);
+    }
+    .avatar-tile-del {
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, .55);
+      color: #fff;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      cursor: pointer;
+      z-index: 2;
+      transition: background .15s, transform .15s;
+    }
+    .avatar-tile-del:hover {
+      background: rgba(231, 76, 60, .9);
+      transform: scale(1.1);
+    }
+    .avatar-tile-upload {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      background: var(--pink-50);
+      border: 2px dashed var(--pink-200);
+      color: var(--pink-400);
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .avatar-tile-upload .upload-plus {
+      font-size: 32px;
+      font-weight: 300;
+      line-height: 1;
+      margin-bottom: 2px;
+    }
+    .avatar-tile-upload:hover {
+      border-color: var(--pink-400);
+      background: linear-gradient(180deg, var(--pink-50), #fff);
+      color: var(--pink-500);
+    }
+
+    /* 用途选择卡片 */
+    .purpose-selection {
+      margin-bottom: 16px;
+    }
+    .purpose-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .purpose-card {
+      padding: 16px 12px;
+      border-radius: 14px;
+      border: 2px solid var(--line);
+      background: #fff;
+      cursor: pointer;
+      transition: .2s;
+      text-align: center;
+    }
+    .purpose-card:hover {
+      border-color: var(--pink-200);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 16px rgba(212, 83, 126, .12);
+    }
+    .purpose-card:active {
+      transform: translateY(0);
+    }
+    .purpose-icon {
+      font-size: 28px;
+      margin-bottom: 8px;
+    }
+    .purpose-name {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--pink-900);
+      margin-bottom: 4px;
+    }
+    .purpose-desc {
+      font-size: 11px;
+      color: var(--subtle);
+      line-height: 1.4;
+    }
+</style>
+</head>
+<body>
+  <div class="app-body">
+    <div class="page-header" data-reveal style="--delay:0ms">
+      <h1>我的</h1>
+    </div>
+
+    <div class="profile-hero" data-reveal style="--delay:60ms">
+      <div class="avatar-lg" id="userAvatar">白</div>
+      <div style="flex:1">
+        <div class="nm" id="userName">江湖小白</div>
+        <div class="id" id="userId">@jianghu_xiaobai · 自托管会员</div>
+        <span class="badge">🌸 RuoBai · 永远在你身边</span>
+      </div>
+    </div>
+
+    <div class="stats-row" data-reveal style="--delay:120ms">
+      <div class="stat-card"><div class="n" id="characterCount">0</div><div class="l">陪伴角色</div></div>
+      <div class="stat-card"><div class="n" id="longestCompanionshipDays">0</div><div class="l">最长陪伴</div></div>
+      <div class="stat-card"><div class="n" id="memoryCount">0</div><div class="l">长期记忆</div></div>
+    </div>
+
+    <div class="settings-block account-block" data-reveal style="--delay:180ms">
+      <div class="block-title">账号</div>
+      <div class="setting-row" id="accountPasswordRow">
+        <div class="row-icon">👤</div>
+        <div class="lb">账号与密码</div>
+        <div class="vl" id="accountUsername">jianghu_xiaobai</div>
+        <div class="arrow">›</div>
+      </div>
+      <div class="setting-row" id="nicknameRow">
+        <div class="row-icon">🌸</div>
+        <div class="lb">昵称</div>
+        <div class="vl" id="nicknamePreview">江湖小白</div>
+        <div class="arrow">›</div>
+      </div>
+      <div class="setting-row" id="avatarRow">
+        <div class="row-icon">🖼️</div>
+        <div class="lb">头像</div>
+        <div class="arrow">›</div>
+      </div>
+    </div>
+
+    <div class="settings-block personalization-block" data-reveal style="--delay:210ms">
+      <div class="block-title">个人化</div>
+      <div class="setting-row" id="cardStyleRow">
+        <div class="row-icon">🎴</div>
+        <div class="lb">聊天卡片样式</div>
+        <div class="vl" id="cardStyleLabel">经典卡片</div>
+        <div class="arrow">›</div>
+      </div>
+    </div>
+
+    <section class="settings-block supplier-block" id="modelConfigBlock" data-reveal style="--delay:240ms">
+      <div class="panel-head">
+        <div class="panel-heading">
+          <div class="panel-title"><span class="emoji">🔑</span><span>我连的供应商</span></div>
+          <div class="panel-subtitle">同一个 key 只加一次。后面聊天、看图、画图、说话、通话都从这里往下配。</div>
+        </div>
+        <button class="add-supplier-btn" type="button"><span class="plus">＋</span><span>添加新供应商</span></button>
+      </div>
+
+      <div class="cred-list" id="credList">
+        <div class="supplier-empty">正在帮你加载已经连好的供应商……</div>
+      </div>
+    </section>
+
+    <section class="settings-block capability-block" data-reveal style="--delay:300ms">
+      <div class="panel-head">
+        <div class="panel-heading">
+          <div class="panel-title"><span class="emoji">🎭</span><span>角色能力面板</span></div>
+          <div class="panel-subtitle">你在这里决定“她”每一种能力现在具体用哪个模型，像开关一样切换就行。</div>
+        </div>
+      </div>
+
+      <div class="cap-list" id="capList">
+        <div class="cap-empty">正在帮你加载能力面板……</div>
+      </div>
+    </section>
+
+    <div class="settings-block" data-reveal style="--delay:360ms">
+      <div class="block-title">其他</div>
+      <div class="setting-row" id="aboutRuobaiRow">
+        <div class="row-icon">💞</div>
+        <div class="lb">关于 RuoBai</div>
+        <div class="vl">v0.1</div>
+        <div class="arrow">›</div>
+      </div>
+      <div class="setting-row" id="privacySecurityRow">
+        <div class="row-icon">🔒</div>
+        <div class="lb">隐私与安全说明</div>
+        <div class="arrow">›</div>
+      </div>
+      <div class="setting-row logout">
+        <div class="row-icon">↩️</div>
+        <div class="lb">退出登录</div>
+        <div class="arrow">›</div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="tab-bar">
+    <a href="chat.html" class="tab-item"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>聊天</span></a>
+    <a href="characters.html" class="tab-item"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>角色</span></a>
+    <a href="moments.html" class="tab-item"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg><span>动态</span></a>
+    <a href="memory.html" class="tab-item"><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13S5 14 5 9a7 7 0 0 1 7-7z"/><circle cx="12" cy="9" r="2.5"/></svg><span>记忆</span></a>
+    <a href="profile.html" class="tab-item active"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>我的</span></a>
+  </nav>
+
+  <script>
+  const revealEls = document.querySelectorAll('[data-reveal]');
+  if (revealEls.length) {
+    const obs = new IntersectionObserver((entries, o) => {
+      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('is-visible'); o.unobserve(e.target); } });
+    }, { threshold: 0.14 });
+    revealEls.forEach(el => obs.observe(el));
+  }
+  </script>
+
+  <!-- 引导轻提示 -->
+  <div class="onboard-toast" id="onboardToast"></div>
+
+  <!-- 聊天卡片样式弹窗 -->
+  <div class="style-picker-overlay" id="stylePicker" onclick="closeStylePicker(event)">
+    <div class="style-picker-panel" onclick="event.stopPropagation()">
+      <div class="style-picker-header">
+        <h3>聊天卡片样式</h3>
+        <button class="style-picker-close" type="button" onclick="closeStylePicker()">✕</button>
+      </div>
+      <div class="style-options">
+        <div class="style-option" data-style="card-a" onclick="selectStyle('card-a')">
+          <div class="style-option-preview">📋</div>
+          <div class="style-option-info">
+            <div class="style-option-name">经典卡片</div>
+            <div class="style-option-desc">左立绘 + 右信息，简洁明亮</div>
+          </div>
+          <div class="style-option-check"></div>
+        </div>
+        <div class="style-option" data-style="card-c3" onclick="selectStyle('card-c3')">
+          <div class="style-option-preview">📊</div>
+          <div class="style-option-info">
+            <div class="style-option-name">信息横幅</div>
+            <div class="style-option-desc">立绘 + 语录 + 陪伴数据 + 纪念日</div>
+          </div>
+          <div class="style-option-check"></div>
+        </div>
+        <div class="style-option" data-style="card-b" onclick="selectStyle('card-b')">
+          <div class="style-option-preview">💮</div>
+          <div class="style-option-info">
+            <div class="style-option-name">浮动立绘</div>
+            <div class="style-option-desc">右上角圆形头像 + 亲密度流光条</div>
+          </div>
+          <div class="style-option-check"></div>
+        </div>
+        <div class="style-option" data-style="card-c1" onclick="selectStyle('card-c1')">
+          <div class="style-option-preview">🌙</div>
+          <div class="style-option-info">
+            <div class="style-option-name">锁屏风格</div>
+            <div class="style-option-desc">渐变背景 + 角色名 + 立绘无边框</div>
+          </div>
+          <div class="style-option-check"></div>
+        </div>
+        <div class="style-option" data-style="card-c2" onclick="selectStyle('card-c2')">
+          <div class="style-option-preview">🌌</div>
+          <div class="style-option-info">
+            <div class="style-option-name">角色卡风格</div>
+            <div class="style-option-desc">深色星空卡片 + 立绘 + 描述文字</div>
+          </div>
+          <div class="style-option-check"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 供应商弹窗 -->
+  <div class="model-config-overlay" id="modelConfigModal" onclick="closeModelConfigModal(event)">
+    <div class="model-config-panel" onclick="event.stopPropagation()">
+      <div class="model-config-header">
+        <h3 id="modalTitle">添加新供应商</h3>
+        <button class="model-config-close" onclick="closeModelConfigModal()">✕</button>
+      </div>
+      <form id="modelConfigForm">
+        <div class="provider-selection" id="supplierPresetStep">
+          <label for="supplierPresetDropdown">供应商</label>
+          <button type="button" class="provider-dropdown" id="supplierPresetDropdown" aria-expanded="false" aria-controls="supplierPresetList">
+            <span class="provider-dropdown-main" id="supplierPresetDropdownValue"></span>
+            <span class="provider-dropdown-arrow">▾</span>
+          </button>
+          <div class="provider-cards" id="supplierPresetList" hidden></div>
+        </div>
+
+        <div id="supplierConfigStep">
+          <div class="form-field">
+            <label for="configName">给它起个名字</label>
+            <input type="text" id="configName" placeholder="比如：千问官方、gpt5x 中转" required>
+          </div>
+
+          <div class="form-field" id="apiBaseReadonlyField" hidden>
+            <label for="apiBaseReadonly">接口地址</label>
+            <input type="url" id="apiBaseReadonly" readonly>
+            <div class="form-help">这是官方固定地址，已经替你填好了，不用手改。</div>
+          </div>
+
+          <div class="form-field" id="apiBaseEditableField">
+            <label for="apiBase">接口地址</label>
+            <input type="url" id="apiBase" placeholder="https://ai98pro.xyz" required>
+            <div class="form-help">一般填到根域名就行，系统会自己去试模型列表和聊天接口。</div>
+          </div>
+
+          <div class="form-field">
+            <label for="apiKey">API Key</label>
+            <div class="key-input-wrap">
+              <input type="password" id="apiKey" placeholder="sk-..." required>
+              <button type="button" class="key-visibility-btn" id="toggleSupplierKeyBtn">显示</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-actions" id="supplierConfigActions">
+          <button type="button" class="btn btn-secondary" id="backSupplierStepBtn">取消</button>
+          <button type="submit" class="btn btn-primary" id="saveBtn">保存并自动检测能力</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="model-config-overlay" id="supplierSummaryModal" onclick="closeSupplierSummaryModal(event)">
+    <div class="model-config-panel" onclick="event.stopPropagation()">
+      <div class="model-config-header">
+        <h3>检测结果</h3>
+        <button class="model-config-close" onclick="closeSupplierSummaryModal()">✕</button>
+      </div>
+      <div class="summary-intro">检测到这个 key 可能会这些事。你可以现在去下面的能力面板继续细配，也可以先放着，后面再回来调。</div>
+      <div class="summary-list" id="supplierSummaryList"></div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-secondary" id="summaryLaterBtn">以后再说</button>
+        <button type="button" class="btn btn-primary" id="summaryConfigureBtn">现在配置</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="model-config-overlay" id="changePasswordModal" onclick="closeChangePasswordModal(event)">
+    <div class="model-config-panel" onclick="event.stopPropagation()">
+      <div class="model-config-header">
+        <h3>账号与密码</h3>
+        <button class="model-config-close" onclick="closeChangePasswordModal()">✕</button>
+      </div>
+      <form id="changePasswordForm">
+        <div class="form-field">
+          <label for="currentAccountName">当前账号</label>
+          <input type="text" id="currentAccountName" readonly>
+        </div>
+        <div class="form-field">
+          <label for="oldPassword">旧密码</label>
+          <input type="password" id="oldPassword" placeholder="输入旧密码" required>
+        </div>
+        <div class="form-field">
+          <label for="newPassword">新密码</label>
+          <input type="password" id="newPassword" placeholder="至少 6 位" required>
+        </div>
+        <div class="form-field">
+          <label for="confirmPassword">确认新密码</label>
+          <input type="password" id="confirmPassword" placeholder="再输一遍新密码" required>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeChangePasswordModal()">取消</button>
+          <button type="submit" class="btn btn-primary" id="savePasswordBtn">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="model-config-overlay" id="nicknameModal" onclick="closeNicknameModal(event)">
+    <div class="model-config-panel" onclick="event.stopPropagation()">
+      <div class="model-config-header">
+        <h3>昵称</h3>
+        <button class="model-config-close" onclick="closeNicknameModal()">✕</button>
+      </div>
+      <form id="nicknameForm">
+        <div class="form-field">
+          <label for="nicknameInput">昵称</label>
+          <input type="text" id="nicknameInput" maxlength="20" placeholder="最多 20 个字" required>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeNicknameModal()">取消</button>
+          <button type="submit" class="btn btn-primary" id="saveNicknameBtn">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="model-config-overlay" id="avatarModal" onclick="closeAvatarModal(event)">
+    <div class="model-config-panel" onclick="event.stopPropagation()">
+      <div class="model-config-header">
+        <h3>换个头像</h3>
+        <button class="model-config-close" onclick="closeAvatarModal()">✕</button>
+      </div>
+      <form id="avatarForm">
+        <div class="avatar-picker-intro">点一个喜欢的，或者放一张你自己的</div>
+        <input type="file" id="avatarUploadInput" accept="image/png,image/jpeg,image/webp" hidden>
+        <div class="avatar-grid" id="avatarPresetList"></div>
+        <div class="form-actions" style="margin-top:20px;">
+          <button type="button" class="btn btn-secondary" onclick="closeAvatarModal()">取消</button>
+          <button type="submit" class="btn btn-primary" id="saveAvatarBtn">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="model-config-overlay" id="aboutRuobaiModal" onclick="closeAboutRuobaiModal(event)">
+    <div class="model-config-panel" onclick="event.stopPropagation()">
+      <div class="model-config-header">
+        <h3>关于 RuoBai</h3>
+        <button class="model-config-close" onclick="closeAboutRuobaiModal()">✕</button>
+      </div>
+      <div class="summary-intro">
+        v0.1<br>
+        一个把聊天、记忆、角色和长期陪伴感收进同一个家的自托管 AI 陪伴项目。
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-primary" onclick="closeAboutRuobaiModal()">知道了</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="model-config-overlay" id="privacySecurityModal" onclick="closePrivacySecurityModal(event)">
+    <div class="model-config-panel" onclick="event.stopPropagation()">
+      <div class="model-config-header">
+        <h3>隐私与安全说明</h3>
+        <button class="model-config-close" onclick="closePrivacySecurityModal()">✕</button>
+      </div>
+      <div class="summary-intro">
+        你的话存在本地服务器的数据库里，只有你自己能看到。
+      </div>
+      <div class="summary-intro">
+        你自己填的供应商 key 存在数据库里，不会发给第三方。
+      </div>
+      <div class="summary-intro">
+        每个用户的角色、记忆、聊天、动态完全隔离，互相看不到。
+      </div>
+      <div class="summary-intro">
+        想离开时，可以删除自己的角色和记忆；删除账号请联系管理员。
+      </div>
+      <div class="summary-intro">
+        数据导出功能还没做，做完会通知你。
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-primary" onclick="closePrivacySecurityModal()">知道了</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  const CARD_STYLE_NAMES = {
+    'card-a': '经典卡片',
+    'card-c3': '信息横幅',
+    'card-b': '浮动立绘',
+    'card-c1': '锁屏风格',
+    'card-c2': '角色卡风格'
+  };
+
+  function getCurrentCardStyle() {
+    const savedStyle = localStorage.getItem('ruobai-card-style');
+    return CARD_STYLE_NAMES[savedStyle] ? savedStyle : 'card-a';
+  }
+
+  function updateCardStyleLabel() {
+    const label = document.getElementById('cardStyleLabel');
+    if (label) {
+      label.textContent = CARD_STYLE_NAMES[getCurrentCardStyle()];
+    }
+  }
+
+  function openStylePicker() {
+    const picker = document.getElementById('stylePicker');
+    if (!picker) return;
+    const currentStyle = getCurrentCardStyle();
+    document.querySelectorAll('.style-option').forEach(option => {
+      option.classList.toggle('active', option.dataset.style === currentStyle);
+    });
+    picker.classList.add('show');
+  }
+
+  function closeStylePicker(event) {
+    if (event && event.target !== event.currentTarget) return;
+    document.getElementById('stylePicker')?.classList.remove('show');
+  }
+
+  function selectStyle(style) {
+    if (!CARD_STYLE_NAMES[style]) return;
+    localStorage.setItem('ruobai-card-style', style);
+    updateCardStyleLabel();
+    closeStylePicker();
+  }
+
+  document.getElementById('cardStyleRow')?.addEventListener('click', openStylePicker);
+  updateCardStyleLabel();
+
+  // ========== 加载用户信息 ==========
+  async function loadUserInfo() {
+    try {
+      const res = await fetch('/api/auth/session', { credentials: 'same-origin' });
+      const data = await res.json();
+      if (data.success && data.loggedIn && data.user) {
+        const user = data.user;
+        currentUserProfile = user;
+        uploadedAvatarUrl = user.avatar && user.avatar.startsWith('/user_assets/avatars/')
+          ? user.avatar
+          : uploadedAvatarUrl;
+        document.getElementById('userName').textContent = user.nickname || user.username || '江湖小白';
+        document.getElementById('userId').textContent = `@${user.username || 'jianghu_xiaobai'} · 自托管会员`;
+        document.getElementById('accountUsername').textContent = user.username || 'jianghu_xiaobai';
+        document.getElementById('nicknamePreview').textContent = user.nickname || user.username || '江湖小白';
+        document.getElementById('characterCount').textContent = String(user.character_count || 0);
+        document.getElementById('longestCompanionshipDays').textContent = String(user.longest_companionship_days || 0);
+        document.getElementById('memoryCount').textContent = String(user.memory_count || 0);
+
+        const avatar = document.getElementById('userAvatar');
+        if (user.avatar) {
+          avatar.innerHTML = `<img src="${escapeHtml(user.avatar)}" alt="头像" style="width:100%;height:100%;border-radius:18px;object-fit:cover;">`;
+        } else {
+          const firstChar = (user.nickname || user.username || '白')[0];
+          avatar.textContent = firstChar;
+        }
+      }
+    } catch (err) {
+      console.error('加载用户信息失败', err);
+    }
+  }
+
+  function openChangePasswordModal() {
+    document.getElementById('changePasswordForm').reset();
+    document.getElementById('currentAccountName').value =
+      currentUserProfile?.username ||
+      document.getElementById('accountUsername')?.textContent?.trim() ||
+      '';
+    document.getElementById('changePasswordModal').classList.add('show');
+  }
+
+  function closeChangePasswordModal(e) {
+    if (e && e.target !== e.currentTarget) return;
+    document.getElementById('changePasswordModal').classList.remove('show');
+  }
+
+  function openNicknameModal() {
+    document.getElementById('nicknameInput').value = currentUserProfile?.nickname || currentUserProfile?.username || '';
+    document.getElementById('nicknameModal').classList.add('show');
+  }
+
+  function closeNicknameModal(e) {
+    if (e && e.target !== e.currentTarget) return;
+    document.getElementById('nicknameModal').classList.remove('show');
+  }
+
+  function openAvatarModal() {
+    selectedAvatarUrl = currentUserProfile?.avatar || getAvatarPresetList()[0];
+    uploadedAvatarUrl = currentUserProfile?.avatar?.startsWith('/user_assets/avatars/')
+      ? currentUserProfile.avatar
+      : uploadedAvatarUrl;
+    avatarChanged = false;
+    renderAvatarPresetList();
+    document.getElementById('avatarModal').classList.add('show');
+  }
+
+  function closeAvatarModal(e) {
+    if (e && e.target !== e.currentTarget) return;
+    document.getElementById('avatarModal').classList.remove('show');
+  }
+
+  function openAboutRuobaiModal() {
+    document.getElementById('aboutRuobaiModal').classList.add('show');
+  }
+
+  function closeAboutRuobaiModal(e) {
+    if (e && e.target !== e.currentTarget) return;
+    document.getElementById('aboutRuobaiModal').classList.remove('show');
+  }
+
+  function openPrivacySecurityModal() {
+    document.getElementById('privacySecurityModal').classList.add('show');
+  }
+
+  function closePrivacySecurityModal(e) {
+    if (e && e.target !== e.currentTarget) return;
+    document.getElementById('privacySecurityModal').classList.remove('show');
+  }
+
+  async function readJsonResponseSafely(response, fallbackMessage) {
+    const contentType = response.headers.get('content-type') || '';
+    const rawText = await response.text();
+
+    if (!contentType.includes('application/json')) {
+      throw new Error(fallbackMessage);
+    }
+
+    try {
+      return JSON.parse(rawText);
+    } catch {
+      throw new Error(fallbackMessage);
+    }
+  }
+
+  async function submitChangePassword(event) {
+    event.preventDefault();
+    const button = document.getElementById('savePasswordBtn');
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = '保存中...';
+
+    try {
+      const response = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          old_password: document.getElementById('oldPassword').value.trim(),
+          new_password: document.getElementById('newPassword').value.trim(),
+          confirm_password: document.getElementById('confirmPassword').value.trim()
+        })
+      });
+      const data = await readJsonResponseSafely(response, '改密码接口没有返回正确结果，像是前端或后端还没刷新到最新版本');
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || '改密码失败');
+      }
+      closeChangePasswordModal();
+      showToast(data.message || '密码已更新');
+    } catch (err) {
+      alert(err.message || '改密码失败');
+    } finally {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
+
+  async function submitNickname(event) {
+    event.preventDefault();
+    const button = document.getElementById('saveNicknameBtn');
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = '保存中...';
+
+    try {
+      const response = await fetch('/api/users/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          nickname: document.getElementById('nicknameInput').value.trim()
+        })
+      });
+      const data = await readJsonResponseSafely(response, '保存资料时拿到的不是接口结果，像是浏览器还在用旧页面或后端还没重启');
+      if (!response.ok || !data.success || !data.user) {
+        throw new Error(data.error || '保存昵称失败');
+      }
+
+      currentUserProfile = {
+        ...(currentUserProfile || {}),
+        ...data.user
+      };
+      closeNicknameModal();
+      await loadUserInfo();
+      showToast('昵称已更新');
+    } catch (err) {
+      alert(err.message || '保存昵称失败');
+    } finally {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
+
+  async function submitAvatar(event) {
+    event.preventDefault();
+    const button = document.getElementById('saveAvatarBtn');
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = '保存中...';
+
+    try {
+      const response = await fetch('/api/users/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          avatar_url: selectedAvatarUrl
+        })
+      });
+      const data = await readJsonResponseSafely(response, '保存头像时拿到的不是接口结果，像是浏览器还在用旧页面或后端还没重启');
+      if (!response.ok || !data.success || !data.user) {
+        throw new Error(data.error || '保存头像失败');
+      }
+
+      currentUserProfile = {
+        ...(currentUserProfile || {}),
+        ...data.user
+      };
+      closeAvatarModal();
+      await loadUserInfo();
+      showToast('头像已更新');
+    } catch (err) {
+      alert(err.message || '保存头像失败');
+    } finally {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
+
+  async function uploadCustomAvatar(file) {
+    const reader = new FileReader();
+    const dataUrl = await new Promise((resolve, reject) => {
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('读取图片失败'));
+      reader.readAsDataURL(file);
+    });
+
+    const response = await fetch('/api/users/avatar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        image_data: dataUrl
+      })
+    });
+    const data = await readJsonResponseSafely(response, '上传头像时拿到的不是接口结果，像是浏览器还在用旧页面或后端还没重启');
+    if (!response.ok || !data.success || !data.avatar_url) {
+      throw new Error(data.error || '上传头像失败');
+    }
+
+    selectedAvatarUrl = data.avatar_url;
+    uploadedAvatarUrl = data.avatar_url;
+    avatarChanged = true;
+    renderAvatarPresetList();
+  }
+
+  function resetUploadedAvatarChoice() {
+    selectedAvatarUrl = getAvatarPresetList()[0];
+    avatarChanged = true;
+    renderAvatarPresetList();
+  }
+
+  async function deleteUploadedAvatar(avatarUrl) {
+    const response = await fetch('/api/users/avatar', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        avatar_url: avatarUrl
+      })
+    });
+    const data = await readJsonResponseSafely(response, '删除上传头像时拿到的不是接口结果，像是浏览器还在用旧页面或后端还没重启');
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || '删除上传头像失败');
+    }
+
+    uploadedAvatarUrl = '';
+    selectedAvatarUrl = data.avatar || getAvatarPresetList()[0];
+    avatarChanged = true;
+    renderAvatarPresetList();
+  }
+
+  // ========== 供应商区块 ==========
+  let credentials = [];
+  let credentialModelsMap = new Map();
+  let editingCredentialId = null;
+  let selectedSupplierPresetId = null;
+  let selectedAvatarUrl = '';
+  let avatarChanged = false;
+  let uploadedAvatarUrl = '';
+  let capabilities = [];
+  let pendingCapabilitySelections = new Map();
+  let lastSummarySelection = null;
+  let currentUserProfile = null;
+  let buildCapabilityLoadErrorMessage = function(error) {
+    const message = String(error?.message || '未知错误');
+    return `没能拉到能力面板（${message}）。<br>试试：<br>1. 双击根目录"一键关闭.bat"再"一键启动.bat"重启后端<br>2. 如果提示请先登录，就重新登录一次<br>3. 还不行的话截图给 AI 看看`;
+  };
+  let parseCapabilityResponseError = async function(response) {
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+
+    if (response.status === 401) {
+      return new Error('请先登录');
+    }
+    if (response.status === 404) {
+      return new Error('接口没找到，像是后端还没重启');
+    }
+    if (payload?.error) {
+      return new Error(String(payload.error));
+    }
+    if (response.status >= 500) {
+      return new Error(`后端报错了（${response.status}）`);
+    }
+    return new Error(`加载失败（${response.status}）`);
+  };
+
+  const CAPABILITY_TEXT = {
+    chat: '文字聊天',
+    vision: '看懂图片',
+    image: '画图发图',
+    tts: '听她说话',
+    realtime: '实时通话'
+  };
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function getAvatarPresetList() {
+    return Array.from({ length: 18 }, (_item, index) => `/assets/avatar-squares/${index}.png`);
+  }
+
+  let buildAvatarChoices = function(options = {}) {
+    const presetCount = options.presetCount ?? 18;
+    const items = [];
+
+    if (options.uploadedAvatarUrl) {
+      items.push({
+        url: options.uploadedAvatarUrl,
+        label: '我上传的',
+        selected: options.uploadedAvatarUrl === options.selectedAvatarUrl,
+        uploaded: true,
+        actions: ['delete', 'reset']
+      });
+    }
+
+    for (let index = 0; index < presetCount; index += 1) {
+      const url = `/assets/avatar-squares/${index}.png`;
+      items.push({
+        url,
+        label: `${index} 号`,
+        selected: url === options.selectedAvatarUrl,
+        uploaded: false,
+        actions: []
+      });
+    }
+
+    return items;
+  };
+
+  function renderAvatarPresetList() {
+    const list = document.getElementById('avatarPresetList');
+    if (!list) return;
+
+    const tiles = buildAvatarChoices({
+      uploadedAvatarUrl,
+      selectedAvatarUrl
+    }).map(item => {
+      const activeCls = selectedAvatarUrl === item.url ? ' active' : '';
+      const badge = item.uploaded ? '<span class="avatar-tile-badge">我的</span>' : '';
+      const delBtn = item.uploaded
+        ? `<button type="button" class="avatar-tile-del" data-avatar-action="delete" data-avatar-url="${escapeHtml(item.url)}" aria-label="删除我上传的头像" title="删除">×</button>`
+        : '';
+      return `
+        <button type="button" class="avatar-tile${activeCls}" data-avatar-url="${escapeHtml(item.url)}">
+          <img src="${escapeHtml(item.url)}" alt="头像" onerror="this.style.opacity=0.3;this.parentElement.style.background='var(--pink-50)'">
+          ${badge}
+          ${delBtn}
+        </button>
+      `;
+    }).join('');
+
+    const uploadTile = `
+      <button type="button" class="avatar-tile avatar-tile-upload" id="uploadAvatarBtn" aria-label="上传我自己的头像" onclick="document.getElementById('avatarUploadInput')?.click()">
+        <span class="upload-plus">＋</span>
+        <span>上传我的</span>
+      </button>
+    `;
+
+    list.innerHTML = tiles + uploadTile;
+  }
+
+  let summarizeSupplierCapabilities = function(summary = {}) {
+    const order = ['chat', 'vision', 'image', 'tts', 'realtime'];
+    const labels = {
+      chat: '文字聊天',
+      vision: '看懂图片',
+      image: '画图发图',
+      tts: '听她说话',
+      realtime: '实时通话'
+    };
+    const preferred = {
+      chat: ['gpt-5.5', 'gpt-5', 'claude', 'qwen-max', 'deepseek-chat'],
+      vision: ['vl-max', 'vl-plus', 'vision', '4o', 'omni'],
+      image: ['gpt-image', 'wanx', 'seed-image', 'flux', 'sdxl'],
+      tts: ['tts', 'speech', 'voice'],
+      realtime: ['realtime', 'omni', 'live']
+    };
+
+    return order.map(capability => {
+      const models = Array.isArray(summary[capability]) ? summary[capability] : [];
+      let recommendedModel = '';
+      for (const keyword of preferred[capability]) {
+        const hit = models.find(model => String(model).toLowerCase().includes(keyword));
+        if (hit) {
+          recommendedModel = hit;
+          break;
+        }
+      }
+      if (!recommendedModel && models.length) {
+        recommendedModel = models[0];
+      }
+      return {
+        capability,
+        label: labels[capability],
+        count: models.length,
+        available: models.length > 0,
+        recommendedModel,
+        models
+      };
+    });
+  };
+
+  import('./js/profile-supplier-utils.mjs')
+    .then(module => {
+      summarizeSupplierCapabilities = summary => module.buildSupplierCapabilitySummary({ summary });
+      listSupplierPresets = module.listSupplierPresets;
+      buildSupplierPresetDraft = module.buildSupplierPresetDraft;
+    })
+    .catch(() => {});
+
+  let listSupplierPresets = function() {
+    return [
+      { id: 'deepseek', label: 'DeepSeek 官方', apiBase: 'https://api.deepseek.com', icon: '🧠', note: '便宜，活人感一般', isCustom: false },
+      { id: 'dashscope', label: '阿里千问官方', apiBase: 'https://dashscope.aliyuncs.com/compatible-mode/v1', icon: '🎙', note: '国产，TTS 强', isCustom: false },
+      { id: 'volcengine', label: '火山豆包', apiBase: 'https://ark.cn-beijing.volces.com/api/v3', icon: '🌋', note: '国产，活人感 +++', isCustom: false },
+      { id: 'grok', label: 'Grok 官方', apiBase: 'https://api.x.ai/v1', icon: '⚡', note: '体验好，要美区 key', isCustom: false },
+      { id: 'openai', label: 'OpenAI 官方', apiBase: 'https://api.openai.com/v1', icon: '✨', note: '贵，被墙', isCustom: false },
+      { id: 'custom', label: '自定义 / 中转', apiBase: '', icon: '🛠', note: 'gpt5x 中转、Grok2API 等', isCustom: true }
+    ];
+  };
+
+  let buildSupplierPresetDraft = function(providerId = 'custom') {
+    const preset = listSupplierPresets().find(item => item.id === providerId) || listSupplierPresets()[listSupplierPresets().length - 1];
+    return {
+      providerId: preset.id,
+      providerLabel: preset.label,
+      name: '',
+      apiBase: preset.apiBase,
+      isCustom: Boolean(preset.isCustom),
+      showApiBaseField: Boolean(preset.isCustom),
+      apiBaseReadonly: !preset.isCustom
+    };
+  };
+
+  const CAPABILITY_META = {
+    chat: {
+      icon: '💬',
+      label: '文字聊天',
+      note: '重要对话切贵的，日常闲聊切省的。'
+    },
+    vision: {
+      icon: '👁',
+      label: '看懂图片',
+      note: '以后你发照片给她，她要靠这里才能真正看懂。'
+    },
+    image: {
+      icon: '🎨',
+      label: '画图发图',
+      note: '她以后发动态图片、给你画图，就靠这一行。'
+    },
+    tts: {
+      icon: '🔊',
+      label: '听她说话',
+      note: '以后你点消息朗读、或者想听她说话，就是这一行在管。'
+    },
+    realtime: {
+      icon: '📞',
+      label: '实时通话',
+      note: '这一项最贵，所以保留按需开的感觉，不强推。'
+    }
+  };
+
+  let groupCapabilityOptions = function(options = []) {
+    const map = new Map();
+    for (const option of options) {
+      const key = `${option.credential_id}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          credentialId: option.credential_id,
+          credentialName: option.credential_name,
+          models: []
+        });
+      }
+      map.get(key).models.push({
+        credentialId: option.credential_id,
+        credentialName: option.credential_name,
+        modelId: option.model_id
+      });
+    }
+    return [...map.values()];
+  };
+
+  let buildQuickChatChoices = function(current, options = []) {
+    if (!current?.credential_id) {
+      return [];
+    }
+    return options
+      .filter(option => option.credential_id === current.credential_id && option.model_id !== current.model_id)
+      .slice(0, 3)
+      .map(option => ({
+        credentialId: option.credential_id,
+        credentialName: option.credential_name,
+        modelId: option.model_id,
+        active: false
+      }));
+  };
+
+  let buildCapabilityViewModel = function(item) {
+    const meta = CAPABILITY_META[item.capability] || {
+      icon: '✨',
+      label: item.capability,
+      note: ''
+    };
+    const options = Array.isArray(item.options) ? item.options : [];
+    const optionGroups = groupCapabilityOptions(options);
+    const suggestedModels = options.slice(0, 2).map(option => option.model_id);
+    const firstAvailable = options.length
+      ? {
+          credentialId: options[0].credential_id,
+          credentialName: options[0].credential_name,
+          modelId: options[0].model_id
+        }
+      : null;
+
+    return {
+      capability: item.capability,
+      icon: meta.icon,
+      label: meta.label,
+      note: meta.note,
+      enabled: Boolean(item.enabled),
+      stateText: item.enabled ? '开启' : '关闭',
+      current: item.current || null,
+      currentLabel: item.current ? `${item.current.credential_name} / ${item.current.model_id}` : '',
+      optionGroups,
+      suggestedModels,
+      firstAvailable,
+      canEnableQuickly: Boolean(firstAvailable),
+      emptyHint: firstAvailable ? '想开启？检测到' : '你的凭证里还没有能干这件事的模型',
+      quickChatChoices: item.capability === 'chat'
+        ? buildQuickChatChoices(item.current, options)
+        : []
+    };
+  };
+
+  import('./js/profile-capability-utils.mjs')
+    .then(module => {
+      buildCapabilityViewModel = module.buildCapabilityViewModel;
+      buildQuickChatChoices = module.buildQuickChatChoices;
+    })
+    .catch(() => {});
+
+  let normalizeVoiceId = value => {
+    const trimmed = String(value ?? '').trim();
+    return trimmed || 'longwan';
+  };
+  let shouldPersistTtsVoice = (nextVoiceId, currentExtras) =>
+    normalizeVoiceId(nextVoiceId) !== normalizeVoiceId(currentExtras?.voice_id);
+  let buildTtsCapabilityPayload = ({
+    credentialId,
+    modelId,
+    enabled = true,
+    voiceId,
+    currentExtras
+  }) => ({
+    credential_id: credentialId,
+    model_id: modelId,
+    enabled,
+    extras: {
+      ...(currentExtras && typeof currentExtras === 'object' ? currentExtras : {}),
+      voice_id: normalizeVoiceId(voiceId)
+    }
+  });
+  let getSelectedTtsPreset = item => {
+    const current = item?.current || {};
+    const voiceId = normalizeVoiceId(current.extras?.voice_id, '');
+    if (
+      current.model_id === 'qwen3-tts-vd-2026-01-26' &&
+      voiceId === 'qwen-tts-vd-bailian-voice-20260511143305690-0d51'
+    ) return 'xiaobai';
+    if (voiceId === 'browser') return 'browser';
+    return 'custom';
+  };
+  let buildTtsPresetPayload = (item, presetId, customVoiceId) => buildTtsCapabilityPayload({
+    credentialId: presetId === 'xiaobai'
+      ? item.options?.find(option => option.model_id === 'qwen3-tts-vd-2026-01-26')?.credential_id
+      : item.current?.credential_id || item.options?.[0]?.credential_id,
+    modelId: presetId === 'xiaobai'
+      ? 'qwen3-tts-vd-2026-01-26'
+      : item.current?.model_id || item.options?.[0]?.model_id,
+    enabled: true,
+    voiceId: presetId === 'xiaobai'
+      ? 'qwen-tts-vd-bailian-voice-20260511143305690-0d51'
+      : presetId === 'browser'
+        ? 'browser'
+        : customVoiceId,
+    currentExtras: item.current?.extras
+  });
+
+  import('./js/profile-tts-utils.mjs')
+    .then(module => {
+      normalizeVoiceId = module.normalizeVoiceId;
+      shouldPersistTtsVoice = module.shouldPersistTtsVoice;
+      buildTtsCapabilityPayload = module.buildTtsCapabilityPayload;
+      getSelectedTtsPreset = module.getSelectedTtsPreset;
+      buildTtsPresetPayload = module.buildTtsPresetPayload;
+    })
+    .catch(() => {});
+
+  import('./js/profile-capability-errors.mjs')
+    .then(module => {
+      buildCapabilityLoadErrorMessage = module.buildCapabilityLoadErrorMessage;
+      parseCapabilityResponseError = module.parseCapabilityResponseError;
+    })
+    .catch(() => {});
+
+  async function loadCapabilities() {
+    try {
+      const response = await fetch('/api/capabilities', { credentials: 'same-origin' });
+      const data = response.ok ? await response.json() : null;
+      if (!response.ok) {
+        throw await parseCapabilityResponseError(response);
+      }
+      if (!data?.success || !Array.isArray(data.items)) {
+        throw new Error(data?.error || '加载能力面板失败');
+      }
+      capabilities = data.items;
+      updateCapabilityUI();
+    } catch (err) {
+      console.error('加载能力面板失败', err);
+      const list = document.getElementById('capList');
+      if (list) {
+        list.innerHTML = `<div class="cap-empty">${buildCapabilityLoadErrorMessage(err)}</div>`;
+      }
+    }
+  }
+
+  function renderCapabilitySelect(view) {
+    if (!view.optionGroups.length) {
+      return '';
+    }
+
+    const pendingValue = pendingCapabilitySelections.get(view.capability) || null;
+
+    const optionsHtml = view.optionGroups.map(group => {
+      const items = group.models.map(model => {
+        const value = `${model.credentialId}::${model.modelId}`;
+        const selected = pendingValue
+          ? pendingValue.credentialId === model.credentialId && pendingValue.modelId === model.modelId
+          : (view.current && view.current.credential_id === model.credentialId && view.current.model_id === model.modelId);
+        return `<option value="${escapeHtml(value)}" ${selected ? 'selected' : ''}>${escapeHtml(model.modelId)}</option>`;
+      }).join('');
+      return `<optgroup label="${escapeHtml(group.credentialName)}">${items}</optgroup>`;
+    }).join('');
+
+    return `
+      <div class="cap-select-wrap">
+        <select class="cap-select" data-cap-select="${view.capability}">
+          <option value="">选择这个能力要用哪个模型</option>
+          ${optionsHtml}
+        </select>
+      </div>
+    `;
+  }
+
+  function renderQuickChatChips(view) {
+    if (view.capability !== 'chat' || !view.enabled || !view.quickChatChoices.length) {
+      return '';
+    }
+
+    return `
+      <div class="cap-helper-row">
+        ${view.quickChatChoices.map(item => `
+          <button
+            type="button"
+            class="quick-chip"
+            data-chat-quick="${view.capability}"
+            data-credential-id="${item.credentialId}"
+            data-model-id="${escapeHtml(item.modelId)}"
+          >${escapeHtml(item.modelId)}</button>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function renderTtsVoiceField(view) {
+    if (view.capability !== 'tts' || !view.enabled) {
+      return '';
+    }
+
+    const currentVoiceId = escapeHtml(view.current?.extras?.voice_id || 'longwan');
+    const selectedPreset = getSelectedTtsPreset(view);
+    return `
+      <div class="cap-helper-row">
+        <button type="button" class="tts-preset-btn ${selectedPreset === 'xiaobai' ? 'active' : ''}" data-tts-preset="xiaobai">小白专属（推荐）</button>
+        <button type="button" class="tts-preset-btn ${selectedPreset === 'browser' ? 'active' : ''}" data-tts-preset="browser">浏览器免费</button>
+        <button type="button" class="tts-preset-btn ${selectedPreset === 'custom' ? 'active' : ''}" data-tts-preset="custom">自定义</button>
+      </div>
+      <div class="cap-helper-row">
+        <input
+          class="cap-select"
+          data-tts-voice-id="${view.capability}"
+          type="text"
+          value="${currentVoiceId}"
+          placeholder="音色 ID，比如 longwan"
+          ${selectedPreset === 'custom' ? '' : 'hidden'}
+        >
+      </div>
+    `;
+  }
+
+  function renderCapabilityCard(view) {
+    const toggleClass = view.enabled ? 'cap-toggle' : 'cap-toggle off';
+    const enabledBody = `
+      <div class="cap-status-line">
+        <span>当前用</span>
+        <span class="cap-pill cap-pill-static">${escapeHtml(view.currentLabel)}</span>
+      </div>
+      <div class="cap-helper-row">
+        ${renderCapabilitySelect(view)}
+      </div>
+      ${renderTtsVoiceField(view)}
+      ${renderQuickChatChips(view)}
+      ${view.capability === 'tts' ? '<div class="cap-tip">小白专属走千问音色；浏览器免费走电脑自带语音；自定义才需要手填音色 ID。</div>' : ''}
+      ${view.capability === 'realtime' ? '<div class="cap-tip">最贵，按需开。等你以后真的需要“打电话陪伴感”的时候，再从这里打开就行。</div>' : ''}
+    `;
+
+    const disabledBody = `
+      <div class="cap-status-line">
+        <span>${escapeHtml(view.emptyHint)}</span>
+        ${view.suggestedModels.map(model => `<span class="quick-chip">${escapeHtml(model)}</span>`).join('')}
+      </div>
+      <div class="cap-helper-row">
+        ${view.canEnableQuickly ? renderCapabilitySelect(view) : ''}
+        ${view.canEnableQuickly
+          ? `<button type="button" class="cap-ghost-btn" data-cap-enable="${view.capability}">立即开启</button>`
+          : `<button type="button" class="cap-ghost-btn" data-cap-goto-supplier="${view.capability}">去添加供应商</button>`}
+      </div>
+      ${view.capability === 'realtime' ? '<div class="cap-tip">最贵，按需开。等你以后真的需要“打电话陪伴感”的时候，再从这里打开就行。</div>' : ''}
+    `;
+
+    return `
+      <article class="cap-card" data-capability="${view.capability}">
+        <div class="cap-top">
+          <div class="cap-title-wrap">
+            <div class="cap-icon">${view.icon}</div>
+            <div class="cap-title-group">
+              <div class="cap-name">${view.label}</div>
+              <div class="cap-note-top">${view.note}</div>
+            </div>
+          </div>
+          <button type="button" class="${toggleClass}" data-cap-toggle="${view.capability}">${view.stateText}</button>
+        </div>
+        ${view.enabled ? enabledBody : disabledBody}
+      </article>
+    `;
+  }
+
+  function updateCapabilityUI() {
+    const list = document.getElementById('capList');
+    if (!list) return;
+
+    if (!capabilities.length) {
+      list.innerHTML = '<div class="cap-empty">你还没有能力分配。先连一个供应商，再回来选每种能力用哪个模型。</div>';
+      return;
+    }
+
+    list.innerHTML = capabilities
+      .map(item => renderCapabilityCard(buildCapabilityViewModel(item)))
+      .join('');
+  }
+
+  async function saveCapability(capability, payload, successText) {
+    const response = await fetch(`/api/capabilities/${capability}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+    if (!response.ok || !data.success || !data.item) {
+      throw new Error(data.error || '保存能力设置失败');
+    }
+    const index = capabilities.findIndex(item => item.capability === capability);
+    if (index >= 0) {
+      capabilities[index] = data.item;
+    } else {
+      capabilities.push(data.item);
+    }
+    pendingCapabilitySelections.delete(capability);
+    updateCapabilityUI();
+    if (successText) {
+      showToast(successText);
+    }
+  }
+
+  async function loadCredentials() {
+    try {
+      const response = await fetch('/api/credentials', { credentials: 'same-origin' });
+      const data = await response.json();
+      if (!response.ok || !data.success || !Array.isArray(data.items)) {
+        throw new Error(data.error || '加载供应商失败');
+      }
+      credentials = data.items;
+      updateSupplierUI();
+      await loadCredentialModelsForAll();
+      updateSupplierUI();
+      await loadCapabilities();
+    } catch (err) {
+      console.error('加载供应商失败', err);
+      document.getElementById('credList').innerHTML = '<div class="supplier-empty">这会儿没把供应商列表拉下来。你可以稍后刷新试试。</div>';
+    }
+  }
+
+  async function loadCredentialModelsForAll() {
+    await Promise.all(credentials.map(async item => {
+      try {
+        const response = await fetch(`/api/credentials/${item.id}/models`, {
+          credentials: 'same-origin'
+        });
+        const data = await response.json();
+        if (response.ok && data.success && Array.isArray(data.items)) {
+          credentialModelsMap.set(item.id, data.items);
+        } else {
+          credentialModelsMap.set(item.id, []);
+        }
+      } catch {
+        credentialModelsMap.set(item.id, []);
+      }
+    }));
+  }
+
+  function updateSupplierUI() {
+    const addButton = document.querySelector('.supplier-block .add-supplier-btn');
+    if (addButton) {
+      addButton.innerHTML = credentials.length > 0
+        ? '<span class="plus">＋</span><span>再加一个供应商</span>'
+        : '<span class="plus">＋</span><span>添加新供应商</span>';
+    }
+
+    const credList = document.getElementById('credList');
+    if (!credList) return;
+
+    if (!credentials.length) {
+      credList.innerHTML = '<div class="supplier-empty">你还没有连过供应商。先加一个 key，后面聊天、看图、画图、说话就都能从这里往下配。</div>';
+      return;
+    }
+
+    credList.innerHTML = credentials.map(item => {
+      const models = credentialModelsMap.get(item.id) || [];
+      const modelCount = models.length;
+      const safeName = escapeHtml(item.name || '未命名供应商');
+      const safeBase = escapeHtml(item.api_base || '');
+      const safeKey = escapeHtml(item.api_key_masked || '未显示');
+      return `
+        <article class="cred-card" data-credential-id="${item.id}">
+          <div class="cred-card-head">
+            <div class="cred-card-main">
+              <div class="cred-card-name">${safeName}</div>
+              <div class="cred-card-base">${safeBase}</div>
+              <div class="cred-card-meta">
+                <span class="meta-pill">已发现 ${modelCount} 个模型</span>
+                <span class="meta-note">${safeKey}</span>
+              </div>
+            </div>
+          </div>
+          <div class="cred-actions">
+            <button class="action-text-btn" type="button" data-action="test" data-id="${item.id}">测试连通</button>
+            <button class="action-text-btn" type="button" data-action="refresh" data-id="${item.id}">刷新模型</button>
+            <button class="action-text-btn" type="button" data-action="rename" data-id="${item.id}">改名</button>
+            <button class="action-text-btn danger" type="button" data-action="delete" data-id="${item.id}">删除</button>
+          </div>
+        </article>
+      `;
+    }).join('');
+  }
+
+  function renderSupplierPresetCards() {
+    const list = document.getElementById('supplierPresetList');
+    if (!list) return;
+    const presets = listSupplierPresets();
+    const selectedPreset = presets.find(item => item.id === selectedSupplierPresetId) || presets[0];
+    const dropdownValue = document.getElementById('supplierPresetDropdownValue');
+    if (dropdownValue && selectedPreset) {
+      dropdownValue.innerHTML = `
+        <span class="provider-icon ${selectedPreset.id === 'deepseek' ? 'deepseek-icon' : ''}">${selectedPreset.icon}</span>
+        <span class="provider-dropdown-label">${escapeHtml(selectedPreset.label)}</span>
+      `;
+    }
+
+    list.innerHTML = presets.map(item => `
+      <button
+        type="button"
+        class="provider-card ${selectedSupplierPresetId === item.id ? 'active' : ''}"
+        data-supplier-preset="${item.id}"
+      >
+        <div class="provider-icon ${item.id === 'deepseek' ? 'deepseek-icon' : ''}">${item.icon}</div>
+        <div>
+          <div class="provider-name">${escapeHtml(item.label)}</div>
+          <div class="provider-desc">${escapeHtml(item.note)}</div>
+        </div>
+      </button>
+    `).join('');
+  }
+
+  function applySupplierDraft(draft) {
+    document.getElementById('configName').value = draft.name || '';
+    document.getElementById('apiBase').value = draft.apiBase || '';
+    document.getElementById('apiBaseReadonly').value = draft.apiBase || '';
+
+    const editableField = document.getElementById('apiBaseEditableField');
+    const readonlyField = document.getElementById('apiBaseReadonlyField');
+    const editableInput = document.getElementById('apiBase');
+    editableField.hidden = !draft.showApiBaseField;
+    readonlyField.hidden = draft.showApiBaseField;
+    editableInput.required = draft.showApiBaseField;
+    editableInput.readOnly = !draft.showApiBaseField;
+  }
+
+  function showSupplierPresetStep() {
+    document.getElementById('supplierPresetStep').hidden = false;
+    document.getElementById('supplierConfigStep').hidden = false;
+    document.getElementById('supplierConfigActions').hidden = false;
+    document.getElementById('modalTitle').textContent = '添加新供应商';
+    document.getElementById('backSupplierStepBtn').textContent = '取消';
+    const draft = buildSupplierPresetDraft(selectedSupplierPresetId || 'deepseek');
+    applySupplierDraft(draft);
+    document.getElementById('supplierPresetList').hidden = true;
+    document.getElementById('supplierPresetDropdown')?.setAttribute('aria-expanded', 'false');
+  }
+
+  function showSupplierConfigStep() {
+    const draft = buildSupplierPresetDraft(selectedSupplierPresetId || 'custom');
+    applySupplierDraft(draft);
+    document.getElementById('supplierConfigStep').hidden = false;
+    document.getElementById('supplierConfigActions').hidden = false;
+    document.getElementById('backSupplierStepBtn').textContent = '取消';
+    document.getElementById('modalTitle').textContent = `添加新供应商 · ${draft.providerLabel}`;
+  }
+
+  function openModelConfigModal(credentialId = null) {
+    editingCredentialId = credentialId;
+    const modal = document.getElementById('modelConfigModal');
+    const form = document.getElementById('modelConfigForm');
+    const title = document.getElementById('modalTitle');
+    form.reset();
+
+    if (credentialId) {
+      const item = credentials.find(entry => entry.id === credentialId);
+      title.textContent = '改供应商信息';
+      selectedSupplierPresetId = 'custom';
+      renderSupplierPresetCards();
+      document.getElementById('supplierPresetStep').hidden = true;
+      document.getElementById('supplierConfigStep').hidden = false;
+      document.getElementById('supplierConfigActions').hidden = false;
+      document.getElementById('backSupplierStepBtn').textContent = '取消';
+      document.getElementById('apiBaseEditableField').hidden = false;
+      document.getElementById('apiBaseReadonlyField').hidden = true;
+      document.getElementById('apiBase').required = true;
+      document.getElementById('apiBase').readOnly = false;
+      document.getElementById('configName').value = item?.name || '';
+      document.getElementById('apiBase').value = item?.api_base || '';
+      document.getElementById('apiBaseReadonly').value = item?.api_base || '';
+      document.getElementById('apiKey').value = '';
+    } else {
+      selectedSupplierPresetId = 'deepseek';
+      renderSupplierPresetCards();
+      showSupplierPresetStep();
+    }
+
+    const apiKeyInput = document.getElementById('apiKey');
+    const toggleBtn = document.getElementById('toggleSupplierKeyBtn');
+    apiKeyInput.type = 'password';
+    toggleBtn.textContent = '显示';
+
+    modal.classList.add('show');
+  }
+
+  function closeModelConfigModal(e) {
+    if (e && e.target !== e.currentTarget) return;
+    document.getElementById('modelConfigModal').classList.remove('show');
+    editingCredentialId = null;
+    selectedSupplierPresetId = null;
+  }
+
+  function renderSupplierSummary(summaryItems) {
+    const list = document.getElementById('supplierSummaryList');
+    list.innerHTML = summaryItems.map(item => `
+      <div class="summary-item ${item.available ? 'available' : ''}">
+        <div class="summary-icon">${item.available ? '✓' : '·'}</div>
+        <div class="summary-copy">
+          <div class="summary-title">${item.label}</div>
+          <div class="summary-desc">
+            ${item.available
+              ? `发现 ${item.count} 个可用模型${item.recommendedModel ? `，先推荐你看看 ${escapeHtml(item.recommendedModel)}` : ''}。`
+              : '这次还没检测到能做这件事的模型。'}
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function openSupplierSummaryModal(summaryItems) {
+    lastSummarySelection = summaryItems;
+    renderSupplierSummary(summaryItems);
+    document.getElementById('supplierSummaryModal').classList.add('show');
+  }
+
+  function closeSupplierSummaryModal(e) {
+    if (e && e.target !== e.currentTarget) return;
+    document.getElementById('supplierSummaryModal').classList.remove('show');
+  }
+
+  async function refreshCredentialModels(credentialId, { showSummary = false } = {}) {
+    const response = await fetch(`/api/credentials/${credentialId}/refresh-models`, {
+      method: 'POST',
+      credentials: 'same-origin'
+    });
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || '刷新模型失败');
+    }
+
+    const modelsResponse = await fetch(`/api/credentials/${credentialId}/models`, {
+      credentials: 'same-origin'
+    });
+    const modelsData = await modelsResponse.json();
+    credentialModelsMap.set(
+      credentialId,
+      modelsResponse.ok && modelsData.success && Array.isArray(modelsData.items) ? modelsData.items : []
+    );
+    updateSupplierUI();
+
+    const summaryItems = summarizeSupplierCapabilities(data.summary || {});
+    if (showSummary) {
+      openSupplierSummaryModal(summaryItems);
+    } else {
+      showToast(`已刷新，发现 ${credentialModelsMap.get(credentialId).length} 个模型`);
+    }
+    await loadCapabilities();
+    return summaryItems;
+  }
+
+  async function saveCredentialFromForm(event) {
+    event.preventDefault();
+    const saveBtn = document.getElementById('saveBtn');
+    const originalText = saveBtn.textContent;
+    const wasEditing = Boolean(editingCredentialId);
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中...';
+
+    try {
+      const draft = buildSupplierPresetDraft(selectedSupplierPresetId || 'custom');
+      const apiBaseValue = wasEditing
+        ? document.getElementById('apiBase').value.trim()
+        : (draft.showApiBaseField
+          ? document.getElementById('apiBase').value.trim()
+          : (draft.apiBase || '').trim());
+      const payload = {
+        name: document.getElementById('configName').value.trim(),
+        api_base: apiBaseValue,
+        api_key: document.getElementById('apiKey').value.trim()
+      };
+
+      if (!payload.name || !payload.api_base || (!payload.api_key && !editingCredentialId)) {
+        throw new Error('名字、接口地址和 key 要先填完整。');
+      }
+
+      let response;
+      if (editingCredentialId) {
+        if (!payload.api_key) {
+          delete payload.api_key;
+        }
+        response = await fetch(`/api/credentials/${editingCredentialId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          credentials: 'same-origin'
+        });
+      } else {
+        response = await fetch('/api/credentials', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          credentials: 'same-origin'
+        });
+      }
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || '保存失败');
+      }
+
+      closeModelConfigModal();
+      await loadCredentials();
+      showToast(wasEditing ? '供应商信息改好了' : '供应商已经记住了');
+
+      if (!wasEditing && data.item?.id) {
+        await refreshCredentialModels(data.item.id, { showSummary: true });
+      }
+    } catch (err) {
+      alert(err.message || '网络错误，请稍后再试');
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = originalText;
+    }
+  }
+
+  async function testCredentialConnection(credentialId) {
+    const response = await fetch(`/api/credentials/${credentialId}/test`, {
+      method: 'POST',
+      credentials: 'same-origin'
+    });
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || '测试连通失败');
+    }
+    showToast(data.message || '连通正常');
+  }
+
+  async function renameCredential(credentialId) {
+    const current = credentials.find(item => item.id === credentialId);
+    const nextName = window.prompt('给这个供应商换个名字吧', current?.name || '');
+    if (!nextName || !nextName.trim()) return;
+
+    const response = await fetch(`/api/credentials/${credentialId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: nextName.trim() }),
+      credentials: 'same-origin'
+    });
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || '改名失败');
+    }
+    await loadCredentials();
+    showToast('名字改好了');
+  }
+
+  async function removeCredential(credentialId) {
+    if (!confirm('确定要删掉这个供应商吗？删掉后，和它绑定的能力也会一起失效。')) return;
+    const response = await fetch(`/api/credentials/${credentialId}`, {
+      method: 'DELETE',
+      credentials: 'same-origin'
+    });
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || '删除失败');
+    }
+    credentialModelsMap.delete(credentialId);
+    await loadCredentials();
+    const affected = Array.isArray(data.disabled_capabilities) && data.disabled_capabilities.length
+      ? `，受影响的能力有：${data.disabled_capabilities.map(item => CAPABILITY_TEXT[item] || item).join('、')}`
+      : '';
+    showToast(`供应商已经删掉了${affected}`);
+  }
+
+  function findCapability(capability) {
+    return capabilities.find(item => item.capability === capability) || null;
+  }
+
+  async function enableCapabilityWithFirstModel(capability) {
+    const item = findCapability(capability);
+    const view = item ? buildCapabilityViewModel(item) : null;
+    const pending = pendingCapabilitySelections.get(capability);
+    const target = pending || view?.firstAvailable;
+    if (!target) {
+      throw new Error('还没有可用模型可开。');
+    }
+
+    await saveCapability(
+      capability,
+      {
+        credential_id: target.credentialId,
+        model_id: target.modelId,
+        enabled: true
+      },
+      `已开启${CAPABILITY_TEXT[capability]}`
+    );
+  }
+
+  document.getElementById('modelConfigForm').addEventListener('submit', saveCredentialFromForm);
+
+  document.getElementById('toggleSupplierKeyBtn')?.addEventListener('click', () => {
+    const input = document.getElementById('apiKey');
+    const btn = document.getElementById('toggleSupplierKeyBtn');
+    const isPassword = input.type === 'password';
+    input.type = isPassword ? 'text' : 'password';
+    btn.textContent = isPassword ? '隐藏' : '显示';
+  });
+
+  document.getElementById('changePasswordForm')?.addEventListener('submit', submitChangePassword);
+  document.getElementById('nicknameForm')?.addEventListener('submit', submitNickname);
+  document.getElementById('avatarForm')?.addEventListener('submit', submitAvatar);
+
+  document.getElementById('accountPasswordRow')?.addEventListener('click', () => {
+    openChangePasswordModal();
+  });
+
+  document.getElementById('nicknameRow')?.addEventListener('click', () => {
+    openNicknameModal();
+  });
+
+  document.getElementById('avatarRow')?.addEventListener('click', () => {
+    openAvatarModal();
+  });
+
+  document.getElementById('uploadAvatarBtn')?.addEventListener('click', () => {
+    document.getElementById('avatarUploadInput')?.click();
+  });
+
+  document.getElementById('avatarUploadInput')?.addEventListener('change', async event => {
+    const input = event.target;
+    const file = input?.files?.[0];
+    if (!file) return;
+
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      alert('先支持上传 PNG、JPG、WEBP 图片');
+      input.value = '';
+      return;
+    }
+
+    try {
+      await uploadCustomAvatar(file);
+      showToast('头像已上传，记得点保存');
+    } catch (err) {
+      alert(err.message || '上传头像失败');
+    } finally {
+      input.value = '';
+    }
+  });
+
+  document.getElementById('aboutRuobaiRow')?.addEventListener('click', () => {
+    openAboutRuobaiModal();
+  });
+
+  document.getElementById('privacySecurityRow')?.addEventListener('click', () => {
+    openPrivacySecurityModal();
+  });
+
+  document.getElementById('avatarPresetList')?.addEventListener('click', event => {
+    const actionButton = event.target.closest('button[data-avatar-action]');
+    if (actionButton) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const action = actionButton.dataset.avatarAction;
+      const avatarUrl = actionButton.dataset.avatarUrl || '';
+
+      if (action === 'reset') {
+        resetUploadedAvatarChoice();
+        return;
+      }
+
+      if (action === 'delete') {
+        deleteUploadedAvatar(avatarUrl).catch(err => {
+          alert(err.message || '删除上传头像失败');
+        });
+        return;
+      }
+    }
+
+    const card = event.target.closest('button[data-avatar-url]');
+    if (!card) return;
+    selectedAvatarUrl = card.dataset.avatarUrl || '';
+    avatarChanged = true;
+    renderAvatarPresetList();
+  });
+
+  document.getElementById('supplierPresetList')?.addEventListener('click', event => {
+    const card = event.target.closest('button[data-supplier-preset]');
+    if (!card) return;
+    selectedSupplierPresetId = card.dataset.supplierPreset;
+    renderSupplierPresetCards();
+    showSupplierConfigStep();
+    document.getElementById('supplierPresetList').hidden = true;
+    document.getElementById('supplierPresetDropdown')?.setAttribute('aria-expanded', 'false');
+  });
+
+  document.getElementById('supplierPresetDropdown')?.addEventListener('click', () => {
+    const list = document.getElementById('supplierPresetList');
+    const dropdown = document.getElementById('supplierPresetDropdown');
+    if (!list || !dropdown) return;
+    const nextHidden = !list.hidden;
+    list.hidden = nextHidden;
+    dropdown.setAttribute('aria-expanded', String(!nextHidden));
+  });
+
+  document.addEventListener('click', event => {
+    const selection = document.getElementById('supplierPresetStep');
+    const list = document.getElementById('supplierPresetList');
+    const dropdown = document.getElementById('supplierPresetDropdown');
+    if (!selection || !list || !dropdown || selection.contains(event.target)) return;
+    list.hidden = true;
+    dropdown.setAttribute('aria-expanded', 'false');
+  });
+
+  document.getElementById('backSupplierStepBtn')?.addEventListener('click', () => {
+    closeModelConfigModal();
+  });
+
+  document.querySelector('.supplier-block .add-supplier-btn')?.addEventListener('click', () => {
+    openModelConfigModal();
+  });
+
+  document.getElementById('credList')?.addEventListener('click', async event => {
+    const button = event.target.closest('button[data-action]');
+    if (!button) return;
+
+    const action = button.dataset.action;
+    const credentialId = Number(button.dataset.id);
+    if (!credentialId) return;
+
+    try {
+      button.disabled = true;
+      if (action === 'test') {
+        await testCredentialConnection(credentialId);
+      } else if (action === 'refresh') {
+        await refreshCredentialModels(credentialId);
+      } else if (action === 'rename') {
+        await renameCredential(credentialId);
+      } else if (action === 'delete') {
+        await removeCredential(credentialId);
+      }
+    } catch (err) {
+      alert(err.message || '这次没做成，请稍后再试');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  document.getElementById('capList')?.addEventListener('change', async event => {
+    const select = event.target.closest('select[data-cap-select]');
+    if (!select) return;
+
+    const capability = select.dataset.capSelect;
+    const value = select.value;
+    if (!capability || !value) return;
+
+    const [credentialIdText, modelId] = value.split('::');
+    const credentialId = Number(credentialIdText);
+    if (!credentialId || !modelId) return;
+    const item = findCapability(capability);
+    const extras = capability === 'tts'
+      ? {
+          voice_id: getSelectedTtsPreset(item) === 'browser'
+            ? 'browser'
+            : normalizeVoiceId(document.querySelector(`[data-tts-voice-id="${capability}"]`)?.value)
+        }
+      : undefined;
+
+    try {
+      select.disabled = true;
+      await saveCapability(
+        capability,
+        {
+          credential_id: credentialId,
+          model_id: modelId,
+          enabled: true,
+          extras
+        },
+        `已切到 ${modelId}`
+      );
+    } catch (err) {
+      alert(err.message || '这次没切成功，请稍后再试');
+    } finally {
+      select.disabled = false;
+    }
+  });
+
+  document.getElementById('capList')?.addEventListener('click', async event => {
+    const toggle = event.target.closest('button[data-cap-toggle]');
+    const quickEnable = event.target.closest('button[data-cap-enable]');
+    const gotoSupplier = event.target.closest('button[data-cap-goto-supplier]');
+    const quickChat = event.target.closest('button[data-chat-quick]');
+    const ttsPreset = event.target.closest('button[data-tts-preset]');
+
+    try {
+      if (ttsPreset) {
+        const item = findCapability('tts');
+        if (!item?.enabled) return;
+
+        ttsPreset.disabled = true;
+        const presetId = ttsPreset.dataset.ttsPreset;
+        if (presetId === 'custom') {
+          const card = ttsPreset.closest('[data-capability="tts"]');
+          card?.querySelectorAll('[data-tts-preset]').forEach(button => {
+            button.classList.toggle('active', button === ttsPreset);
+          });
+          const input = card?.querySelector('[data-tts-voice-id="tts"]');
+          if (input) {
+            input.hidden = false;
+            input.focus();
+            input.select();
+          }
+          ttsPreset.disabled = false;
+          return;
+        }
+
+        await saveCapability(
+          'tts',
+          buildTtsPresetPayload(item, presetId),
+          presetId === 'xiaobai'
+            ? '已切到小白专属'
+            : presetId === 'browser'
+              ? '已切到浏览器免费语音'
+              : '已切到自定义音色'
+        );
+        return;
+      }
+
+      if (toggle) {
+        const capability = toggle.dataset.capToggle;
+        const item = findCapability(capability);
+        if (!item) return;
+
+        const nextEnabled = !item.enabled;
+        if (nextEnabled) {
+          const view = buildCapabilityViewModel(item);
+          const pending = pendingCapabilitySelections.get(capability);
+          const target = pending || view.firstAvailable;
+          if (!target) {
+            throw new Error('还没有可用模型可开，先去上面加供应商。');
+          }
+          await saveCapability(
+            capability,
+            {
+              credential_id: target.credentialId,
+              model_id: target.modelId,
+              enabled: true
+            },
+            `${CAPABILITY_TEXT[capability]}已开启`
+          );
+        } else {
+          const current = item.current || {};
+          await saveCapability(
+            capability,
+            {
+              credential_id: current.credential_id || null,
+              model_id: current.model_id || '',
+              enabled: false,
+              extras: current.extras || null
+            },
+            `${CAPABILITY_TEXT[capability]}已关闭`
+          );
+        }
+        return;
+      }
+
+      if (quickEnable) {
+        await enableCapabilityWithFirstModel(quickEnable.dataset.capEnable);
+        return;
+      }
+
+      if (gotoSupplier) {
+        document.getElementById('modelConfigBlock')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+
+      if (quickChat) {
+        const capability = quickChat.dataset.chatQuick;
+        const credentialId = Number(quickChat.dataset.credentialId);
+        const modelId = quickChat.dataset.modelId;
+        if (!capability || !credentialId || !modelId) return;
+
+        await saveCapability(
+          capability,
+          {
+            credential_id: credentialId,
+            model_id: modelId,
+            enabled: true
+          },
+          `已切到 ${modelId}`
+        );
+      }
+    } catch (err) {
+      alert(err.message || '这次没做成，请稍后再试');
+    }
+  });
+
+  document.getElementById('capList')?.addEventListener('focusout', async event => {
+    const input = event.target.closest('input[data-tts-voice-id]');
+    if (!input) return;
+
+    const capability = input.dataset.ttsVoiceId;
+    if (capability !== 'tts') return;
+
+    const item = findCapability(capability);
+    if (!item?.enabled || !item.current?.credential_id || !item.current?.model_id) {
+      input.value = normalizeVoiceId(input.value);
+      return;
+    }
+
+    const nextVoiceId = normalizeVoiceId(input.value);
+    input.value = nextVoiceId;
+
+    if (!shouldPersistTtsVoice(nextVoiceId, item.current.extras)) {
+      return;
+    }
+
+    const originalValue = item.current?.extras?.voice_id || 'longwan';
+    input.disabled = true;
+    try {
+      await saveCapability(
+        capability,
+        buildTtsCapabilityPayload({
+          credentialId: item.current.credential_id,
+          modelId: item.current.model_id,
+          enabled: true,
+          voiceId: nextVoiceId,
+          currentExtras: item.current.extras
+        }),
+        `音色已切到 ${nextVoiceId}`
+      );
+    } catch (err) {
+      input.value = normalizeVoiceId(originalValue);
+      alert(err.message || '音色保存失败，请稍后再试');
+    } finally {
+      input.disabled = false;
+    }
+  });
+
+  document.getElementById('summaryLaterBtn')?.addEventListener('click', () => {
+    closeSupplierSummaryModal();
+  });
+
+  document.getElementById('summaryConfigureBtn')?.addEventListener('click', () => {
+    closeSupplierSummaryModal();
+    if (lastSummarySelection && Array.isArray(lastSummarySelection)) {
+      pendingCapabilitySelections = new Map();
+      for (const summaryItem of lastSummarySelection) {
+        if (!summaryItem.available || !summaryItem.recommendedModel) continue;
+        const capabilityItem = findCapability(summaryItem.capability);
+        const match = capabilityItem?.options?.find(option => option.model_id === summaryItem.recommendedModel);
+        if (match) {
+          pendingCapabilitySelections.set(summaryItem.capability, {
+            credentialId: match.credential_id,
+            credentialName: match.credential_name,
+            modelId: match.model_id
+          });
+        }
+      }
+    }
+    const block = document.querySelector('.capability-block');
+    if (block) {
+      block.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      block.classList.add('onboard-highlight');
+      setTimeout(() => block.classList.remove('onboard-highlight'), 2200);
+    }
+    updateCapabilityUI();
+  });
+
+  function showToast(text) {
+    const toast = document.getElementById('onboardToast');
+    toast.textContent = text;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 2000);
+  }
+
+  // ========== 初始化 ==========
+  loadUserInfo();
+  loadCredentials();
+
+  // 退出登录
+  document.querySelector('.setting-row.logout')?.addEventListener('click', async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+    } catch {}
+    localStorage.removeItem('rb-username');
+    localStorage.removeItem('rb-user');
+    location.href = 'auth.html';
+  });
+
+  // ========== 落地引导：?onboard=key 时滚到模型配置板块 + 轻提示 ==========
+  (function handleOnboard() {
+    const params = new URLSearchParams(window.location.search);
+    const mode = params.get('onboard');
+    if (mode !== 'key') return;
+
+    const block = document.getElementById('modelConfigBlock');
+    const toast = document.getElementById('onboardToast');
+    if (!block || !toast) return;
+
+    setTimeout(() => {
+      block.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      block.classList.add('onboard-highlight');
+      toast.textContent = '配置 key 才能和她说话呀～';
+      toast.classList.add('show');
+    }, 350);
+
+    setTimeout(() => {
+      toast.classList.remove('show');
+    }, 4200);
+
+    setTimeout(() => {
+      block.classList.remove('onboard-highlight');
+      const url = new URL(window.location.href);
+      url.searchParams.delete('onboard');
+      window.history.replaceState({}, '', url.toString());
+    }, 6000);
+  })();
+  </script>
+</body>
+</html>

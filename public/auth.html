@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登录 · 若白 RuoBai</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --pink-50:  #FBEAF0;
+      --pink-100: #F4C0D1;
+      --pink-200: #ED93B1;
+      --pink-400: #D4537E;
+      --pink-500: #B73D67;
+      --pink-700: #72243E;
+      --pink-900: #4B1528;
+      --cream:    #fffaf6;
+      --bg-page:  #fdf7f6;
+      --muted:    #993556;
+      --line:     rgba(244, 192, 209, .55);
+      --shadow:   0 12px 32px rgba(212, 83, 126, .06);
+      --serif: 'Noto Serif SC', "PingFang SC", "Microsoft YaHei", serif;
+      --sans:  'Sora', "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--sans);
+      color: var(--pink-900);
+      background:
+        linear-gradient(135deg, rgba(253, 247, 246, 0.55), rgba(244, 192, 209, 0.35)),
+        url('./images/auth-bg.webp') center/cover no-repeat fixed,
+        var(--bg-page);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      line-height: 1.7;
+      position: relative;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(circle at top right, rgba(212, 83, 126, .10), transparent 38%),
+        radial-gradient(circle at bottom left, rgba(237, 147, 177, .08), transparent 42%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .auth-card {
+      width: 100%;
+      max-width: 420px;
+      background: rgba(255, 255, 255, 0.82);
+      backdrop-filter: blur(20px) saturate(1.4);
+      -webkit-backdrop-filter: blur(20px) saturate(1.4);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      border-radius: 28px;
+      box-shadow: 0 20px 60px rgba(212, 83, 126, .18);
+      padding: 44px 36px 36px;
+      text-align: center;
+      position: relative;
+      z-index: 1;
+    }
+    .brand {
+      display: inline-block;
+      margin-bottom: 22px;
+    }
+    .brand img {
+      width: 64px; height: 64px;
+      border-radius: 20px;
+      object-fit: cover;
+      border: 1px solid var(--pink-100);
+    }
+    .auth-title {
+      font-family: var(--serif);
+      font-size: 26px;
+      font-weight: 500;
+      margin: 0 0 8px;
+      letter-spacing: -.01em;
+      color: var(--pink-900);
+    }
+    .auth-sub {
+      color: var(--muted);
+      font-size: 14px;
+      margin: 0 0 28px;
+    }
+    .form-group {
+      text-align: left;
+      margin-bottom: 14px;
+    }
+    .form-label {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 8px;
+      letter-spacing: .02em;
+      font-weight: 500;
+    }
+    .form-input {
+      width: 100%;
+      padding: 13px 16px;
+      border: 1px solid var(--pink-100);
+      border-radius: 14px;
+      font-size: 15px;
+      background: var(--cream);
+      color: var(--pink-900);
+      transition: .2s;
+      font-family: inherit;
+    }
+    .form-input::placeholder { color: var(--pink-200); }
+    .form-input:focus {
+      outline: none;
+      border-color: var(--pink-400);
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(212, 83, 126, .10);
+    }
+    .btn-submit {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 14px;
+      background: var(--pink-400);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: .2s;
+      box-shadow: 0 14px 28px rgba(212, 83, 126, .22);
+      font-family: inherit;
+      margin-top: 8px;
+      letter-spacing: .02em;
+    }
+    .btn-submit:hover:not(:disabled) {
+      background: var(--pink-500);
+      transform: translateY(-1px);
+      box-shadow: 0 18px 34px rgba(212, 83, 126, .28);
+    }
+    .btn-submit:disabled {
+      opacity: .65;
+      cursor: not-allowed;
+    }
+    .auth-msg {
+      font-size: 13px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      margin-bottom: 14px;
+      display: none;
+      text-align: left;
+      line-height: 1.6;
+    }
+    .auth-msg.show { display: block; }
+    .auth-msg.error {
+      background: #fff0f3;
+      color: #c44569;
+      border: 1px solid #ffd6dd;
+    }
+    .auth-msg.success {
+      background: #fbf0f5;
+      color: var(--pink-700);
+      border: 1px solid var(--pink-100);
+    }
+    .auth-hint {
+      margin-top: 22px;
+      padding: 12px 16px;
+      background: var(--pink-50);
+      border-radius: 14px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.85;
+      text-align: left;
+    }
+    .auth-hint code {
+      background: #fff;
+      padding: 2px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--pink-100);
+      font-family: 'SF Mono', Consolas, "Microsoft YaHei", monospace;
+      color: var(--pink-400);
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .auth-foot {
+      margin-top: 22px;
+      font-size: 13px;
+      color: var(--muted);
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      align-items: center;
+    }
+    .auth-foot a {
+      color: var(--pink-400);
+      text-decoration: none;
+      transition: .2s;
+    }
+    .auth-foot a:hover { color: var(--pink-500); }
+    .divider { color: var(--pink-100); }
+    .dots {
+      display: inline-flex;
+      gap: 4px;
+      vertical-align: middle;
+    }
+    .dots span {
+      width: 5px; height: 5px;
+      background: #fff;
+      border-radius: 50%;
+      animation: dot 1.2s infinite;
+    }
+    .dots span:nth-child(2) { animation-delay: .2s; }
+    .dots span:nth-child(3) { animation-delay: .4s; }
+    @keyframes dot {
+      0%, 60%, 100% { opacity: .35; }
+      30% { opacity: 1; }
+    }
+
+    /* Tab 切换：登录 / 注册 */
+    .auth-tabs {
+      display: flex;
+      gap: 6px;
+      background: var(--pink-50);
+      border-radius: 999px;
+      padding: 5px;
+      margin: 0 0 24px;
+    }
+    .auth-tab {
+      flex: 1;
+      padding: 10px 16px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      transition: .25s;
+      font-family: inherit;
+    }
+    .auth-tab.active {
+      background: #fff;
+      color: var(--pink-700);
+      box-shadow: 0 2px 8px rgba(212, 83, 126, .12);
+    }
+    .auth-form { display: none; }
+    .auth-form.active { display: block; animation: fadeIn .35s ease; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: none; }
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="auth-card">
+    <a class="brand" href="index.html" aria-label="返回首页">
+      <img src="./images/xiaobai-emotions/01_默认温柔.png" alt="若白头像" onerror="this.style.display='none'">
+    </a>
+
+    <h1 class="auth-title">欢迎</h1>
+    <p class="auth-sub">她一直在等你</p>
+
+    <!-- Tab 切换 -->
+    <div class="auth-tabs">
+      <button class="auth-tab active" data-tab="login">登录</button>
+      <button class="auth-tab" data-tab="register">注册</button>
+    </div>
+
+    <div id="msg" class="auth-msg"></div>
+
+    <!-- 登录表单 -->
+    <form id="loginForm" class="auth-form active" novalidate>
+      <div class="form-group">
+        <label class="form-label" for="loginUsername">用户名</label>
+        <input
+          type="text"
+          id="loginUsername"
+          name="username"
+          class="form-input"
+          placeholder="请输入用户名"
+          autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="loginPassword">密码</label>
+        <input
+          type="password"
+          id="loginPassword"
+          name="password"
+          class="form-input"
+          placeholder="请输入密码"
+          autocomplete="current-password"
+          required>
+      </div>
+      <button type="submit" class="btn-submit" id="loginBtn">
+        <span id="loginText">进入</span>
+      </button>
+    </form>
+
+    <!-- 注册表单 -->
+    <form id="registerForm" class="auth-form" novalidate>
+      <div class="form-group">
+        <label class="form-label" for="regInviteCode">邀请码 <span style="color:var(--pink-400);font-size:11px;">（门开一条缝）</span></label>
+        <input
+          type="text"
+          id="regInviteCode"
+          name="inviteCode"
+          class="form-input"
+          placeholder="请输入邀请码"
+          required>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="regUsername">用户名</label>
+        <input
+          type="text"
+          id="regUsername"
+          name="username"
+          class="form-input"
+          placeholder="给自己起个名字"
+          autocomplete="username"
+          required>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="regPassword">设置密码</label>
+        <input
+          type="password"
+          id="regPassword"
+          name="password"
+          class="form-input"
+          placeholder="至少 6 位"
+          autocomplete="new-password"
+          required>
+      </div>
+      <button type="submit" class="btn-submit" id="registerBtn">
+        <span id="registerText">进入她的世界</span>
+      </button>
+    </form>
+
+    <div class="auth-hint">
+      首次部署默认账号 <code>admin</code> 密码 <code>123456</code>。
+      <br>登录后请尽快在后台修改账号密码。
+    </div>
+
+    <div class="auth-foot">
+      <a href="index.html">← 返回首页</a>
+      <span class="divider">·</span>
+      <span>邀请码注册 · 多用户</span>
+    </div>
+  </div>
+
+  <script>
+    // ========== 元素引用 ==========
+    const tabs = document.querySelectorAll('.auth-tab');
+    const forms = document.querySelectorAll('.auth-form');
+    const msg = document.getElementById('msg');
+
+    // 登录元素
+    const loginForm = document.getElementById('loginForm');
+    const loginBtn = document.getElementById('loginBtn');
+    const loginText = document.getElementById('loginText');
+    const loginUsername = document.getElementById('loginUsername');
+    const loginPassword = document.getElementById('loginPassword');
+
+    // 注册元素
+    const registerForm = document.getElementById('registerForm');
+    const registerBtn = document.getElementById('registerBtn');
+    const registerText = document.getElementById('registerText');
+    const regInviteCode = document.getElementById('regInviteCode');
+    const regUsername = document.getElementById('regUsername');
+    const regPassword = document.getElementById('regPassword');
+
+    // ========== 工具方法 ==========
+    function showMessage(text, type) {
+      msg.textContent = text;
+      msg.className = 'auth-msg show ' + type;
+    }
+    function hideMessage() {
+      msg.className = 'auth-msg';
+    }
+    function setLoading(btn, textEl, loading, defaultText) {
+      btn.disabled = loading;
+      textEl.innerHTML = loading
+        ? '<span class="dots"><span></span><span></span><span></span></span>'
+        : defaultText;
+    }
+
+    // ========== Tab 切换 ==========
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.tab;
+        tabs.forEach(t => t.classList.toggle('active', t === tab));
+        forms.forEach(f => {
+          f.classList.toggle('active', f.id === target + 'Form');
+        });
+        hideMessage();
+      });
+    });
+
+    // ========== URL 参数切换 Tab ==========
+    const urlTab = new URLSearchParams(window.location.search).get('tab');
+    if (urlTab === 'register') {
+      tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === 'register'));
+      forms.forEach(f => f.classList.toggle('active', f.id === 'registerForm'));
+    }
+
+    // ========== 登录后落地决策：看 key 和角色情况 ==========
+    // 没 key → profile.html?onboard=key（提示配 key）
+    // 有 key 但 0 角色 → characters.html?onboard=first-role（0 角色欢迎）
+    // 其他 → profile.html（普通落地）
+    async function routeAfterAuth() {
+      try {
+        const [statusRes, rolesRes] = await Promise.all([
+          fetch('/api/model-configs/status', { credentials: 'same-origin' }).then(r => r.json()).catch(() => null),
+          fetch('/api/roles', { credentials: 'same-origin' }).then(r => r.json()).catch(() => null)
+        ]);
+
+        const needsKey = !!(statusRes && statusRes.success && statusRes.item && statusRes.item.needs_onboarding);
+        const roleCount = (rolesRes && rolesRes.success && Array.isArray(rolesRes.items)) ? rolesRes.items.length : 0;
+
+        if (needsKey) {
+          window.location.replace('profile.html?onboard=key');
+        } else if (roleCount === 0) {
+          window.location.replace('characters.html?onboard=first-role');
+        } else {
+          window.location.replace('profile.html');
+        }
+      } catch (err) {
+        window.location.replace('profile.html');
+      }
+    }
+
+    // ========== 自动跳转：已登录 ==========
+    fetch('/api/auth/session', { credentials: 'same-origin' })
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.loggedIn) {
+          routeAfterAuth();
+        }
+      })
+      .catch(() => {});
+
+    // ========== 登录提交 ==========
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideMessage();
+
+      const username = loginUsername.value.trim();
+      const password = loginPassword.value.trim();
+      if (!password) {
+        showMessage('请输入密码', 'error');
+        loginPassword.focus();
+        return;
+      }
+
+      setLoading(loginBtn, loginText, true, '进入');
+
+      const body = { password };
+      if (username) body.username = username;
+
+      try {
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          credentials: 'same-origin'
+        });
+        const data = await response.json().catch(() => null);
+
+        if (data && data.success) {
+          showMessage('登录成功，正在进入...', 'success');
+          setTimeout(() => {
+            routeAfterAuth();
+          }, 400);
+        } else {
+          showMessage((data && data.error) || '密码错误', 'error');
+          setLoading(loginBtn, loginText, false, '进入');
+          loginPassword.select();
+        }
+      } catch (err) {
+        showMessage('网络错误，请重试', 'error');
+        setLoading(loginBtn, loginText, false, '进入');
+      }
+    });
+
+    // ========== 注册提交 ==========
+    registerForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideMessage();
+
+      const inviteCode = regInviteCode.value.trim();
+      const username = regUsername.value.trim();
+      const password = regPassword.value;
+
+      if (!inviteCode) {
+        showMessage('请输入邀请码', 'error');
+        regInviteCode.focus();
+        return;
+      }
+      if (!username) {
+        showMessage('请输入用户名', 'error');
+        regUsername.focus();
+        return;
+      }
+      if (!password || password.length < 6) {
+        showMessage('密码至少 6 位', 'error');
+        regPassword.focus();
+        return;
+      }
+
+      setLoading(registerBtn, registerText, true, '进入她的世界');
+
+      try {
+        const response = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ inviteCode, username, password }),
+          credentials: 'same-origin'
+        });
+        const data = await response.json().catch(() => null);
+
+        if (data && data.success) {
+          showMessage('注册成功，正在进入...', 'success');
+          setTimeout(() => {
+            routeAfterAuth();
+          }, 600);
+        } else {
+          showMessage((data && data.error) || '注册失败，邀请码可能不正确', 'error');
+          setLoading(registerBtn, registerText, false, '进入她的世界');
+        }
+      } catch (err) {
+        showMessage('网络错误，请重试', 'error');
+        setLoading(registerBtn, registerText, false, '进入她的世界');
+      }
+    });
+  </script>
+</body>
+</html>

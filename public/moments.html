@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>动态 · 若白 RuoBai</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --pink-50:  #FBEAF0;
+      --pink-100: #F4C0D1;
+      --pink-200: #ED93B1;
+      --pink-400: #D4537E;
+      --pink-500: #B73D67;
+      --pink-700: #72243E;
+      --pink-900: #4B1528;
+      --cream:    #fffaf6;
+      --bg-page:  #fdf7f6;
+      --muted:    #993556;
+      --subtle:   #b8607e;
+      --line:     rgba(244, 192, 209, .55);
+      --glass:    rgba(255, 255, 255, .72);
+      --shadow-float: 0 18px 36px rgba(212, 83, 126, .14);
+      --serif: 'Noto Serif SC', "PingFang SC", "Microsoft YaHei", serif;
+      --sans:  'Sora', "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: var(--sans);
+      color: var(--pink-900);
+      background:
+        radial-gradient(circle at 100% 0%, rgba(212, 83, 126, .08), transparent 32%),
+        radial-gradient(circle at 0% 100%, rgba(244, 192, 209, .12), transparent 38%),
+        var(--bg-page);
+      background-attachment: fixed;
+      -webkit-font-smoothing: antialiased;
+      display: flex; flex-direction: column;
+    }
+    .app-body { flex: 1; overflow-y: auto; padding: 0 16px 100px; -webkit-overflow-scrolling: touch; }
+
+    .page-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 24px 0 16px;
+    }
+    .page-header h1 { font-family: var(--serif); font-size: 24px; font-weight: 500; }
+    .header-actions { display: flex; gap: 10px; align-items: center; }
+    .icon-btn {
+      width: 32px; height: 32px; border-radius: 10px;
+      background: rgba(255, 255, 255, .5); backdrop-filter: blur(8px);
+      border: 1px solid rgba(244, 192, 209, .3);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: transform .24s, box-shadow .24s;
+    }
+    .icon-btn:hover { transform: translateY(-2px); box-shadow: var(--shadow-float); }
+    .icon-btn svg { width: 15px; height: 15px; stroke: var(--pink-400); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+    .publish-btn {
+      padding: 5px 12px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, rgba(212, 83, 126, .94), rgba(244, 140, 174, .86));
+      color: #fff;
+      font-size: 11px; font-weight: 500;
+      border: none; cursor: pointer;
+      transition: transform .2s, box-shadow .2s;
+      box-shadow: 0 4px 10px rgba(212, 83, 126, .14);
+      text-decoration: none;
+    }
+    .publish-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 14px rgba(212, 83, 126, .2); }
+
+    .moment-list { display: flex; flex-direction: column; gap: 12px; }
+
+    .moment-card {
+      background: var(--glass);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 14px;
+      transition: transform .24s, box-shadow .24s;
+    }
+    .moment-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-float); }
+    .moment-card.mine {
+      border-left: 3px solid var(--pink-400);
+      background: linear-gradient(135deg, rgba(251, 234, 240, .88), rgba(255, 250, 246, .72));
+    }
+
+    .moment-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .moment-avatar {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: linear-gradient(135deg, #fffafb, #fef0f4);
+      border: 2px solid rgba(244, 192, 209, .4);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0; overflow: hidden;
+    }
+    .moment-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+    .moment-author { flex: 1; }
+    .moment-author .nm { font-family: var(--serif); font-size: 14px; font-weight: 500; }
+    .moment-author .tm { font-size: 11px; color: var(--subtle); margin-top: 1px; }
+    .moment-tag {
+      padding: 2px 8px; border-radius: 999px;
+      font-size: 10px; font-weight: 500;
+      flex-shrink: 0;
+    }
+    .moment-tag.lover { background: rgba(212, 83, 126, .1); color: var(--pink-400); }
+    .moment-tag.friend { background: rgba(76, 175, 80, .1); color: #3a8e5e; }
+
+    .moment-body { font-size: 14px; line-height: 1.7; color: var(--pink-900); margin-bottom: 10px; }
+
+    .moment-imgs {
+      display: grid; gap: 4px; margin-bottom: 10px;
+      border-radius: 12px; overflow: hidden;
+    }
+    .moment-imgs[data-count="1"] { grid-template-columns: 1fr; max-width: 70%; }
+    .moment-imgs[data-count="2"] { grid-template-columns: 1fr 1fr; }
+    .moment-imgs[data-count="3"] { grid-template-columns: 1fr 1fr 1fr; }
+    .moment-imgs[data-count="4"] { grid-template-columns: 1fr 1fr; max-width: 70%; }
+    .moment-imgs[data-count="5"] { grid-template-columns: 1fr 1fr 1fr; }
+    .moment-imgs[data-count="6"] { grid-template-columns: 1fr 1fr 1fr; }
+    .moment-imgs[data-count="7"] { grid-template-columns: 1fr 1fr 1fr; }
+    .moment-imgs[data-count="8"] { grid-template-columns: 1fr 1fr 1fr; }
+    .moment-imgs[data-count="9"] { grid-template-columns: 1fr 1fr 1fr; }
+    .moment-imgs .img-item {
+      aspect-ratio: 1; overflow: hidden; background: var(--pink-50);
+      border: 0; padding: 0; cursor: zoom-in; display: block;
+    }
+    .moment-imgs[data-count="1"] .img-item { aspect-ratio: 4/3; }
+    .moment-imgs .img-item img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+    }
+    .image-preview-modal {
+      position: fixed; inset: 0; z-index: 10020;
+      display: none; align-items: center; justify-content: center;
+      padding: 22px;
+      background: rgba(75, 21, 40, .72);
+      backdrop-filter: blur(14px);
+    }
+    .image-preview-modal.show { display: flex; }
+    .image-preview-modal img {
+      max-width: min(100%, 960px);
+      max-height: 82vh;
+      object-fit: contain;
+      border-radius: 16px;
+      box-shadow: 0 24px 70px rgba(20, 8, 14, .34);
+      background: rgba(255,255,255,.18);
+    }
+    .image-preview-close {
+      position: fixed; top: 18px; right: 18px;
+      width: 36px; height: 36px; border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.5);
+      background: rgba(255,255,255,.86);
+      color: var(--pink-500);
+      font-size: 22px; line-height: 1;
+      cursor: pointer;
+    }
+
+    .moment-actions {
+      display: flex; align-items: center; gap: 16px;
+      padding-top: 8px; border-top: 1px solid rgba(244, 192, 209, .2);
+    }
+    .moment-action {
+      display: flex; align-items: center; gap: 4px;
+      font-size: 12px; color: var(--subtle);
+      cursor: pointer; transition: color .2s;
+      background: none; border: none; padding: 4px 0;
+    }
+    .moment-action:hover { color: var(--pink-400); }
+    .moment-action:disabled { cursor: not-allowed; opacity: .65; }
+    .moment-action.liked { color: var(--pink-400); }
+    .moment-action svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .moment-action.liked svg { fill: var(--pink-400); }
+    .moment-action .share-icon { margin-left: auto; }
+
+    .tab-bar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: rgba(255, 255, 255, .88); backdrop-filter: blur(20px);
+      border-top: 1px solid var(--line);
+      display: flex; justify-content: space-around; align-items: center;
+      padding: 10px 0 env(safe-area-inset-bottom, 8px); z-index: 100;
+    }
+    .tab-item { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: var(--subtle); text-decoration: none; padding: 4px 12px; transition: color .2s; }
+    .tab-item.active { color: var(--pink-400); }
+    .tab-item svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .tab-item.active svg { stroke-width: 2.2; }
+
+    [data-reveal] { opacity: 0; transform: translateY(18px); }
+    [data-reveal].is-visible { opacity: 1; transform: translateY(0); transition: opacity .5s ease, transform .5s ease; transition-delay: var(--delay, 0ms); }
+
+    @keyframes heartPop {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.3); }
+      100% { transform: scale(1); }
+    }
+    .heart-pop { animation: heartPop .3s ease; }
+
+    /* Avatar row */
+    .avatar-row {
+      padding: 12px 0 16px; position: relative;
+    }
+    .avatar-row .avatars {
+      display: flex;
+      justify-content: space-between;
+    }
+    .avatar-item {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      cursor: pointer; width: calc(100% / 6); flex-shrink: 0;
+      padding: 4px 0;
+    }
+    .avatar-item .av {
+      width: 46px; height: 46px; border-radius: 50%;
+      border: 2.5px solid var(--pink-200);
+      overflow: hidden; display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #fffafb, #fef0f4);
+      font-size: 20px; transition: transform .2s, border-color .2s, box-shadow .2s;
+    }
+    .avatar-item .av img { width: 100%; height: 100%; object-fit: cover; }
+    .avatar-item:active .av { transform: scale(0.9); }
+    .avatar-item.active .av {
+      border-color: var(--pink-400);
+      box-shadow: 0 0 0 3px rgba(212, 83, 126, .15);
+      transform: scale(1.08);
+      animation: avatarBreath 2s ease-in-out infinite;
+    }
+    @keyframes avatarBreath {
+      0%, 100% { box-shadow: 0 0 0 3px rgba(212, 83, 126, .15); transform: scale(1.08); }
+      50% { box-shadow: 0 0 0 6px rgba(212, 83, 126, .08); transform: scale(1.12); }
+    }
+    .avatar-item .av-name {
+      font-size: 10px; color: var(--muted); white-space: nowrap;
+      text-align: center;
+    }
+    .avatar-item.active .av-name { color: var(--pink-400); font-weight: 500; }
+    .more-btn {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      cursor: pointer; width: calc(100% / 6); flex-shrink: 0;
+      padding: 4px 0; position: relative;
+    }
+    .more-btn .av {
+      width: 46px; height: 46px; border-radius: 50%;
+      border: 2px solid var(--pink-400);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; color: var(--pink-400); font-weight: 600;
+      background: rgba(251, 234, 240, .8);
+      transition: transform .2s, background .2s;
+    }
+    .more-btn:hover .av { background: var(--pink-50); transform: scale(1.05); }
+    .more-btn .av-name { font-size: 10px; color: var(--pink-400); font-weight: 500; }
+    .more-btn.active .av {
+      background: linear-gradient(135deg, rgba(212, 83, 126, .94), rgba(244, 140, 174, .86));
+      color: #fff; border-color: transparent;
+      animation: avatarBreath 2s ease-in-out infinite;
+    }
+
+    /* Dropdown */
+    .more-dropdown {
+      position: fixed;
+      min-width: 110px; padding: 8px 0;
+      background: rgba(255,255,255,.95); backdrop-filter: blur(20px);
+      border: 1px solid var(--line); border-radius: 14px;
+      box-shadow: 0 12px 40px rgba(212, 83, 126, .18);
+      z-index: 9999; display: none;
+      flex-direction: column;
+    }
+    .more-dropdown.show { display: flex; }
+    .more-dropdown .drop-item {
+      padding: 9px 18px; font-size: 13px; color: var(--pink-900);
+      cursor: pointer; transition: all .2s;
+      white-space: nowrap; margin: 3px 8px;
+      border-radius: 999px; text-align: center;
+      background: rgba(251, 234, 240, .5);
+    }
+    .more-dropdown .drop-item:hover {
+      background: linear-gradient(135deg, rgba(212, 83, 126, .12), rgba(244, 192, 209, .3));
+      color: var(--pink-400);
+    }
+    .more-dropdown .drop-item.active {
+      background: linear-gradient(135deg, rgba(212, 83, 126, .94), rgba(244, 140, 174, .86));
+      color: #fff; font-weight: 500;
+      box-shadow: 0 4px 10px rgba(212, 83, 126, .14);
+    }
+    .page-note {
+      margin: 0 0 12px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(255,255,255,.72);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .empty-state {
+      padding: 24px 18px;
+      border-radius: 18px;
+      border: 1px dashed var(--pink-200);
+      background: rgba(255,255,255,.62);
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .empty-state strong {
+      display: block;
+      margin-bottom: 6px;
+      font-family: var(--serif);
+      font-size: 18px;
+      color: var(--pink-900);
+    }
+    .modal-mask {
+      position: fixed; inset: 0;
+      display: none; align-items: flex-end; justify-content: center;
+      padding: 18px 14px calc(env(safe-area-inset-bottom, 0px) + 18px);
+      background: rgba(75, 21, 40, .24);
+      backdrop-filter: blur(10px);
+      z-index: 10000;
+    }
+    .modal-mask.show { display: flex; }
+    .moment-modal {
+      width: min(520px, 100%);
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255,250,246,.96);
+      box-shadow: 0 20px 60px rgba(75, 21, 40, .2);
+      padding: 18px;
+    }
+    .modal-head {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 14px;
+    }
+    .modal-head h2 { font-family: var(--serif); font-size: 18px; font-weight: 500; }
+    .modal-close {
+      width: 30px; height: 30px; border: 1px solid var(--line);
+      border-radius: 999px; background: rgba(255,255,255,.7);
+      color: var(--pink-400); cursor: pointer;
+    }
+    .moment-form { display: flex; flex-direction: column; gap: 10px; }
+    .moment-form label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--subtle); }
+    .moment-form textarea {
+      width: 100%;
+      min-height: 120px;
+      resize: vertical;
+      border: 1px solid rgba(244, 192, 209, .7);
+      border-radius: 12px;
+      background: rgba(255,255,255,.72);
+      color: var(--pink-900);
+      font: 14px/1.5 var(--sans);
+      outline: none;
+      padding: 10px 12px;
+    }
+    .moment-form textarea:focus { border-color: var(--pink-400); box-shadow: 0 0 0 3px rgba(212, 83, 126, .12); }
+    .comment-list {
+      display: flex; flex-direction: column; gap: 8px;
+      max-height: 150px; overflow-y: auto; padding: 8px 0;
+    }
+    .comment-item {
+      border-radius: 12px;
+      background: rgba(251, 234, 240, .6);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+      padding: 8px 10px;
+    }
+    .detail-modal {
+      max-height: min(78vh, 680px);
+      overflow-y: auto;
+    }
+    .detail-meta {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 12px;
+    }
+    .detail-content {
+      font-size: 14px;
+      line-height: 1.8;
+      color: var(--pink-900);
+      white-space: pre-wrap;
+      margin-bottom: 12px;
+    }
+    .detail-stats {
+      display: flex; gap: 12px;
+      font-size: 12px;
+      color: var(--subtle);
+      padding: 8px 0;
+      border-top: 1px solid rgba(244, 192, 209, .22);
+      border-bottom: 1px solid rgba(244, 192, 209, .22);
+      margin-bottom: 10px;
+    }
+    .detail-images {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .detail-images .img-item {
+      aspect-ratio: 1;
+      border: 0;
+      border-radius: 12px;
+      overflow: hidden;
+      padding: 0;
+      background: var(--pink-50);
+      cursor: zoom-in;
+    }
+    .detail-images img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .detail-loading {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .modal-hint { font-size: 12px; color: var(--subtle); line-height: 1.5; }
+    .modal-error { min-height: 18px; font-size: 12px; color: #b73d67; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+    .modal-actions button {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 16px;
+      font-size: 13px;
+      cursor: pointer;
+      background: rgba(255,255,255,.72);
+      color: var(--pink-400);
+    }
+    .modal-actions .save {
+      border-color: transparent;
+      background: linear-gradient(135deg, rgba(212, 83, 126, .94), rgba(244, 140, 174, .86));
+      color: #fff;
+    }
+    .draft-btn {
+      align-self: flex-start;
+      border: 1px solid rgba(244, 192, 209, .7);
+      border-radius: 999px;
+      padding: 7px 13px;
+      font-size: 12px;
+      cursor: pointer;
+      background: rgba(255,255,255,.72);
+      color: var(--pink-400);
+    }
+    .modal-actions button:disabled,
+    .modal-close:disabled,
+    .draft-btn:disabled { opacity: .55; cursor: not-allowed; }
+    .settings-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .settings-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(244, 192, 209, .24);
+    }
+    .settings-row:last-child { border-bottom: 0; }
+    .settings-row span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .settings-row input[type="number"],
+    .settings-row input[type="time"] {
+      width: 108px;
+      border: 1px solid rgba(244, 192, 209, .7);
+      border-radius: 10px;
+      background: rgba(255,255,255,.72);
+      color: var(--pink-900);
+      font: 13px/1.4 var(--sans);
+      padding: 8px 10px;
+      outline: none;
+    }
+    .settings-row input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+      accent-color: var(--pink-400);
+    }
+  </style>
+</head>
+<body>
+  <div class="app-body">
+    <div class="page-header" data-reveal style="--delay:0ms">
+      <div>
+        <h1>动态 <span style="font-size:16px">💕</span></h1>
+        <p style="font-size:13px;color:var(--subtle);margin-top:2px">看看她们今天的心情</p>
+      </div>
+      <div class="header-actions">
+        <button class="icon-btn" id="momentSettingsBtn" type="button" aria-label="动态设置">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06A2 2 0 0 1 7.1 3.23l.06.06A1.65 1.65 0 0 0 9 3.6a1.65 1.65 0 0 0 1-1.51V2a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 3.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.36.43.56.98.56 1.55V12c0 .57-.2 1.12-.56 1.55z"/></svg>
+        </button>
+        <button class="publish-btn" id="publishBtn">发布心情</button>
+      </div>
+    </div>
+
+    <div class="avatar-row" data-reveal style="--delay:40ms">
+      <div class="avatars" id="avatarList">
+        <div id="roleAvatarItems" style="display:contents"></div>
+        <div class="more-btn active" id="moreBtn">
+          <div class="av">更多</div>
+          <span class="av-name"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="moment-list" id="momentList"></div>
+  </div>
+
+  <div class="more-dropdown" id="moreDropdown">
+  </div>
+
+  <div class="modal-mask" id="momentModal" aria-hidden="true">
+    <div class="moment-modal" role="dialog" aria-modal="true" aria-labelledby="momentModalTitle">
+      <div class="modal-head">
+        <h2 id="momentModalTitle">发布心情</h2>
+        <button class="modal-close" id="momentModalClose" type="button" aria-label="关闭">×</button>
+      </div>
+      <form class="moment-form" id="momentForm">
+        <label>
+          动态内容
+          <textarea id="momentContent" maxlength="2000" placeholder="写下今天想记录的心情"></textarea>
+        </label>
+        <div class="modal-hint" id="momentTargetHint">发布到自己的动态。</div>
+        <button type="button" class="draft-btn" id="momentDraftBtn">让她先写一条草稿</button>
+        <div class="modal-error" id="momentFormError"></div>
+        <div class="modal-actions">
+          <button type="button" id="momentCancelBtn">取消</button>
+          <button type="submit" class="save" id="momentSaveBtn">发布</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-mask" id="commentModal" aria-hidden="true">
+    <div class="moment-modal" role="dialog" aria-modal="true" aria-labelledby="commentModalTitle">
+      <div class="modal-head">
+        <h2 id="commentModalTitle">写评论</h2>
+        <button class="modal-close" id="commentModalClose" type="button" aria-label="关闭">×</button>
+      </div>
+      <form class="moment-form" id="commentForm">
+        <div class="comment-list" id="commentList"></div>
+        <label>
+          评论内容
+          <textarea id="commentContent" maxlength="1000" placeholder="写一句想说的话"></textarea>
+        </label>
+        <div class="modal-error" id="commentFormError"></div>
+        <div class="modal-actions">
+          <button type="button" id="commentCancelBtn">取消</button>
+          <button type="submit" class="save" id="commentSaveBtn">发送</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-mask" id="detailModal" aria-hidden="true">
+    <div class="moment-modal detail-modal" role="dialog" aria-modal="true" aria-labelledby="detailModalTitle">
+      <div class="modal-head">
+        <h2 id="detailModalTitle">动态详情</h2>
+        <button class="modal-close" id="detailModalClose" type="button" aria-label="关闭">×</button>
+      </div>
+      <div id="detailContent" class="detail-loading">正在读取这条动态...</div>
+    </div>
+  </div>
+
+  <div class="modal-mask" id="settingsModal" aria-hidden="true">
+    <div class="moment-modal" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
+      <div class="modal-head">
+        <h2 id="settingsModalTitle">动态设置</h2>
+        <button class="modal-close" id="settingsModalClose" type="button" aria-label="关闭">×</button>
+      </div>
+      <form class="moment-form" id="settingsForm">
+        <div class="settings-grid">
+          <label class="settings-row">
+            <span>允许以后自动发动态</span>
+            <input type="checkbox" id="autoMomentsEnabled">
+          </label>
+          <label class="settings-row">
+            <span>最少间隔小时</span>
+            <input type="number" id="autoMomentsFrequency" min="1" max="168" step="1">
+          </label>
+          <label class="settings-row">
+            <span>夜间保持安静</span>
+            <input type="checkbox" id="autoMomentsQuietEnabled">
+          </label>
+          <label class="settings-row">
+            <span>安静开始</span>
+            <input type="time" id="autoMomentsQuietStart">
+          </label>
+          <label class="settings-row">
+            <span>安静结束</span>
+            <input type="time" id="autoMomentsQuietEnd">
+          </label>
+        </div>
+        <div class="modal-hint">这里只先保存规则，不会马上让 AI 自动发动态。</div>
+        <div class="modal-error" id="settingsFormError"></div>
+        <div class="modal-actions">
+          <button type="button" id="settingsCancelBtn">取消</button>
+          <button type="submit" class="save" id="settingsSaveBtn">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="image-preview-modal" id="imagePreviewModal" aria-hidden="true">
+    <button class="image-preview-close" id="imagePreviewClose" type="button" aria-label="关闭">×</button>
+    <img id="imagePreviewImg" src="" alt="动态图片预览">
+  </div>
+
+  <nav class="tab-bar">
+    <a href="chat.html" class="tab-item"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>聊天</span></a>
+    <a href="characters.html" class="tab-item"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>角色</span></a>
+    <a href="moments.html" class="tab-item active"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg><span>动态</span></a>
+    <a href="memory.html" class="tab-item"><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13S5 14 5 9a7 7 0 0 1 7-7z"/><circle cx="12" cy="9" r="2.5"/></svg><span>记忆</span></a>
+    <a href="profile.html" class="tab-item"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>我的</span></a>
+  </nav>
+
+  <script type="module">
+  import {
+    buildMomentImageItems,
+    buildCommentPayload,
+    buildMomentPayload,
+    buildMomentDetailViewModel,
+    buildMomentViewModel,
+    escapeHtml
+  } from './js/moments-page-utils.mjs';
+  import {
+    buildCharactersViewModel,
+    pickActiveRole
+  } from './js/characters-page-utils.mjs';
+
+  // More button dropdown + dual responsibility
+  const moreBtn = document.getElementById('moreBtn');
+  const dropdown = document.getElementById('moreDropdown');
+  const roleAvatarItems = document.getElementById('roleAvatarItems');
+  const momentList = document.getElementById('momentList');
+  const momentSettingsBtn = document.getElementById('momentSettingsBtn');
+  const publishBtn = document.getElementById('publishBtn');
+  const momentModal = document.getElementById('momentModal');
+  const momentModalClose = document.getElementById('momentModalClose');
+  const momentForm = document.getElementById('momentForm');
+  const momentContent = document.getElementById('momentContent');
+  const momentTargetHint = document.getElementById('momentTargetHint');
+  const momentFormError = document.getElementById('momentFormError');
+  const momentDraftBtn = document.getElementById('momentDraftBtn');
+  const momentCancelBtn = document.getElementById('momentCancelBtn');
+  const momentSaveBtn = document.getElementById('momentSaveBtn');
+  const commentModal = document.getElementById('commentModal');
+  const commentModalClose = document.getElementById('commentModalClose');
+  const commentForm = document.getElementById('commentForm');
+  const commentList = document.getElementById('commentList');
+  const commentContent = document.getElementById('commentContent');
+  const commentFormError = document.getElementById('commentFormError');
+  const commentCancelBtn = document.getElementById('commentCancelBtn');
+  const commentSaveBtn = document.getElementById('commentSaveBtn');
+  const detailModal = document.getElementById('detailModal');
+  const detailModalClose = document.getElementById('detailModalClose');
+  const detailContent = document.getElementById('detailContent');
+  const settingsModal = document.getElementById('settingsModal');
+  const settingsModalClose = document.getElementById('settingsModalClose');
+  const settingsForm = document.getElementById('settingsForm');
+  const settingsFormError = document.getElementById('settingsFormError');
+  const settingsCancelBtn = document.getElementById('settingsCancelBtn');
+  const settingsSaveBtn = document.getElementById('settingsSaveBtn');
+  const autoMomentsEnabled = document.getElementById('autoMomentsEnabled');
+  const autoMomentsFrequency = document.getElementById('autoMomentsFrequency');
+  const autoMomentsQuietEnabled = document.getElementById('autoMomentsQuietEnabled');
+  const autoMomentsQuietStart = document.getElementById('autoMomentsQuietStart');
+  const autoMomentsQuietEnd = document.getElementById('autoMomentsQuietEnd');
+  const imagePreviewModal = document.getElementById('imagePreviewModal');
+  const imagePreviewClose = document.getElementById('imagePreviewClose');
+  const imagePreviewImg = document.getElementById('imagePreviewImg');
+  let roles = [];
+  let currentRole = null;
+  let currentFilter = 'all';
+  let currentMoments = [];
+  let commentingMoment = null;
+  let currentViewer = { name: '江湖小白', avatar: '' };
+
+  async function loadCurrentViewer() {
+    try {
+      const res = await fetch('/api/auth/session', { credentials: 'include' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.loggedIn && data.user) {
+        currentViewer = {
+          name: data.user.nickname || data.user.username || currentViewer.name,
+          avatar: data.user.avatar || ''
+        };
+      }
+    } catch (error) {
+      console.warn('加载当前用户头像失败', error);
+    }
+  }
+
+  function showNote(text) {
+    let note = document.querySelector('.page-note');
+    if (!note) {
+      note = document.createElement('div');
+      note.className = 'page-note';
+      document.querySelector('.avatar-row').insertAdjacentElement('afterend', note);
+    }
+    note.textContent = text;
+  }
+
+  function clearNote() {
+    document.querySelector('.page-note')?.remove();
+  }
+
+  function setMomentFormBusy(isBusy) {
+    momentSaveBtn.disabled = isBusy;
+    momentCancelBtn.disabled = isBusy;
+    momentModalClose.disabled = isBusy;
+    momentDraftBtn.disabled = isBusy;
+    momentSaveBtn.textContent = isBusy ? '发布中' : '发布';
+  }
+
+  function setDraftBusy(isBusy) {
+    momentDraftBtn.disabled = isBusy;
+    momentSaveBtn.disabled = isBusy;
+    momentCancelBtn.disabled = isBusy;
+    momentModalClose.disabled = isBusy;
+    momentDraftBtn.textContent = isBusy ? '她正在想...' : '让她先写一条草稿';
+  }
+
+  function openMomentModal() {
+    momentContent.value = '';
+    momentFormError.textContent = '';
+    momentTargetHint.textContent = currentRole
+      ? `发布到 ${currentRole.name} 的动态。`
+      : '发布到自己的动态。';
+    setMomentFormBusy(false);
+    momentModal.classList.add('show');
+    momentModal.setAttribute('aria-hidden', 'false');
+    setTimeout(() => momentContent.focus(), 0);
+  }
+
+  function closeMomentModal() {
+    if (momentSaveBtn.disabled) return;
+    momentModal.classList.remove('show');
+    momentModal.setAttribute('aria-hidden', 'true');
+    momentForm.reset();
+    momentFormError.textContent = '';
+  }
+
+  function setCommentFormBusy(isBusy) {
+    commentSaveBtn.disabled = isBusy;
+    commentCancelBtn.disabled = isBusy;
+    commentModalClose.disabled = isBusy;
+    commentSaveBtn.textContent = isBusy ? '发送中' : '发送';
+  }
+
+  function openCommentModal(moment) {
+    commentingMoment = moment;
+    commentList.innerHTML = (moment.comments || []).length
+      ? moment.comments.map(item => `<div class="comment-item">${escapeHtml(item.content || '')}</div>`).join('')
+      : '<div class="comment-item">还没有评论。</div>';
+    commentContent.value = '';
+    commentFormError.textContent = '';
+    setCommentFormBusy(false);
+    commentModal.classList.add('show');
+    commentModal.setAttribute('aria-hidden', 'false');
+    setTimeout(() => commentContent.focus(), 0);
+  }
+
+  function closeCommentModal() {
+    if (commentSaveBtn.disabled) return;
+    commentingMoment = null;
+    commentModal.classList.remove('show');
+    commentModal.setAttribute('aria-hidden', 'true');
+    commentForm.reset();
+    commentFormError.textContent = '';
+  }
+
+  function renderDetailContent(moment) {
+    const imgs = buildMomentImageItems(moment.images)
+      .map(item => `
+        <button class="img-item" type="button" data-preview-src="${escapeHtml(item.src)}" data-preview-alt="${escapeHtml(item.alt)}">
+          <img src="${escapeHtml(item.src)}" alt="${escapeHtml(item.alt)}">
+        </button>
+      `).join('');
+    const comments = (moment.comments || []).length
+      ? moment.comments.map(item => `<div class="comment-item">${escapeHtml(item.content || '')}</div>`).join('')
+      : '<div class="comment-item">还没有评论。</div>';
+
+    detailContent.className = '';
+    detailContent.innerHTML = `
+      <div class="detail-meta">
+        <div class="moment-avatar">${moment.avatar ? `<img src="${escapeHtml(moment.avatar)}" alt="${escapeHtml(moment.authorName)}">` : (moment.isMine ? '👤' : '🌸')}</div>
+        <div class="moment-author">
+          <div class="nm">${escapeHtml(moment.authorName)}</div>
+          <div class="tm">${escapeHtml(moment.dateText)}</div>
+        </div>
+        <span class="moment-tag ${moment.isMine ? 'lover' : 'friend'}">${escapeHtml(moment.tagText)}</span>
+      </div>
+      <div class="detail-content">${escapeHtml(moment.content)}</div>
+      ${moment.images.length ? `<div class="detail-images">${imgs}</div>` : ''}
+      <div class="detail-stats">
+        <span>喜欢 ${moment.likesCount}</span>
+        <span>评论 ${moment.commentsCount}</span>
+      </div>
+      <div class="comment-list">${comments}</div>
+    `;
+  }
+
+  async function openDetailModal(momentId) {
+    detailContent.className = 'detail-loading';
+    detailContent.textContent = '正在读取这条动态...';
+    detailModal.classList.add('show');
+    detailModal.setAttribute('aria-hidden', 'false');
+
+    try {
+      const data = await requestJson(`/api/moments/${encodeURIComponent(momentId)}`);
+      const detail = buildMomentDetailViewModel(data.item || {}, roles);
+      if (!detail.canRender) {
+        throw new Error('这条动态暂时打不开');
+      }
+      renderDetailContent(detail);
+    } catch (error) {
+      detailContent.className = 'detail-loading';
+      detailContent.textContent = error.message || '动态详情读取失败';
+    }
+  }
+
+  function closeDetailModal() {
+    detailModal.classList.remove('show');
+    detailModal.setAttribute('aria-hidden', 'true');
+    detailContent.innerHTML = '';
+    detailContent.className = 'detail-loading';
+  }
+
+  function setSettingsFormBusy(isBusy) {
+    settingsSaveBtn.disabled = isBusy;
+    settingsCancelBtn.disabled = isBusy;
+    settingsModalClose.disabled = isBusy;
+    settingsSaveBtn.textContent = isBusy ? '保存中' : '保存';
+  }
+
+  function applySettingsToForm(settings = {}) {
+    autoMomentsEnabled.checked = Boolean(Number(settings.auto_moments_enabled || 0));
+    autoMomentsFrequency.value = String(settings.auto_moments_frequency_hours || 24);
+    autoMomentsQuietEnabled.checked = Boolean(Number(settings.auto_moments_quiet_enabled ?? 1));
+    autoMomentsQuietStart.value = settings.auto_moments_quiet_start || '23:00';
+    autoMomentsQuietEnd.value = settings.auto_moments_quiet_end || '08:00';
+  }
+
+  async function openSettingsModal() {
+    settingsFormError.textContent = '';
+    setSettingsFormBusy(false);
+    applySettingsToForm();
+    settingsModal.classList.add('show');
+    settingsModal.setAttribute('aria-hidden', 'false');
+
+    try {
+      const data = await requestJson('/api/settings');
+      applySettingsToForm(data.item || {});
+    } catch (error) {
+      settingsFormError.textContent = error.message || '动态设置读取失败';
+    }
+  }
+
+  function closeSettingsModal() {
+    if (settingsSaveBtn.disabled) return;
+    settingsModal.classList.remove('show');
+    settingsModal.setAttribute('aria-hidden', 'true');
+    settingsFormError.textContent = '';
+  }
+
+  async function saveSettings(event) {
+    event.preventDefault();
+    const frequency = Math.min(168, Math.max(1, Number.parseInt(autoMomentsFrequency.value, 10) || 24));
+    const payload = {
+      auto_moments_enabled: autoMomentsEnabled.checked,
+      auto_moments_frequency_hours: frequency,
+      auto_moments_quiet_enabled: autoMomentsQuietEnabled.checked,
+      auto_moments_quiet_start: autoMomentsQuietStart.value || '23:00',
+      auto_moments_quiet_end: autoMomentsQuietEnd.value || '08:00'
+    };
+
+    setSettingsFormBusy(true);
+    settingsFormError.textContent = '';
+    try {
+      const data = await requestJson('/api/settings', {
+        method: 'PATCH',
+        body: JSON.stringify(payload)
+      });
+      applySettingsToForm(data.item || payload);
+      setSettingsFormBusy(false);
+      closeSettingsModal();
+      showNote('动态设置已保存。');
+    } catch (error) {
+      settingsFormError.textContent = error.message || '动态设置保存失败';
+    } finally {
+      setSettingsFormBusy(false);
+    }
+  }
+
+  function openImagePreview(src, alt = '动态图片预览') {
+    imagePreviewImg.src = src;
+    imagePreviewImg.alt = alt;
+    imagePreviewModal.classList.add('show');
+    imagePreviewModal.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeImagePreview() {
+    imagePreviewModal.classList.remove('show');
+    imagePreviewModal.setAttribute('aria-hidden', 'true');
+    imagePreviewImg.removeAttribute('src');
+  }
+
+  async function requestJson(url, options = {}) {
+    const res = await fetch(url, {
+      credentials: 'include',
+      ...options,
+      headers: {
+        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(options.headers || {})
+      }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.success === false) {
+      throw new Error(data.error || '操作失败');
+    }
+    return data;
+  }
+
+  moreBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!roles.length) return;
+    // If already showing all, just toggle dropdown
+    if (currentFilter === 'all') {
+      if (dropdown.classList.contains('show')) {
+        dropdown.classList.remove('show');
+      } else {
+        const rect = moreBtn.getBoundingClientRect();
+        dropdown.style.top = (rect.bottom + 4) + 'px';
+        dropdown.style.right = (window.innerWidth - rect.right) + 'px';
+        dropdown.classList.add('show');
+      }
+      return;
+    }
+    // Otherwise: switch to all + open dropdown
+    document.querySelectorAll('.avatar-item').forEach(a => a.classList.remove('active'));
+    document.querySelectorAll('.drop-item').forEach(a => a.classList.remove('active'));
+    moreBtn.classList.add('active');
+    currentFilter = 'all';
+    currentRole = null;
+    loadMomentsForCurrentFilter();
+    const rect = moreBtn.getBoundingClientRect();
+    dropdown.style.top = (rect.bottom + 4) + 'px';
+    dropdown.style.right = (window.innerWidth - rect.right) + 'px';
+    dropdown.classList.add('show');
+  });
+  document.addEventListener('click', () => {
+    dropdown.classList.remove('show');
+  });
+
+  // Avatar filter
+  function setFilter(roleId, el) {
+    const role = roles.find(item => String(item.id) === String(roleId));
+    if (!role) return;
+    document.querySelectorAll('.avatar-item').forEach(a => a.classList.remove('active'));
+    document.querySelectorAll('.drop-item').forEach(a => a.classList.remove('active'));
+    moreBtn.classList.remove('active');
+    if (el) el.classList.add('active');
+    currentRole = role;
+    currentFilter = String(role.id);
+    dropdown.classList.remove('show');
+    loadMomentsForCurrentFilter();
+  }
+
+  const heartSvg = '<svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>';
+  const commentSvg = '<svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+  const shareSvg = '<svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>';
+
+  function renderRoleAvatars() {
+    const firstRoles = roles.slice(0, 5);
+    roleAvatarItems.innerHTML = firstRoles.map(role => `
+      <div class="avatar-item ${currentRole?.id === role.id ? 'active' : ''}" data-role-id="${role.id}">
+        <div class="av">${role.portraitRound ? `<img src="${escapeHtml(role.portraitRound)}" alt="${escapeHtml(role.name)}">` : '🌸'}</div>
+        <span class="av-name">${escapeHtml(role.name)}</span>
+      </div>
+    `).join('');
+
+    roleAvatarItems.querySelectorAll('[data-role-id]').forEach(item => {
+      item.addEventListener('click', () => setFilter(item.dataset.roleId, item));
+    });
+
+    moreBtn.style.display = roles.length > 5 ? '' : '';
+    moreBtn.classList.toggle('active', currentFilter === 'all');
+  }
+
+  function renderDropdown() {
+    dropdown.innerHTML = roles.slice(5).map(role => `
+      <div class="drop-item ${currentRole?.id === role.id ? 'active' : ''}" data-role-id="${role.id}">${escapeHtml(role.name)}</div>
+    `).join('');
+
+    dropdown.querySelectorAll('[data-role-id]').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setFilter(item.dataset.roleId, item);
+        moreBtn.classList.add('active');
+      });
+    });
+  }
+
+  function renderMoments() {
+    if (!currentMoments.length) {
+      momentList.innerHTML = '<div class="empty-state"><strong>还没有动态</strong><div>等她们发第一条，或者稍后刷新看看。</div></div>';
+      return;
+    }
+
+    momentList.innerHTML = '';
+    currentMoments.forEach((m, i) => {
+      const imgs = buildMomentImageItems(m.images)
+        .map(item => `
+          <button class="img-item" type="button" data-preview-src="${escapeHtml(item.src)}" data-preview-alt="${escapeHtml(item.alt)}">
+            <img src="${escapeHtml(item.src)}" alt="${escapeHtml(item.alt)}">
+          </button>
+        `).join('');
+      const card = document.createElement('div');
+      card.className = 'moment-card' + (m.isMine ? ' mine' : '');
+      card.setAttribute('data-reveal', '');
+      card.dataset.momentId = String(m.id);
+      card.style.setProperty('--delay', (60 + i * 70) + 'ms');
+      card.innerHTML = `
+        <div class="moment-head" data-action="detail" data-id="${m.id}">
+          <div class="moment-avatar">${m.avatar ? `<img src="${escapeHtml(m.avatar)}" alt="${escapeHtml(m.authorName)}">` : (m.isMine ? '🧑' : '🌸')}</div>
+          <div class="moment-author"><div class="nm">${escapeHtml(m.authorName)}</div><div class="tm">${escapeHtml(m.dateText)}</div></div>
+          <span class="moment-tag ${m.isMine ? 'lover' : 'friend'}">${escapeHtml(m.tagText)}</span>
+        </div>
+        <div class="moment-body" data-action="detail" data-id="${m.id}">${escapeHtml(m.content)}</div>
+        ${m.images.length ? `<div class="moment-imgs" data-count="${m.images.length}">${imgs}</div>` : ''}
+        <div class="moment-actions">
+          <button class="moment-action like-btn${m.liked?' liked':''}" data-action="like" data-id="${m.id}">${heartSvg}<span class="like-count">${m.likesCount}</span></button>
+          <button class="moment-action" data-action="comment" data-id="${m.id}">${commentSvg}<span>${m.commentsCount}</span></button>
+          <button class="moment-action" style="margin-left:auto" disabled>${shareSvg}<span>分享</span></button>
+        </div>`;
+      momentList.appendChild(card);
+    });
+    // Re-observe reveals
+    const obs = new IntersectionObserver((entries, o) => {
+      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('is-visible'); o.unobserve(e.target); } });
+    }, { threshold: 0.14 });
+    momentList.querySelectorAll('[data-reveal]').forEach(el => obs.observe(el));
+  }
+
+  async function loadMomentsForCurrentFilter() {
+    const params = new URLSearchParams({ limit: '50' });
+    if (currentRole) params.set('character_id', currentRole.id);
+    momentList.innerHTML = '<div class="empty-state"><strong>正在读取动态</strong><div>稍等一下。</div></div>';
+
+    try {
+      const res = await fetch(`/api/moments?${params.toString()}`, { credentials: 'include' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || '动态列表读取失败');
+      }
+      currentMoments = buildMomentViewModel(data.items || data.data || [], roles, {
+        viewerName: currentViewer.name,
+        viewerAvatar: currentViewer.avatar
+      });
+      clearNote();
+      renderRoleAvatars();
+      renderDropdown();
+      renderMoments();
+    } catch (error) {
+      currentMoments = [];
+      renderMoments();
+      showNote(error.message || '动态列表读取失败');
+    }
+  }
+
+  async function loadRoles() {
+    momentList.innerHTML = '<div class="empty-state"><strong>正在读取角色</strong><div>稍等一下。</div></div>';
+    try {
+      const res = await fetch('/api/roles', { credentials: 'include' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || '角色列表读取失败');
+      }
+      roles = buildCharactersViewModel(data.items || []);
+      currentRole = null;
+      currentFilter = 'all';
+      renderRoleAvatars();
+      renderDropdown();
+      await loadMomentsForCurrentFilter();
+    } catch (error) {
+      roles = [];
+      currentRole = null;
+      currentFilter = 'all';
+      roleAvatarItems.innerHTML = '';
+      moreBtn.style.display = 'none';
+      currentMoments = [];
+      renderMoments();
+      showNote(error.message || '角色列表读取失败');
+    }
+  }
+
+  async function saveMoment(event) {
+    event.preventDefault();
+    const payload = buildMomentPayload({
+      content: momentContent.value,
+      images: []
+    });
+
+    if (payload.error) {
+      momentFormError.textContent = payload.error;
+      return;
+    }
+
+    setMomentFormBusy(true);
+    momentFormError.textContent = '';
+    try {
+      const body = currentRole
+        ? { ...payload, character_id: currentRole.id }
+        : payload;
+      await requestJson('/api/moments', {
+        method: 'POST',
+        body: JSON.stringify(body)
+      });
+      setMomentFormBusy(false);
+      closeMomentModal();
+      await loadMomentsForCurrentFilter();
+    } catch (error) {
+      momentFormError.textContent = error.message || '动态发布失败';
+    } finally {
+      setMomentFormBusy(false);
+    }
+  }
+
+  async function generateMomentDraft() {
+    if (!currentRole) {
+      momentFormError.textContent = '先选一个角色，再让她写草稿。';
+      return;
+    }
+
+    setDraftBusy(true);
+    momentFormError.textContent = '';
+    try {
+      const data = await requestJson('/api/moments/draft', {
+        method: 'POST',
+        body: JSON.stringify({ character_id: currentRole.id })
+      });
+      momentContent.value = data.item?.content || '';
+      momentContent.focus();
+    } catch (error) {
+      momentFormError.textContent = error.message || '草稿生成失败';
+    } finally {
+      setDraftBusy(false);
+    }
+  }
+
+  async function toggleLike(moment) {
+    await requestJson(`/api/moments/${encodeURIComponent(moment.id)}/like`, {
+      method: 'POST'
+    });
+    await loadMomentsForCurrentFilter();
+  }
+
+  async function saveComment(event) {
+    event.preventDefault();
+    if (!commentingMoment) return;
+
+    const payload = buildCommentPayload(commentContent.value);
+    if (payload.error) {
+      commentFormError.textContent = payload.error;
+      return;
+    }
+
+    setCommentFormBusy(true);
+    commentFormError.textContent = '';
+    try {
+      await requestJson(`/api/moments/${encodeURIComponent(commentingMoment.id)}/comment`, {
+        method: 'POST',
+        body: JSON.stringify(currentRole ? { ...payload, character_id: currentRole.id } : payload)
+      });
+      setCommentFormBusy(false);
+      closeCommentModal();
+      await loadMomentsForCurrentFilter();
+    } catch (error) {
+      commentFormError.textContent = error.message || '评论发送失败';
+    } finally {
+      setCommentFormBusy(false);
+    }
+  }
+
+  momentList.addEventListener('click', async (event) => {
+    const previewButton = event.target.closest('[data-preview-src]');
+    if (previewButton) {
+      openImagePreview(previewButton.dataset.previewSrc, previewButton.dataset.previewAlt);
+      return;
+    }
+
+    const button = event.target.closest('[data-action]');
+    if (!button) return;
+
+    const moment = currentMoments.find(item => String(item.id) === String(button.dataset.id));
+    if (!moment) return;
+
+    try {
+      button.disabled = true;
+      if (button.dataset.action === 'like') {
+        await toggleLike(moment);
+      } else if (button.dataset.action === 'comment') {
+        openCommentModal(moment);
+      } else if (button.dataset.action === 'detail') {
+        await openDetailModal(moment.id);
+      }
+    } catch (error) {
+      showNote(error.message || '动态操作失败');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  momentSettingsBtn.addEventListener('click', openSettingsModal);
+  publishBtn.addEventListener('click', openMomentModal);
+  momentDraftBtn.addEventListener('click', generateMomentDraft);
+  momentForm.addEventListener('submit', saveMoment);
+  momentCancelBtn.addEventListener('click', closeMomentModal);
+  momentModalClose.addEventListener('click', closeMomentModal);
+  momentModal.addEventListener('click', (event) => {
+    if (event.target === momentModal) closeMomentModal();
+  });
+  commentForm.addEventListener('submit', saveComment);
+  commentCancelBtn.addEventListener('click', closeCommentModal);
+  commentModalClose.addEventListener('click', closeCommentModal);
+  commentModal.addEventListener('click', (event) => {
+    if (event.target === commentModal) closeCommentModal();
+  });
+  detailModalClose.addEventListener('click', closeDetailModal);
+  detailModal.addEventListener('click', (event) => {
+    if (event.target === detailModal) closeDetailModal();
+  });
+  settingsForm.addEventListener('submit', saveSettings);
+  settingsCancelBtn.addEventListener('click', closeSettingsModal);
+  settingsModalClose.addEventListener('click', closeSettingsModal);
+  settingsModal.addEventListener('click', (event) => {
+    if (event.target === settingsModal) closeSettingsModal();
+  });
+  imagePreviewClose.addEventListener('click', closeImagePreview);
+  imagePreviewModal.addEventListener('click', (event) => {
+    if (event.target === imagePreviewModal) closeImagePreview();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && imagePreviewModal.classList.contains('show')) {
+      closeImagePreview();
+    } else if (event.key === 'Escape' && detailModal.classList.contains('show')) {
+      closeDetailModal();
+    } else if (event.key === 'Escape' && settingsModal.classList.contains('show')) {
+      closeSettingsModal();
+    }
+  });
+
+  // Header reveals
+  const revealEls = document.querySelectorAll('[data-reveal]');
+  if (revealEls.length) {
+    const obs = new IntersectionObserver((entries, o) => {
+      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('is-visible'); o.unobserve(e.target); } });
+    }, { threshold: 0.14 });
+    revealEls.forEach(el => obs.observe(el));
+  }
+  (async () => {
+    await loadCurrentViewer();
+    await loadRoles();
+  })();
+  </script>
+</body>
+</html>

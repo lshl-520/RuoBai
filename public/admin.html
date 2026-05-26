@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理后台 · 若白 RuoBai</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --pink-50: #fdf2f7;
+      --pink-100: #fce7f3;
+      --pink-200: #fbcfe8;
+      --pink-300: #f9a8d4;
+      --pink-400: #f472b6;
+      --pink-500: #ec4899;
+      --pink-600: #db2777;
+      --pink-700: #be185d;
+      --pink-800: #9d174d;
+      --pink-900: #831843;
+      --purple-50: #faf5ff;
+      --purple-100: #f3e8ff;
+      --purple-400: #c084fc;
+      --purple-500: #a855f7;
+      --bg: #fefcfd;
+      --sidebar-bg: linear-gradient(180deg, #fdf2f8 0%, #fce7f3 100%);
+      --card-bg: #ffffff;
+      --border: #fce7f3;
+      --text: #1f1215;
+      --text-secondary: #6b4255;
+      --text-muted: #9f7089;
+      --radius: 12px;
+      --radius-lg: 16px;
+      --shadow-sm: 0 1px 3px rgba(219, 39, 119, .06);
+      --shadow-md: 0 4px 16px rgba(219, 39, 119, .08);
+      --shadow-lg: 0 8px 32px rgba(219, 39, 119, .12);
+      --serif: 'Noto Serif SC', serif;
+      --sans: 'Sora', system-ui, sans-serif;
+      --transition: .2s cubic-bezier(.4,0,.2,1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: var(--sans);
+      color: var(--text);
+      background: var(--bg);
+      display: flex;
+      -webkit-font-smoothing: antialiased;
+    }
+    /* Sidebar */
+    .sidebar {
+      width: 240px;
+      height: 100vh;
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 24px 0;
+      flex-shrink: 0;
+      position: sticky;
+      top: 0;
+    }
+    .sidebar-brand {
+      padding: 0 24px 28px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    .sidebar-brand h1 {
+      font-family: var(--serif);
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--pink-700);
+    }
+    .sidebar-brand span {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      display: block;
+    }
+    .nav-list { list-style: none; flex: 1; }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 11px 24px;
+      margin: 2px 12px;
+      border-radius: var(--radius);
+      font-size: 14px;
+      font-weight: 400;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: var(--transition);
+      text-decoration: none;
+    }
+    .nav-item:hover { background: rgba(252,231,243,.6); color: var(--pink-700); }
+    .nav-item.active {
+      background: #fff;
+      color: var(--pink-700);
+      font-weight: 500;
+      box-shadow: var(--shadow-sm);
+    }
+    .nav-item svg {
+      width: 18px;
+      height: 18px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      flex-shrink: 0;
+    }
+    .sidebar-footer {
+      padding: 16px 24px 0;
+      border-top: 1px solid var(--border);
+      margin-top: auto;
+    }
+    .logout-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      color: var(--text-muted);
+      cursor: pointer;
+      border: none;
+      background: none;
+      width: 100%;
+      font-family: inherit;
+      transition: var(--transition);
+    }
+    .logout-btn:hover { background: rgba(252,231,243,.6); color: var(--pink-600); }
+    .logout-btn svg {
+      width: 16px; height: 16px;
+      stroke: currentColor; fill: none;
+      stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+    }
+
+    /* Main content */
+    .main {
+      flex: 1;
+      height: 100vh;
+      overflow-y: auto;
+      padding: 32px 40px;
+    }
+    .page-title {
+      font-family: var(--serif);
+      font-size: 24px;
+      font-weight: 500;
+      margin-bottom: 24px;
+      color: var(--text);
+    }
+    .page-view { display: none; }
+    .page-view.active { display: block; }
+
+    /* Cards */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      box-shadow: var(--shadow-sm);
+    }
+    .card + .card { margin-top: 20px; }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 500;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      transition: var(--transition);
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--pink-500), var(--pink-600));
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(236,72,153,.25);
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(236,72,153,.3); }
+    .btn-ghost {
+      background: var(--pink-50);
+      color: var(--pink-600);
+      border: 1px solid var(--pink-200);
+    }
+    .btn-ghost:hover { background: var(--pink-100); }
+    .btn-danger {
+      background: #fef2f2;
+      color: #dc2626;
+      border: 1px solid #fecaca;
+    }
+    .btn-danger:hover { background: #fee2e2; }
+    .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+    /* Table */
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th {
+      text-align: left;
+      padding: 10px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    td {
+      padding: 12px;
+      border-bottom: 1px solid var(--pink-50);
+      vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--pink-50); }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .badge-green { background: #ecfdf5; color: #059669; }
+    .badge-yellow { background: #fffbeb; color: #d97706; }
+    .badge-red { background: #fef2f2; color: #dc2626; }
+    .badge-gray { background: #f9fafb; color: #6b7280; }
+    .badge-pink { background: var(--pink-100); color: var(--pink-700); }
+
+    /* Stats row */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-item {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      box-shadow: var(--shadow-sm);
+    }
+    .stat-item .stat-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .stat-item .stat-value {
+      font-family: var(--serif);
+      font-size: 28px;
+      font-weight: 600;
+      color: var(--pink-600);
+    }
+
+    /* Form */
+    .form-group { margin-bottom: 16px; }
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+    .form-control {
+      width: 100%;
+      max-width: 360px;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 14px;
+      font-family: inherit;
+      color: var(--text);
+      background: #fff;
+      transition: var(--transition);
+    }
+    .form-control:focus {
+      outline: none;
+      border-color: var(--pink-400);
+      box-shadow: 0 0 0 3px rgba(244,114,182,.12);
+    }
+    .form-control::placeholder { color: var(--text-muted); }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(31,18,21,.4);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal {
+      background: #fff;
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      width: 90%;
+      max-width: 420px;
+      box-shadow: var(--shadow-lg);
+      animation: modalIn .25s ease;
+    }
+    @keyframes modalIn {
+      from { opacity: 0; transform: scale(.95) translateY(8px); }
+      to { opacity: 1; transform: none; }
+    }
+    .modal-title {
+      font-family: var(--serif);
+      font-size: 18px;
+      font-weight: 500;
+      margin-bottom: 16px;
+    }
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 20px;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      top: 24px;
+      right: 24px;
+      padding: 12px 20px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 500;
+      z-index: 2000;
+      animation: toastIn .3s ease;
+      box-shadow: var(--shadow-md);
+    }
+    .toast-success { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
+    .toast-error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    /* Invite code mono */
+    .code-text {
+      font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--pink-600);
+      cursor: pointer;
+    }
+    .code-text:hover { text-decoration: underline; }
+
+    /* User avatar */
+    .avatar {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--pink-200), var(--purple-400));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 600;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    /* System info */
+    .info-grid {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: 12px 16px;
+      font-size: 13px;
+    }
+    .info-key { color: var(--text-muted); }
+    .info-val { color: var(--text); font-weight: 500; }
+
+    /* Mobile responsive */
+    @media (max-width: 1024px) {
+      .sidebar { display: none; }
+      .mobile-nav {
+        display: flex !important;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: #fff;
+        border-top: 1px solid var(--border);
+        padding: 8px 0 calc(env(safe-area-inset-bottom, 4px) + 8px);
+        z-index: 100;
+        justify-content: space-around;
+      }
+      .mobile-nav-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 3px;
+        font-size: 10px;
+        color: var(--text-muted);
+        cursor: pointer;
+        padding: 4px 8px;
+        border: none;
+        background: none;
+        font-family: inherit;
+      }
+      .mobile-nav-item.active { color: var(--pink-600); }
+      .mobile-nav-item svg {
+        width: 20px; height: 20px;
+        stroke: currentColor; fill: none;
+        stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+      }
+      .main { padding: 20px 16px 80px; }
+      .stats-row { grid-template-columns: repeat(2, 1fr); }
+      .form-control { max-width: 100%; }
+    }
+    .mobile-nav { display: none; }
+  </style>
+</head>
+<body>
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <h1>若白</h1>
+      <span>管理后台</span>
+    </div>
+    <ul class="nav-list">
+      <li class="nav-item active" data-page="dashboard">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        仪表盘
+      </li>
+      <li class="nav-item" data-page="users">
+        <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        用户列表
+      </li>
+      <li class="nav-item" data-page="invites">
+        <svg viewBox="0 0 24 24"><path d="M15 5v2"/><path d="M15 11v2"/><path d="M15 17v2"/><path d="M5 5h14a2 2 0 012 2v3a2 2 0 000 4v3a2 2 0 01-2 2H5a2 2 0 01-2-2v-3a2 2 0 000-4V7a2 2 0 012-2z"/></svg>
+        邀请码
+      </li>
+      <li class="nav-item" data-page="settings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15 1.65 1.65 0 003 14.08V14a2 2 0 014 0v.09c0 .67.44 1.27 1.09 1.49"/></svg>
+        设置
+      </li>
+      <li class="nav-item" data-page="system">
+        <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        系统
+      </li>
+    </ul>
+    <div class="sidebar-footer">
+      <button class="logout-btn" id="logoutBtn">
+        <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        退出登录
+      </button>
+    </div>
+  </aside>
+
+  <!-- Mobile bottom nav -->
+  <nav class="mobile-nav">
+    <button class="mobile-nav-item active" data-page="dashboard">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      总览
+    </button>
+    <button class="mobile-nav-item" data-page="users">
+      <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+      用户
+    </button>
+    <button class="mobile-nav-item" data-page="invites">
+      <svg viewBox="0 0 24 24"><path d="M15 5v2"/><path d="M15 11v2"/><path d="M15 17v2"/><path d="M5 5h14a2 2 0 012 2v3a2 2 0 000 4v3a2 2 0 01-2 2H5a2 2 0 01-2-2v-3a2 2 0 000-4V7a2 2 0 012-2z"/></svg>
+      邀请码
+    </button>
+    <button class="mobile-nav-item" data-page="settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33"/></svg>
+      设置
+    </button>
+    <button class="mobile-nav-item" data-page="system">
+      <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      系统
+    </button>
+  </nav>
+
+  <!-- Main content -->
+  <main class="main">
+    <!-- 仪表盘 -->
+    <div class="page-view active" id="page-dashboard">
+      <h2 class="page-title">仪表盘</h2>
+      <div class="stats-row">
+        <div class="stat-item"><div class="stat-label">注册用户</div><div class="stat-value" id="statUsers">--</div></div>
+        <div class="stat-item"><div class="stat-label">可用邀请码</div><div class="stat-value" id="statInvites">--</div></div>
+        <div class="stat-item"><div class="stat-label">已使用邀请码</div><div class="stat-value" id="statUsed">--</div></div>
+        <div class="stat-item"><div class="stat-label">封禁用户</div><div class="stat-value" id="statBanned">--</div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">最近注册</span></div>
+        <div class="table-wrap">
+          <table><thead><tr><th>用户</th><th>注册时间</th><th>状态</th></tr></thead><tbody id="recentUsers"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 用户列表 -->
+    <div class="page-view" id="page-users">
+      <h2 class="page-title">用户列表</h2>
+      <div class="card">
+        <div class="table-wrap">
+          <table><thead><tr><th></th><th>用户名</th><th>角色</th><th>注册时间</th><th>最近登录</th><th>状态</th><th>操作</th></tr></thead><tbody id="userTableBody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 邀请码 -->
+    <div class="page-view" id="page-invites">
+      <h2 class="page-title">邀请码</h2>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">邀请码列表</span>
+          <button class="btn btn-primary" id="genInviteBtn">生成邀请码</button>
+        </div>
+        <div class="table-wrap">
+          <table><thead><tr><th>邀请码</th><th>状态</th><th>创建时间</th><th>备注</th><th>操作</th></tr></thead><tbody id="inviteTableBody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 设置 -->
+    <div class="page-view" id="page-settings">
+      <h2 class="page-title">设置</h2>
+      <div class="card">
+        <div class="card-header"><span class="card-title">管理员账号</span></div>
+        <div class="form-group">
+          <label>新用户名</label>
+          <input type="text" class="form-control" id="newUsername" placeholder="留空则不修改">
+        </div>
+        <div class="form-group">
+          <label>当前密码</label>
+          <input type="password" class="form-control" id="currentPwd" placeholder="必填，验证身份">
+        </div>
+        <div class="form-group">
+          <label>新密码</label>
+          <input type="password" class="form-control" id="newPwd" placeholder="至少6位">
+        </div>
+        <button class="btn btn-primary" id="changePwdBtn">保存修改</button>
+      </div>
+    </div>
+
+    <!-- 系统 -->
+    <div class="page-view" id="page-system">
+      <h2 class="page-title">系统</h2>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">运行状态</span></div>
+        <div class="info-grid">
+          <span class="info-key">服务状态</span><span class="info-val" id="sysStatus">--</span>
+          <span class="info-key">运行时长</span><span class="info-val" id="sysUptime">--</span>
+          <span class="info-key">数据库连接</span><span class="info-val" id="sysDbStatus">--</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">资源使用</span></div>
+        <div class="info-grid">
+          <span class="info-key">内存使用</span><span class="info-val" id="sysMemory">--</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">环境信息</span></div>
+        <div class="info-grid">
+          <span class="info-key">Node.js版本</span><span class="info-val" id="sysNodeVersion">--</span>
+          <span class="info-key">数据库版本</span><span class="info-val" id="sysDbVersion">--</span>
+          <span class="info-key">部署平台</span><span class="info-val" id="sysPlatform">--</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">数据统计</span></div>
+        <div class="info-grid">
+          <span class="info-key">总用户数</span><span class="info-val" id="sysTotalUsers">--</span>
+          <span class="info-key">总角色数</span><span class="info-val" id="sysTotalCharacters">--</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">版本信息</span></div>
+        <div class="info-grid">
+          <span class="info-key">当前版本</span><span class="info-val" id="sysVersion">--</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal" onclick="event.stopPropagation()">
+      <h3 class="modal-title" id="modalTitle"></h3>
+      <div id="modalBody"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="modalCancel">取消</button>
+        <button class="btn btn-primary" id="modalOk">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  const REDIRECT = '/admin-login.html';
+  const state = { session: null, users: [], invites: [] };
+
+  // === Helpers ===
+  function escHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+  }
+  function fmtDate(v) {
+    if (!v) return '--';
+    const d = new Date(v);
+    return isNaN(d) ? String(v) : d.toLocaleDateString('zh-CN');
+  }
+  function fmtDateTime(v) {
+    if (!v) return '--';
+    const d = new Date(v);
+    return isNaN(d) ? String(v) : d.toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+  }
+
+  async function api(path, opts = {}) {
+    const res = await fetch(path, {
+      credentials: 'include',
+      headers: opts.body ? { 'Content-Type': 'application/json', ...opts.headers } : opts.headers,
+      ...opts
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw Object.assign(new Error(data?.error || `请求失败(${res.status})`), { status: res.status });
+    return data;
+  }
+
+  function toast(msg, type = 'success') {
+    const el = document.createElement('div');
+    el.className = `toast toast-${type}`;
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => { el.style.opacity = '0'; el.style.transition = '.3s'; setTimeout(() => el.remove(), 300); }, 2500);
+  }
+
+  // === Navigation ===
+  const navItems = document.querySelectorAll('.nav-item');
+  const mobileItems = document.querySelectorAll('.mobile-nav-item');
+  const pages = document.querySelectorAll('.page-view');
+
+  function switchPage(name) {
+    navItems.forEach(n => n.classList.toggle('active', n.dataset.page === name));
+    mobileItems.forEach(n => n.classList.toggle('active', n.dataset.page === name));
+    pages.forEach(p => p.classList.toggle('active', p.id === 'page-' + name));
+  }
+  navItems.forEach(n => n.addEventListener('click', () => switchPage(n.dataset.page)));
+  mobileItems.forEach(n => n.addEventListener('click', () => switchPage(n.dataset.page)));
+
+  // === Modal ===
+  let modalCallback = null;
+  function showModal(title, bodyHtml, opts = {}) {
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('modalBody').innerHTML = bodyHtml;
+    document.getElementById('modalOk').textContent = opts.okText || '确认';
+    document.getElementById('modalOk').className = `btn ${opts.danger ? 'btn-danger' : 'btn-primary'}`;
+    document.getElementById('modalOverlay').classList.add('show');
+    return new Promise(resolve => { modalCallback = resolve; });
+  }
+  function closeModal(result) {
+    document.getElementById('modalOverlay').classList.remove('show');
+    if (modalCallback) { modalCallback(result); modalCallback = null; }
+  }
+  document.getElementById('modalCancel').onclick = () => closeModal(false);
+  document.getElementById('modalOk').onclick = () => closeModal(true);
+  document.getElementById('modalOverlay').onclick = () => closeModal(false);
+
+  // === Auth check ===
+  async function init() {
+    try {
+      const session = await api('/api/auth/session');
+      if (!session?.loggedIn || session.user?.role !== 'owner') {
+        window.location.replace(REDIRECT);
+        return;
+      }
+      state.session = session;
+      await loadData();
+    } catch (e) {
+      if (e.status === 401 || e.status === 403) window.location.replace(REDIRECT);
+      else toast(e.message, 'error');
+    }
+  }
+
+  async function loadData() {
+    const [usersRes, invitesRes, systemRes] = await Promise.all([
+      api('/api/admin/users'),
+      api('/api/admin/invites'),
+      api('/api/admin/system/status')
+    ]);
+    state.users = usersRes?.items || [];
+    state.invites = invitesRes?.items || [];
+    state.systemStatus = systemRes?.data || null;
+    renderAll();
+  }
+
+  // === Render ===
+  function renderAll() {
+    renderDashboard();
+    renderUsers();
+    renderInvites();
+    renderSystem();
+  }
+
+  function renderDashboard() {
+    const unused = state.invites.filter(i => i.status === 'unused').length;
+    const used = state.invites.filter(i => i.status === 'used').length;
+    const banned = state.users.filter(u => u.status === 'banned').length;
+    document.getElementById('statUsers').textContent = state.users.length;
+    document.getElementById('statInvites').textContent = unused;
+    document.getElementById('statUsed').textContent = used;
+    document.getElementById('statBanned').textContent = banned;
+
+    const recent = [...state.users].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5);
+    document.getElementById('recentUsers').innerHTML = recent.map(u => `
+      <tr>
+        <td style="display:flex;align-items:center;gap:8px">
+          <div class="avatar">${escHtml(u.username?.[0]?.toUpperCase() || '?')}</div>
+          ${escHtml(u.username)}
+        </td>
+        <td>${escHtml(fmtDate(u.created_at))}</td>
+        <td><span class="badge ${u.status === 'banned' ? 'badge-red' : 'badge-green'}">${u.status === 'banned' ? '封禁' : '正常'}</span></td>
+      </tr>
+    `).join('') || '<tr><td colspan="3" style="text-align:center;color:var(--text-muted)">暂无用户</td></tr>';
+  }
+
+  function renderUsers() {
+    document.getElementById('userTableBody').innerHTML = state.users.map(u => {
+      const isOwner = u.role === 'owner';
+      const isBanned = u.status === 'banned';
+      return `<tr>
+        <td><div class="avatar">${escHtml(u.username?.[0]?.toUpperCase() || '?')}</div></td>
+        <td><strong>${escHtml(u.username)}</strong></td>
+        <td><span class="badge ${isOwner ? 'badge-pink' : 'badge-gray'}">${isOwner ? 'Owner' : '用户'}</span></td>
+        <td>${escHtml(fmtDate(u.created_at))}</td>
+        <td>${escHtml(fmtDateTime(u.last_login))}</td>
+        <td><span class="badge ${isBanned ? 'badge-red' : 'badge-green'}">${isBanned ? '封禁' : '正常'}</span></td>
+        <td>${isOwner ? '' : `
+          <button class="btn btn-ghost btn-sm" onclick="editUser(${u.id})">编辑</button>
+          <button class="btn btn-ghost btn-sm" onclick="toggleBan(${u.id})">${isBanned ? '解封' : '封禁'}</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id})">删除</button>
+        `}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">暂无用户</td></tr>';
+  }
+
+  function renderInvites() {
+    const statusMap = { unused: ['未使用','badge-green'], used: ['已使用','badge-gray'], revoked: ['已作废','badge-red'], expired: ['已过期','badge-yellow'] };
+    document.getElementById('inviteTableBody').innerHTML = state.invites.map(i => {
+      const [label, cls] = statusMap[i.status] || ['未知','badge-gray'];
+      return `<tr>
+        <td><span class="code-text" onclick="copyCode('${escHtml(i.code)}')">${escHtml(i.code)}</span></td>
+        <td><span class="badge ${cls}">${label}</span></td>
+        <td>${escHtml(fmtDate(i.created_at))}</td>
+        <td>${escHtml(i.used_at ? '使用于 ' + fmtDateTime(i.used_at) : i.note || '--')}</td>
+        <td>${i.status === 'unused' ? `<button class="btn btn-danger btn-sm" onclick="revokeInvite('${escHtml(i.code)}')">作废</button>` : ''}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted)">暂无邀请码</td></tr>';
+  }
+
+  function renderSystem() {
+    if (!state.systemStatus) return;
+    const s = state.systemStatus;
+
+    document.getElementById('sysStatus').innerHTML = '<span class="badge badge-green">运行中 ✓</span>';
+
+    const days = s.uptime.days;
+    const hours = s.uptime.hours;
+    const minutes = s.uptime.minutes;
+    let uptimeText = '';
+    if (days > 0) uptimeText += `${days}天`;
+    if (hours > 0) uptimeText += `${hours}小时`;
+    if (minutes > 0 || uptimeText === '') uptimeText += `${minutes}分钟`;
+    document.getElementById('sysUptime').textContent = uptimeText;
+
+    const dbOk = s.database.status === 'normal';
+    document.getElementById('sysDbStatus').innerHTML = `<span class="badge ${dbOk ? 'badge-green' : 'badge-red'}">${dbOk ? '正常 ✓' : '异常'}</span>`;
+
+    document.getElementById('sysMemory').textContent = `${s.memory.used_mb}MB / ${s.memory.total_mb}MB`;
+
+    document.getElementById('sysNodeVersion').textContent = s.environment.node_version;
+    document.getElementById('sysDbVersion').textContent = s.database.version;
+    const platformMap = { win32: 'Windows', linux: 'Linux', darwin: 'macOS' };
+    document.getElementById('sysPlatform').textContent = platformMap[s.environment.platform] || s.environment.platform;
+
+    document.getElementById('sysTotalUsers').textContent = `${s.statistics.total_users}人`;
+    document.getElementById('sysTotalCharacters').textContent = `${s.statistics.total_characters}个`;
+
+    document.getElementById('sysVersion').textContent = s.version;
+  }
+
+  // === Actions ===
+  async function copyCode(code) {
+    try { await navigator.clipboard.writeText(code); toast('已复制'); } catch { toast('复制失败', 'error'); }
+  }
+
+  document.getElementById('genInviteBtn').onclick = async () => {
+    try {
+      const res = await api('/api/admin/invites', { method: 'POST', body: JSON.stringify({ note: '' }) });
+      if (res?.item) state.invites.unshift(res.item);
+      renderAll();
+      toast('邀请码已生成');
+    } catch (e) { toast(e.message, 'error'); }
+  };
+
+  async function revokeInvite(code) {
+    const ok = await showModal('作废邀请码', `<p style="color:var(--text-secondary)">确定作废 <strong>${escHtml(code)}</strong>？作废后无法使用。</p>`, { danger: true });
+    if (!ok) return;
+    try {
+      await api(`/api/admin/invites/${encodeURIComponent(code)}`, { method: 'DELETE' });
+      state.invites = state.invites.map(i => i.code === code ? { ...i, status: 'revoked' } : i);
+      renderAll();
+      toast('已作废');
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  async function editUser(id) {
+    const user = state.users.find(u => u.id === id);
+    if (!user) return;
+    const html = `
+      <div class="form-group"><label>用户名</label><input class="form-control" id="editUsername" value="${escHtml(user.username)}" style="max-width:100%"></div>
+      <div class="form-group"><label>重置密码</label><input class="form-control" id="editPassword" placeholder="留空则不修改" type="password" style="max-width:100%"></div>
+    `;
+    const ok = await showModal(`编辑用户 · ${user.username}`, html, { okText: '保存' });
+    if (!ok) return;
+    const newName = document.getElementById('editUsername').value.trim();
+    const newPwd = document.getElementById('editPassword').value;
+    if (!newName) { toast('用户名不能为空', 'error'); return; }
+    try {
+      await api(`/api/admin/users/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ username: newName, ...(newPwd ? { password: newPwd } : {}) })
+      });
+      await loadData();
+      toast('已保存');
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  async function toggleBan(id) {
+    const user = state.users.find(u => u.id === id);
+    if (!user) return;
+    const banning = user.status !== 'banned';
+    const ok = await showModal(
+      banning ? `封禁 ${user.username}` : `解封 ${user.username}`,
+      `<p style="color:var(--text-secondary)">${banning ? '封禁后该用户将无法登录。' : '解封后该用户可以重新登录。'}</p>`,
+      { danger: banning }
+    );
+    if (!ok) return;
+    try {
+      await api(`/api/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify({ status: banning ? 'banned' : 'active' }) });
+      state.users = state.users.map(u => u.id === id ? { ...u, status: banning ? 'banned' : 'active' } : u);
+      renderAll();
+      toast(banning ? '已封禁' : '已解封');
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  async function deleteUser(id) {
+    const user = state.users.find(u => u.id === id);
+    if (!user) return;
+    const ok = await showModal(`删除 ${user.username}`, `<p style="color:var(--text-secondary)">删除后数据无法恢复。</p>`, { danger: true });
+    if (!ok) return;
+    try {
+      await api(`/api/admin/users/${id}`, { method: 'DELETE' });
+      state.users = state.users.filter(u => u.id !== id);
+      renderAll();
+      toast('已删除');
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  // === Settings ===
+  document.getElementById('changePwdBtn').onclick = async () => {
+    const currentPwd = document.getElementById('currentPwd').value;
+    const newPwd = document.getElementById('newPwd').value;
+    const newUsername = document.getElementById('newUsername').value.trim();
+    if (!currentPwd) { toast('请输入当前密码', 'error'); return; }
+    if (!newPwd && !newUsername) { toast('请输入新密码或新用户名', 'error'); return; }
+    if (newPwd && newPwd.length < 6) { toast('新密码至少6位', 'error'); return; }
+    try {
+      const body = { currentPassword: currentPwd };
+      if (newPwd) body.newPassword = newPwd;
+      if (newUsername) body.newUsername = newUsername;
+      await api('/api/auth/password', { method: 'PATCH', body: JSON.stringify(body) });
+      toast('修改成功，请重新登录');
+      setTimeout(() => window.location.replace('admin-login.html'), 1500);
+    } catch (e) { toast(e.message, 'error'); }
+  };
+
+  // === Logout ===
+  document.getElementById('logoutBtn').onclick = async () => {
+    try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
+    window.location.replace('admin-login.html');
+  };
+
+  init();
+  </script>
+</body>
+</html>

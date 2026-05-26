@@ -1,0 +1,90 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Local screenshots already present in this folder
+ScreenShot_*.png
+
+# === 由 Claude 协助新增于 2026-05-19 ===
+
+# 测试截图
+test-*.png
+
+# Node.js 依赖
+node_modules/
+**/node_modules/
+
+# 日志
+*.log
+*.log.*
+npm-debug.log*
+
+# 环境变量（机密信息，绝不可提交）
+.env
+**/.env
+.env.local
+.env.*.local
+
+# 编辑器 / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Playwright / 浏览器测试产物
+.playwright-mcp/
+playwright-report/
+test-results/
+output/
+
+# 备份与临时文件
+*.bak
+*.backup
+*.tmp
+
+# 桌面元数据
+desktop.ini
+
+# === 第二轮新增于 2026-05-19（工具配置 + 大体积归档） ===
+
+# Codex / Claude / Agent 工具配置（含敏感 token）
+.agents/
+.claude/
+.codex/
+.mcp.json
+.playwright-cli/
+
+# Trellis 工作流（工具内部状态）
+.trellis/
+
+# UI 视觉 QA 产物（截图、对比图）
+visual-qa/
+
+# 历史 UI 归档（计划搬出项目）
+ui-archive/
+ui-v2-prototypes/
+
+# 大体积媒体（mp4 等视频文件留磁盘但不进 git）
+/Midnight_on_the_Sill.mp4
+
+# 本地运行时用户数据，含头像、聊天图片、角色立绘、语音缓存等隐私内容
+user_assets/*
+!user_assets/.gitkeep
+
+# 手动备份只保留在本地磁盘，不进入公开仓库
+_manual_backups/
+
+# 内部接手文档、旧工单、体检报告和私人项目手记只留本地
+CLAUDE.md
+AGENTS.md
+口袋提示词.md
+为了她.md
+页面真假清单.md
+capture-screenshots.js
+docs/*
+!docs/.gitkeep
+!docs/部署指南.md
+!docs/开源与隐私说明.md
+
+# 对话导出过程产物
+docs/体检/*-019*.md

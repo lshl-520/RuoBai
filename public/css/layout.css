@@ -1,0 +1,26 @@
+/* Layout - minimal, most styles in themes/xiaohongshu.css */
+
+html, body { height: 100%; overflow: hidden; }
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+}
+
+.mobile-app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+}
+
+.page-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }

@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>角色 · 若白 RuoBai</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --pink-50:  #FBEAF0;
+      --pink-100: #F4C0D1;
+      --pink-200: #ED93B1;
+      --pink-400: #D4537E;
+      --pink-500: #B73D67;
+      --pink-700: #72243E;
+      --pink-900: #4B1528;
+      --cream:    #fffaf6;
+      --bg-page:  #fdf7f6;
+      --muted:    #993556;
+      --subtle:   #b8607e;
+      --line:     rgba(244, 192, 209, .55);
+      --glass:    rgba(255, 255, 255, .72);
+      --shadow-float: 0 18px 36px rgba(212, 83, 126, .14);
+      --serif: 'Noto Serif SC', "PingFang SC", "Microsoft YaHei", serif;
+      --sans:  'Sora', "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: var(--sans);
+      color: var(--pink-900);
+      background: var(--bg-page);
+      -webkit-font-smoothing: antialiased;
+      display: flex; flex-direction: column;
+    }
+    .app-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; padding-bottom: 58px; }
+
+    .page-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 24px 16px 16px;
+      flex-shrink: 0;
+    }
+    .page-header h1 { font-family: var(--serif); font-size: 24px; font-weight: 500; }
+    .header-actions { display: flex; gap: 10px; align-items: center; }
+    .icon-btn {
+      width: 32px; height: 32px; border-radius: 10px;
+      background: rgba(255, 255, 255, .5); backdrop-filter: blur(8px);
+      border: 1px solid rgba(244, 192, 209, .3);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: transform .24s, box-shadow .24s;
+    }
+    .icon-btn:hover { transform: translateY(-2px); box-shadow: var(--shadow-float); }
+    .icon-btn svg { width: 15px; height: 15px; stroke: var(--pink-400); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .create-btn {
+      padding: 5px 12px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, rgba(212, 83, 126, .94), rgba(244, 140, 174, .86));
+      color: #fff;
+      font-size: 11px; font-weight: 500;
+      border: none; cursor: pointer;
+      transition: transform .2s, box-shadow .2s;
+      box-shadow: 0 4px 10px rgba(212, 83, 126, .14);
+      text-decoration: none;
+    }
+    .create-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(212, 83, 126, .25); }
+
+    /* ===== Hero 大屏 ===== */
+    .hero {
+      margin: 0 16px 16px;
+      border-radius: 20px;
+      overflow: hidden;
+      position: relative;
+      background: url('images/login-bg.webp') center/cover no-repeat;
+      height: calc((100vh - 68px - 58px) / 3);
+      display: flex;
+      align-items: stretch;
+      flex-shrink: 0;
+    }
+    .hero::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,.15), rgba(244,192,209,.2));
+      pointer-events: none;
+    }
+    .hero-portrait {
+      width: 50%;
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .hero-portrait img {
+      height: 80%;
+      width: auto;
+      object-fit: contain;
+    }
+    .hero-info {
+      width: 50%;
+      padding: 10px 10px 10px 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: clamp(4px, 1.2vw, 8px);
+      position: relative;
+      z-index: 1;
+    }
+    .hero-name {
+      font-family: var(--serif);
+      font-size: clamp(14px, 4vw, 18px);
+      font-weight: 600;
+      color: var(--pink-900);
+    }
+    .hero-name .tag {
+      font-size: clamp(8px, 2.2vw, 10px);
+      font-weight: 500;
+      background: rgba(212, 83, 126, .12);
+      color: var(--pink-400);
+      padding: 2px 6px;
+      border-radius: 999px;
+      margin-left: 4px;
+    }
+    .hero-quote {
+      font-size: clamp(10px, 2.8vw, 12px);
+      color: var(--muted);
+      line-height: 1.4;
+      font-style: italic;
+    }
+    .hero-stats {
+      display: flex;
+      gap: 4px;
+    }
+    .hero-stat-card {
+      flex: 1;
+      background: rgba(255,255,255,.75);
+      border: 1px solid rgba(244, 192, 209, .4);
+      border-radius: 8px;
+      padding: clamp(4px, 1.5vw, 8px);
+      text-align: center;
+      backdrop-filter: blur(4px);
+    }
+    .hero-stat-card .label {
+      font-size: clamp(8px, 2vw, 10px);
+      color: var(--subtle);
+      margin-bottom: 2px;
+    }
+    .hero-stat-card .value {
+      font-size: clamp(12px, 3.5vw, 16px);
+      font-weight: 600;
+      color: var(--pink-400);
+    }
+    .hero-stat-card .temp-bar {
+      margin-top: 6px;
+      height: 4px;
+      background: rgba(244, 192, 209, .3);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .hero-stat-card .temp-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, var(--pink-200), var(--pink-400));
+    }
+    .hero-anniversary {
+      background: rgba(255,255,255,.65);
+      border: 1px solid rgba(244, 192, 209, .3);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: clamp(9px, 2.4vw, 11px);
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      backdrop-filter: blur(4px);
+    }
+    .hero-anniversary .arrow {
+      margin-left: auto;
+      color: var(--pink-400);
+      flex-shrink: 0;
+    }
+
+    /* ===== 筛选 tabs ===== */
+    .filter-tabs {
+      display: flex; gap: 8px; overflow-x: auto; padding: 0 16px 4px;
+      margin-bottom: 12px; scrollbar-width: none; flex-shrink: 0;
+    }
+    .filter-tabs::-webkit-scrollbar { display: none; }
+    .filter-tab {
+      flex: 0 0 auto; height: 32px; padding: 0 14px;
+      border-radius: 999px; border: 1px solid var(--line);
+      background: rgba(255,255,255,.58); color: var(--muted);
+      font-size: 13px; font-weight: 500; cursor: pointer;
+      display: flex; align-items: center; transition: .2s;
+    }
+    .filter-tab:hover { background: var(--pink-50); }
+    .filter-tab.active {
+      color: #fff;
+      background: linear-gradient(135deg, rgba(212, 83, 126, .94), rgba(244, 140, 174, .86));
+      border-color: transparent;
+      box-shadow: 0 6px 14px rgba(212, 83, 126, .18);
+    }
+
+    /* ===== 角色列表 ===== */
+    .char-list { display: flex; flex-direction: column; gap: 6px; padding: 0 16px; overflow-y: auto; flex: 1; -webkit-overflow-scrolling: touch; }
+    .char-item {
+      background: var(--glass);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      color: inherit;
+      transition: transform .24s, box-shadow .24s;
+      flex-shrink: 0;
+    }
+    .char-item:hover { transform: translateY(-2px); box-shadow: var(--shadow-float); }
+    .char-item.active {
+      border-color: var(--pink-200);
+      background: linear-gradient(135deg, rgba(251, 234, 240, .9), rgba(255, 250, 246, .7));
+    }
+    .char-avatar {
+      width: 40px; height: 40px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #fffafb, #fef0f4);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+      border: 2px solid rgba(244, 192, 209, .4);
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(212, 83, 126, .08);
+    }
+    .char-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+    .char-meta { flex: 1; min-width: 0; }
+    .char-meta-top { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+    .char-meta-name { font-family: var(--serif); font-size: 14px; font-weight: 500; }
+    .char-meta-tag {
+      font-size: 10px; font-weight: 500;
+      background: var(--pink-50); color: var(--pink-400);
+      padding: 1px 6px; border-radius: 999px;
+    }
+    .char-meta-desc {
+      font-size: 12px; color: var(--muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .char-meta-time {
+      font-size: 10px; color: var(--subtle);
+      display: flex; align-items: center; gap: 4px;
+    }
+    .char-right {
+      display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+      flex-shrink: 0;
+    }
+    .char-intimacy-label { font-size: 10px; color: var(--subtle); }
+    .char-intimacy-bar {
+      width: 50px; height: 4px;
+      background: var(--pink-50);
+      border-radius: 3px; overflow: hidden;
+      position: relative;
+    }
+    .char-intimacy-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--pink-200), var(--pink-400));
+      border-radius: 3px;
+    }
+    .char-intimacy-val { font-size: 10px; color: var(--pink-400); font-weight: 500; }
+    .char-chat-btn {
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, rgba(212, 83, 126, .94), rgba(244, 140, 174, .86));
+      color: #fff;
+      font-size: 11px; font-weight: 500;
+      border: none; cursor: pointer;
+      display: flex; align-items: center; gap: 3px;
+      transition: transform .2s, box-shadow .2s;
+      text-decoration: none;
+      box-shadow: 0 4px 10px rgba(212, 83, 126, .18);
+    }
+    .char-chat-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(212, 83, 126, .25); }
+
+    .add-item {
+      border: 2px dashed var(--pink-200);
+      background: transparent;
+      backdrop-filter: none;
+      justify-content: center;
+      gap: 8px;
+      padding: 16px;
+      color: var(--pink-400);
+      font-size: 14px; font-weight: 500;
+      cursor: pointer;
+      border-radius: 18px;
+    }
+    .add-item:hover { background: rgba(251, 234, 240, .4); border-color: var(--pink-400); }
+    .empty-state {
+      margin: 0 16px;
+      padding: 24px 18px;
+      border-radius: 18px;
+      border: 1px dashed var(--pink-200);
+      background: rgba(255, 255, 255, .62);
+      text-align: center;
+      color: var(--muted);
+    }
+    .empty-state strong {
+      display: block;
+      margin-bottom: 6px;
+      font-family: var(--serif);
+      font-size: 18px;
+      color: var(--pink-900);
+    }
+    .empty-state .create-btn {
+      display: inline-flex;
+      margin-top: 14px;
+    }
+    .page-note {
+      margin: 0 16px 10px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .68);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      background: rgba(75, 21, 40, .24);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 16px;
+    }
+    .modal-card {
+      width: min(100%, 460px);
+      max-height: 86vh;
+      overflow: auto;
+      border-radius: 22px;
+      background: rgba(255, 250, 246, .96);
+      border: 1px solid var(--line);
+      box-shadow: 0 22px 60px rgba(75, 21, 40, .22);
+      padding: 18px;
+    }
+    .modal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .modal-head h2 {
+      font-family: var(--serif);
+      font-size: 20px;
+      font-weight: 600;
+    }
+    .modal-close {
+      border: 0;
+      background: var(--pink-50);
+      color: var(--pink-400);
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 18px;
+    }
+    .role-form {
+      display: grid;
+      gap: 12px;
+    }
+    .role-field {
+      display: grid;
+      gap: 6px;
+    }
+    .role-field label {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .role-field input,
+    .role-field textarea,
+    .role-field select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .72);
+      color: var(--pink-900);
+      font: inherit;
+      padding: 10px 12px;
+      outline: none;
+    }
+    .role-field textarea {
+      min-height: 120px;
+      resize: vertical;
+      line-height: 1.55;
+    }
+    .role-switch-field {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .66);
+    }
+    .role-switch-field label {
+      font-size: 13px;
+      color: var(--pink-900);
+      font-weight: 600;
+    }
+    .role-switch-field small {
+      display: block;
+      margin-top: 3px;
+      color: var(--subtle);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+    .role-switch-field input {
+      width: 20px;
+      height: 20px;
+      accent-color: var(--pink-400);
+      flex-shrink: 0;
+    }
+    .auto-moment-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .auto-moment-grid .role-field input {
+      padding: 8px 10px;
+    }
+    .auto-moment-grid .role-field label {
+      font-size: 11px;
+    }
+    .portrait-picker {
+      display: grid;
+      gap: 10px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, .58);
+    }
+    .portrait-picker-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .portrait-picker-title {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .portrait-upload-btn {
+      border: 1px solid var(--pink-100);
+      background: #fff;
+      color: var(--pink-700);
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .portrait-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .portrait-option {
+      position: relative;
+      aspect-ratio: 1;
+      border: 2px solid transparent;
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--pink-50);
+      cursor: pointer;
+      padding: 0;
+    }
+    .portrait-option img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .portrait-option.active {
+      border-color: var(--pink-400);
+      box-shadow: 0 8px 18px rgba(212, 83, 126, .18);
+    }
+    .portrait-option.active::after {
+      content: '✓';
+      position: absolute;
+      right: 5px;
+      top: 5px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--pink-400);
+      color: #fff;
+      font-size: 12px;
+      display: grid;
+      place-items: center;
+    }
+    .portrait-badge {
+      position: absolute;
+      left: 5px;
+      bottom: 5px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .88);
+      color: var(--pink-700);
+      font-size: 10px;
+      padding: 2px 6px;
+    }
+    .role-form-error {
+      min-height: 18px;
+      color: #d33f62;
+      font-size: 12px;
+    }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 4px;
+    }
+    .secondary-btn {
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, .68);
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 8px 14px;
+      cursor: pointer;
+    }
+    .danger-btn {
+      background: rgba(211, 63, 98, .1);
+      border-color: rgba(211, 63, 98, .22);
+      color: #d33f62;
+    }
+    .pending-delete-note {
+      font-size: 10px;
+      color: #d33f62;
+      margin-top: 2px;
+    }
+
+    /* ===== Tab bar ===== */
+    .tab-bar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: rgba(255, 255, 255, .88); backdrop-filter: blur(20px);
+      border-top: 1px solid var(--line);
+      display: flex; justify-content: space-around; align-items: center;
+      padding: 10px 0 env(safe-area-inset-bottom, 8px); z-index: 100;
+    }
+    .tab-item { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: var(--subtle); text-decoration: none; padding: 4px 12px; transition: color .2s; }
+    .tab-item.active { color: var(--pink-400); }
+    .tab-item svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .tab-item.active svg { stroke-width: 2.2; }
+
+    [data-reveal] { opacity: 0; transform: translateY(18px); }
+    [data-reveal].is-visible { opacity: 1; transform: translateY(0); transition: opacity .5s ease, transform .5s ease; transition-delay: var(--delay, 0ms); }
+</style>
+</head>
+<body>
+  <div class="app-body">
+    <div class="page-header" data-reveal style="--delay:0ms">
+      <h1>角色</h1>
+      <div class="header-actions">
+        <div class="icon-btn"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+        <div class="icon-btn"><svg viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></div>
+        <button class="create-btn" data-create-role>创建角色</button>
+      </div>
+    </div>
+
+<!-- Hero 大屏 -->
+    <div class="hero" id="heroCard" data-reveal style="--delay:60ms">
+      <div class="hero-portrait">
+        <img src="images/ruobai-standing.png" alt="若白">
+      </div>
+      <div class="hero-info">
+        <div class="hero-name">若白 <span class="tag">当前活跃</span></div>
+        <div class="hero-quote">"谢谢你出现的每一天，都让我的世界变得不一样～"</div>
+        <div class="hero-stats">
+          <div class="hero-stat-card">
+            <div class="label">我们相遇的第</div>
+            <div class="value">152 天 ❤️</div>
+          </div>
+          <div class="hero-stat-card">
+            <div class="label">关系温度</div>
+            <div class="value">92°C</div>
+            <div class="temp-bar"><div class="temp-fill" style="width:92%"></div></div>
+          </div>
+        </div>
+        <div class="hero-anniversary">
+          <span>📅</span>
+          <span>下次纪念日 6月20日 我们的第一次约会</span>
+          <span class="arrow">›</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 筛选 tabs -->
+    <div class="filter-tabs" id="filterTabs" data-reveal style="--delay:120ms">
+    </div>
+
+    <!-- 角色列表 -->
+    <div class="char-list" id="charList">
+      <div class="empty-state">
+        <strong>正在读取角色</strong>
+        <div>稍等一下。</div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="tab-bar">
+    <a href="chat.html" class="tab-item"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>聊天</span></a>
+    <a href="characters.html" class="tab-item active"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>角色</span></a>
+    <a href="moments.html" class="tab-item"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg><span>动态</span></a>
+    <a href="memory.html" class="tab-item"><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13S5 14 5 9a7 7 0 0 1 7-7z"/><circle cx="12" cy="9" r="2.5"/></svg><span>记忆</span></a>
+    <a href="profile.html" class="tab-item"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>我的</span></a>
+  </nav>
+
+  <script type="module">
+  import {
+    buildCharactersViewModel,
+    buildFilterItems,
+    buildPortraitChoices,
+    buildRolePayload,
+    escapeHtml,
+    getChatHref,
+    pickActiveRole
+  } from './js/characters-page-utils.mjs';
+
+  const heroCard = document.getElementById('heroCard');
+  const filterTabs = document.getElementById('filterTabs');
+  const charList = document.getElementById('charList');
+  let roles = [];
+  let deletedRoles = [];
+  let currentFilter = 'all';
+  let editingRole = null;
+  let selectedPortraitId = null;
+  let selectedPortraitCustomUrl = null;
+  let pendingPortraitFile = null;
+
+  function showNote(text) {
+    let note = document.querySelector('.page-note');
+    if (!note) {
+      note = document.createElement('div');
+      note.className = 'page-note';
+      heroCard.insertAdjacentElement('beforebegin', note);
+    }
+    note.textContent = text;
+  }
+
+  function clearNote() {
+    document.querySelector('.page-note')?.remove();
+  }
+
+  function roleQuote(role) {
+    if (role.persona && role.persona !== '还没有人设') {
+      return role.persona.length > 42 ? `${role.persona.slice(0, 42)}...` : role.persona;
+    }
+    return '她已经在这里了，等你补完她的故事。';
+  }
+
+  function roleDaysText(role) {
+    return role.createdDays ? `${role.createdDays} 天` : '新相遇';
+  }
+
+  function deleteAfterText(role) {
+    if (!role.deleteAfter) return '';
+    const time = new Date(role.deleteAfter).getTime();
+    if (!Number.isFinite(time)) return '已进入删除冷静期';
+    const days = Math.max(1, Math.ceil((time - Date.now()) / (24 * 60 * 60 * 1000)));
+    return `${days} 天后自动删除`;
+  }
+
+  function renderHero(role) {
+    if (!role) {
+      heroCard.style.display = 'none';
+      return;
+    }
+    heroCard.style.display = '';
+    heroCard.style.backgroundImage = `url('${role.roomBackground || 'images/ruobai-theme/room.webp'}')`;
+    heroCard.querySelector('.hero-name').innerHTML = `${escapeHtml(role.name)} <span class="tag">当前活跃</span>`;
+    heroCard.querySelector('.hero-quote').textContent = `"${roleQuote(role)}"`;
+    heroCard.querySelector('.hero-stat-card:first-child .value').textContent = `${roleDaysText(role)} ❤️`;
+    heroCard.querySelector('.hero-stat-card:last-child .value').textContent = `${role.intimacy}°C`;
+    heroCard.querySelector('.hero-stat-card:last-child .temp-fill').style.width = `${role.intimacy}%`;
+    heroCard.querySelector('.hero-anniversary span:nth-child(2)').textContent = `${role.tag ? `${role.tag} · ` : ''}心情 ${role.mood}`;
+    const img = heroCard.querySelector('.hero-portrait img');
+    if (role.portrait) {
+      img.src = role.portrait;
+      img.alt = role.name;
+      img.style.display = '';
+    } else {
+      img.style.display = 'none';
+    }
+  }
+
+  function renderFilters() {
+    filterTabs.innerHTML = buildFilterItems(roles).map(item => `
+      <button class="filter-tab ${item.value === currentFilter ? 'active' : ''}" data-filter="${escapeHtml(item.value)}">
+        ${escapeHtml(item.label)} ${item.count}
+      </button>
+    `).join('');
+
+    filterTabs.querySelectorAll('[data-filter]').forEach(button => {
+      button.addEventListener('click', () => {
+        currentFilter = button.dataset.filter || 'all';
+        renderFilters();
+        renderList();
+      });
+    });
+  }
+
+  function renderAvatar(role) {
+    if (role.portraitSquare) {
+      return `<img src="${escapeHtml(role.portraitSquare)}" alt="${escapeHtml(role.name)}">`;
+    }
+    return '🌸';
+  }
+
+  function renderList() {
+    const visibleRoles = currentFilter === 'all'
+      ? roles
+      : roles.filter(role => role.tag === currentFilter);
+
+    if (!roles.length) {
+      charList.innerHTML = `
+        <div class="empty-state">
+          <strong>还没有角色</strong>
+          <div>先给她一个名字，再开始聊天。</div>
+          <a class="create-btn" href="profile.html?onboard=first-role">去创建角色</a>
+        </div>
+      `;
+      return;
+    }
+
+    if (!visibleRoles.length) {
+      charList.innerHTML = '<div class="empty-state"><strong>这个分类还没有角色</strong><div>换个分类看看。</div></div>';
+      return;
+    }
+
+    const restoreMarkup = deletedRoles.length ? `
+      <div class="empty-state" style="text-align:left">
+        <strong>可恢复角色</strong>
+        <div>这些角色已经删除，但还能从本地数据里找回来。</div>
+      </div>
+      ${deletedRoles.map((role, index) => `
+        <div class="char-item is-visible" data-deleted-role-id="${role.id}" style="--delay:${160 + (visibleRoles.length + index) * 60}ms">
+          <div class="char-avatar">${renderAvatar(role)}</div>
+          <div class="char-meta">
+            <div class="char-meta-top">
+              <span class="char-meta-name">${escapeHtml(role.name)}</span>
+              <span class="char-meta-tag">已删除</span>
+            </div>
+            <div class="char-meta-desc">${escapeHtml(role.persona)}</div>
+            <div class="char-meta-time">可以恢复聊天和记忆</div>
+          </div>
+          <div class="char-right">
+            <button class="secondary-btn" type="button" data-hard-restore-role="${role.id}">恢复</button>
+          </div>
+        </div>
+      `).join('')}
+    ` : '';
+
+    charList.innerHTML = visibleRoles.map((role, index) => `
+      <div class="char-item is-visible ${role.isActive ? 'active' : ''}" data-role-id="${role.id}" style="--delay:${160 + index * 60}ms">
+        <div class="char-avatar">${renderAvatar(role)}</div>
+        <div class="char-meta">
+          <div class="char-meta-top">
+            <span class="char-meta-name">${escapeHtml(role.name)}</span>
+            ${role.tag ? `<span class="char-meta-tag">${escapeHtml(role.tag)}</span>` : ''}
+          </div>
+          <div class="char-meta-desc">${escapeHtml(role.persona)}</div>
+          <div class="char-meta-time">🕐 ${escapeHtml(roleDaysText(role))}</div>
+          ${role.deleteAfter ? `<div class="pending-delete-note">${escapeHtml(deleteAfterText(role))}</div>` : ''}
+        </div>
+        <div class="char-right">
+          <div style="display:flex;align-items:center;gap:4px">
+            <div class="char-intimacy-bar"><div class="char-intimacy-fill" style="width:${role.intimacy}%"></div></div>
+            <span class="char-intimacy-val">${role.intimacy}%</span>
+            <span style="font-size:12px">💕</span>
+          </div>
+          <a href="${getChatHref(role)}" class="char-chat-btn">💬 去聊天</a>
+          <button class="char-chat-btn" type="button" data-edit-role="${role.id}">编辑</button>
+          ${role.deleteAfter
+            ? `<button class="secondary-btn" type="button" data-restore-role="${role.id}">恢复</button>`
+            : `<button class="secondary-btn danger-btn" type="button" data-delete-role="${role.id}">删除</button>`}
+        </div>
+      </div>
+    `).join('') + restoreMarkup;
+
+    charList.querySelectorAll('.char-item[data-role-id]').forEach(item => {
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('.char-chat-btn') || e.target.closest('[data-edit-role]') || e.target.closest('[data-delete-role]') || e.target.closest('[data-restore-role]')) return;
+        const role = roles.find(entry => String(entry.id) === item.dataset.roleId);
+        if (!role) return;
+        roles = roles.map(entry => ({ ...entry, isActive: entry.id === role.id }));
+        renderHero(role);
+        renderList();
+      });
+    });
+
+    charList.querySelectorAll('[data-edit-role]').forEach(button => {
+      button.addEventListener('click', () => {
+        const role = roles.find(entry => String(entry.id) === button.dataset.editRole);
+        if (role) openRoleModal(role);
+      });
+    });
+
+    charList.querySelectorAll('[data-delete-role]').forEach(button => {
+      button.addEventListener('click', () => {
+        const role = roles.find(entry => String(entry.id) === button.dataset.deleteRole);
+        if (role) scheduleRoleDelete(role);
+      });
+    });
+
+    charList.querySelectorAll('[data-restore-role]').forEach(button => {
+      button.addEventListener('click', () => {
+        const role = roles.find(entry => String(entry.id) === button.dataset.restoreRole);
+        if (role) restoreRole(role);
+      });
+    });
+
+    charList.querySelectorAll('[data-hard-restore-role]').forEach(button => {
+      button.addEventListener('click', () => {
+        const role = deletedRoles.find(entry => String(entry.id) === button.dataset.hardRestoreRole);
+        if (role) restoreHardDeletedRole(role);
+      });
+    });
+  }
+
+  async function loadRoles() {
+    charList.innerHTML = '<div class="empty-state"><strong>正在读取角色</strong><div>稍等一下。</div></div>';
+    try {
+      const res = await fetch('/api/roles?include_deleted=1', { credentials: 'include' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || '角色列表读取失败');
+      }
+      const allRoles = buildCharactersViewModel(data.items || []);
+      roles = allRoles.filter(role => !role.isDeleted);
+      deletedRoles = allRoles.filter(role => role.isDeleted);
+      clearNote();
+      const active = pickActiveRole(roles);
+      renderHero(active);
+      renderFilters();
+      renderList();
+    } catch (error) {
+      roles = [];
+      renderHero(null);
+      filterTabs.innerHTML = '';
+      charList.innerHTML = '<div class="empty-state"><strong>角色暂时读不出来</strong><div>稍后再试，或者先检查登录状态。</div></div>';
+      showNote(error.message || '角色列表读取失败');
+    }
+  }
+
+  function closeRoleModal() {
+    document.querySelector('.modal-backdrop')?.remove();
+    editingRole = null;
+    selectedPortraitId = null;
+    selectedPortraitCustomUrl = null;
+    pendingPortraitFile = null;
+  }
+
+  function openRoleModal(roleToEdit = null) {
+    const isEdit = Boolean(roleToEdit);
+    closeRoleModal();
+    editingRole = roleToEdit;
+    selectedPortraitId = roleToEdit?.portraitId ?? null;
+    selectedPortraitCustomUrl = roleToEdit?.portraitCustomUrl || null;
+    pendingPortraitFile = null;
+    const portraitChoices = buildPortraitChoices({
+      portraitId: selectedPortraitId,
+      customUrl: selectedPortraitCustomUrl
+    });
+    document.body.insertAdjacentHTML('beforeend', `
+      <div class="modal-backdrop" role="dialog" aria-modal="true">
+        <div class="modal-card">
+          <div class="modal-head">
+            <h2>${isEdit ? '编辑角色' : '创建角色'}</h2>
+            <button class="modal-close" type="button" data-close-role-modal aria-label="关闭">×</button>
+          </div>
+          <form class="role-form" id="roleForm">
+            <div class="role-field">
+              <label for="roleName">名字</label>
+              <input id="roleName" name="name" value="${escapeHtml(roleToEdit?.name || '')}" placeholder="比如：小白">
+            </div>
+            <div class="role-field">
+              <label for="roleTag">关系标签</label>
+              <select id="roleTag" name="tag">
+                <option value="" ${!roleToEdit?.tag ? 'selected' : ''}>(留空)</option>
+                ${['恋人', '挚友', '朋友', '家人', '自定义'].map(tag => `
+                  <option value="${tag}" ${tag === roleToEdit?.tag ? 'selected' : ''}>${tag}</option>
+                `).join('')}
+              </select>
+            </div>
+            <div class="portrait-picker">
+              <div class="portrait-picker-head">
+                <div class="portrait-picker-title">选立绘</div>
+                <button class="portrait-upload-btn" type="button" id="portraitUploadBtn">上传自定义</button>
+                <input id="portraitUploadInput" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+              </div>
+              <div class="portrait-grid" id="portraitGrid">
+                ${portraitChoices.map(choice => `
+                  <button type="button" class="portrait-option ${choice.active ? 'active' : ''}" data-portrait-id="${choice.id}" data-portrait-url="${escapeHtml(choice.uploaded ? choice.src : '')}" title="${escapeHtml(choice.label)}">
+                    <img src="${escapeHtml(choice.src)}" alt="${escapeHtml(choice.label)}">
+                    ${choice.uploaded ? '<span class="portrait-badge">我上传的</span>' : ''}
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+            <div class="role-field">
+              <label for="roleAvatar">头像地址</label>
+              <input id="roleAvatar" name="avatar" value="${escapeHtml(roleToEdit?.avatar || '')}" placeholder="可以先留空">
+            </div>
+            <div class="role-field">
+              <label for="rolePersona">人设</label>
+              <textarea id="rolePersona" name="persona" placeholder="写她是什么样的人、怎么陪你说话">${escapeHtml(roleToEdit?.persona === '还没有人设' ? '' : roleToEdit?.persona || '')}</textarea>
+            </div>
+            <div class="role-switch-field">
+              <label for="roleAutoMoments">
+                允许她自动发动态
+                <small>适合小白、糖糖这类陪伴角色；工具型角色可以先关着。</small>
+              </label>
+              <input id="roleAutoMoments" name="auto_moments_enabled" type="checkbox" ${roleToEdit?.autoMomentsEnabled ? 'checked' : ''}>
+            </div>
+            <div class="auto-moment-grid">
+              <div class="role-field">
+                <label for="roleAutoMomentMin">每天最少</label>
+                <input id="roleAutoMomentMin" name="auto_moments_daily_min" type="number" min="0" max="6" value="${roleToEdit?.autoMomentsDailyMin ?? 2}">
+              </div>
+              <div class="role-field">
+                <label for="roleAutoMomentMax">每天最多</label>
+                <input id="roleAutoMomentMax" name="auto_moments_daily_max" type="number" min="0" max="6" value="${roleToEdit?.autoMomentsDailyMax ?? 6}">
+              </div>
+              <div class="role-field">
+                <label for="roleAutoMomentInterval">间隔小时</label>
+                <input id="roleAutoMomentInterval" name="auto_moments_min_interval_hours" type="number" min="4" max="24" value="${roleToEdit?.autoMomentsMinIntervalHours ?? 4}">
+              </div>
+            </div>
+            <div class="role-form-error" id="roleFormError"></div>
+            <div class="modal-actions">
+              <button class="secondary-btn" type="button" data-close-role-modal>取消</button>
+              <button class="create-btn" type="submit">${isEdit ? '保存修改' : '创建角色'}</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `);
+
+    document.querySelectorAll('[data-close-role-modal]').forEach(button => {
+      button.addEventListener('click', closeRoleModal);
+    });
+    document.getElementById('portraitUploadBtn')?.addEventListener('click', () => {
+      document.getElementById('portraitUploadInput')?.click();
+    });
+    document.getElementById('portraitUploadInput')?.addEventListener('change', event => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      pendingPortraitFile = file;
+      selectedPortraitId = 999;
+      selectedPortraitCustomUrl = URL.createObjectURL(file);
+      renderPortraitGrid();
+    });
+    document.getElementById('portraitGrid')?.addEventListener('click', event => {
+      const button = event.target.closest('[data-portrait-id]');
+      if (!button) return;
+      selectedPortraitId = Number(button.dataset.portraitId);
+      selectedPortraitCustomUrl = button.dataset.portraitUrl || null;
+      if (selectedPortraitId !== 999) {
+        pendingPortraitFile = null;
+        selectedPortraitCustomUrl = null;
+      }
+      renderPortraitGrid();
+    });
+    document.getElementById('roleForm')?.addEventListener('submit', saveRole);
+  }
+
+  function renderPortraitGrid() {
+    const grid = document.getElementById('portraitGrid');
+    if (!grid) return;
+    const choices = buildPortraitChoices({
+      portraitId: selectedPortraitId,
+      customUrl: selectedPortraitCustomUrl
+    });
+    grid.innerHTML = choices.map(choice => `
+      <button type="button" class="portrait-option ${choice.active ? 'active' : ''}" data-portrait-id="${choice.id}" data-portrait-url="${escapeHtml(choice.uploaded ? choice.src : '')}" title="${escapeHtml(choice.label)}">
+        <img src="${escapeHtml(choice.src)}" alt="${escapeHtml(choice.label)}">
+        ${choice.uploaded ? '<span class="portrait-badge">我上传的</span>' : ''}
+      </button>
+    `).join('');
+  }
+
+  function readFileAsDataUrl(file) {
+    const reader = new FileReader();
+    return new Promise((resolve, reject) => {
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('读取图片失败'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function uploadPortrait(roleId, file) {
+    const dataUrl = await readFileAsDataUrl(file);
+    const res = await fetch(`/api/roles/${roleId}/portrait`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_data: dataUrl })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.success === false || !data.portrait_url) {
+      throw new Error(data.error || '上传立绘失败');
+    }
+    return data.portrait_url;
+  }
+
+  async function saveRole(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const errorEl = document.getElementById('roleFormError');
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const payload = buildRolePayload({
+      name: form.name.value,
+      tag: form.tag.value,
+      avatar: form.avatar.value,
+      portrait_id: selectedPortraitId,
+      portrait_custom_url: selectedPortraitCustomUrl,
+      persona: form.persona.value,
+      mood: editingRole?.mood ?? 80,
+      intimacy: editingRole?.intimacy ?? 50,
+      auto_moments_enabled: form.auto_moments_enabled.checked,
+      auto_moments_daily_min: form.auto_moments_daily_min.value,
+      auto_moments_daily_max: form.auto_moments_daily_max.value,
+      auto_moments_min_interval_hours: form.auto_moments_min_interval_hours.value
+    });
+
+    if (payload.error) {
+      errorEl.textContent = payload.error;
+      return;
+    }
+
+    errorEl.textContent = '';
+    submitBtn.disabled = true;
+    submitBtn.textContent = editingRole ? '保存中...' : '创建中...';
+    try {
+      const url = editingRole ? `/api/roles/${editingRole.id}` : '/api/roles';
+      const res = await fetch(url, {
+        method: editingRole ? 'PATCH' : 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || '保存角色失败');
+      }
+      const savedRoleId = data.item?.id || editingRole?.id;
+      if (pendingPortraitFile && savedRoleId) {
+        const portraitUrl = await uploadPortrait(savedRoleId, pendingPortraitFile);
+        const patchRes = await fetch(`/api/roles/${savedRoleId}`, {
+          method: 'PATCH',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            portrait_id: 999,
+            portrait_custom_url: portraitUrl
+          })
+        });
+        const patchData = await patchRes.json().catch(() => ({}));
+        if (!patchRes.ok || patchData.success === false) {
+          throw new Error(patchData.error || '保存自定义立绘失败');
+        }
+      }
+      closeRoleModal();
+      await loadRoles();
+    } catch (error) {
+      errorEl.textContent = error.message || '保存角色失败';
+      submitBtn.disabled = false;
+      submitBtn.textContent = editingRole ? '保存修改' : '创建角色';
+    }
+  }
+
+  async function patchRole(role, payload, pendingText) {
+    showNote(pendingText);
+    const res = await fetch(`/api/roles/${role.id}`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.success === false) {
+      throw new Error(data.error || '角色更新失败');
+    }
+    await loadRoles();
+  }
+
+  async function scheduleRoleDelete(role) {
+    const ok = window.confirm(`先让 ${role.name} 进入 3 天删除冷静期，可以恢复。继续吗？`);
+    if (!ok) return;
+    const deleteAfter = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+    try {
+      await patchRole(role, { delete_after: deleteAfter }, '正在设置删除冷静期...');
+    } catch (error) {
+      showNote(error.message || '设置删除冷静期失败');
+    }
+  }
+
+  async function restoreRole(role) {
+    try {
+      await patchRole(role, { delete_after: null }, '正在恢复角色...');
+    } catch (error) {
+      showNote(error.message || '恢复角色失败');
+    }
+  }
+
+  async function restoreHardDeletedRole(role) {
+    try {
+      showNote('正在恢复角色...');
+      const res = await fetch(`/api/roles/${role.id}/restore`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || '恢复角色失败');
+      }
+      await loadRoles();
+    } catch (error) {
+      showNote(error.message || '恢复角色失败');
+    }
+  }
+
+  document.querySelectorAll('[data-create-role]').forEach(button => {
+    button.addEventListener('click', () => openRoleModal());
+  });
+
+  const revealEls = document.querySelectorAll('[data-reveal]');
+  if (revealEls.length) {
+    const obs = new IntersectionObserver((entries, o) => {
+      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('is-visible'); o.unobserve(e.target); } });
+    }, { threshold: 0.14 });
+    revealEls.forEach(el => obs.observe(el));
+  }
+  loadRoles();
+  </script>
+</body>
+</html>

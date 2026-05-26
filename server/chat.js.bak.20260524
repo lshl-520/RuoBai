@@ -1,0 +1,448 @@
+import express from 'express';
+import { pool as defaultPool } from './db.js';
+import { getRequestCharacterId } from './middleware.js';
+import {
+  normalizeLimit,
+  parseInteger,
+  requireCharacterForUser as defaultRequireCharacterForUser
+} from './helpers.js';
+
+const NO_MODEL_MESSAGE = '请先在“我的”页面配置 AI 模型。';
+const CHARACTER_NOT_FOUND_ERROR = '角色不存在或不属于当前用户';
+
+export function buildChatCompletionsUrl(apiBase) {
+  const base = String(apiBase || '').trim().replace(/\/+$/, '');
+  if (!base) {
+    return '/v1/chat/completions';
+  }
+
+  if (/\/chat\/completions$/i.test(base)) {
+    return base;
+  }
+
+  if (/\/v\d+(?:\/[^/]+)*$/i.test(base)) {
+    return `${base}/chat/completions`;
+  }
+
+  return `${base}/v1/chat/completions`;
+}
+
+function wantsEventStream(req) {
+  return String(req.headers.accept || '').includes('text/event-stream');
+}
+
+function sendSyntheticStream(res, text) {
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+  res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`);
+  res.write('data: [DONE]\n\n');
+  res.end();
+}
+
+function buildSystemPrompt(character) {
+  const name = String(character?.name || '').trim() || '陪伴角色';
+  const persona = String(character?.persona || '').trim();
+  const identityGuard = `你现在就是${name}。不要自称 AI、模型、助手或程序。别人问你是谁或你叫什么时，先直接回答“我是${name}”。`;
+  return persona ? `${identityGuard}\n\n${persona}` : identityGuard;
+}
+
+async function hasMessageIsDeletedColumn(queryable) {
+  const [rows] = await queryable.query(
+    `
+      SELECT column_name
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'messages'
+        AND COLUMN_NAME = 'is_deleted'
+      LIMIT 1
+    `
+  );
+
+  return rows.length > 0;
+}
+
+function mapChatErrorStatus(error) {
+  return error?.message === CHARACTER_NOT_FOUND_ERROR ? 404 : 400;
+}
+
+export function createChatRouter({
+  pool = defaultPool,
+  requireCharacterForUser = defaultRequireCharacterForUser
+} = {}) {
+  const router = express.Router();
+  let supportsMessageSoftDelete;
+
+  async function messagesSupportIsDeleted() {
+    if (supportsMessageSoftDelete === undefined) {
+      supportsMessageSoftDelete = await hasMessageIsDeletedColumn(pool);
+    }
+
+    return supportsMessageSoftDelete;
+  }
+
+  async function loadRecentMessages(userId, characterId, limit = 20) {
+    const useIsDeleted = await messagesSupportIsDeleted();
+    const [rows] = await pool.query(
+      `
+        SELECT id, user_id, character_id, role, content, message_type, media_url, is_active, created_at
+        FROM messages
+        WHERE user_id = ? AND character_id = ? AND is_active = 1 ${useIsDeleted ? 'AND is_deleted = 0' : ''}
+        ORDER BY id DESC
+        LIMIT ?
+      `,
+      [userId, characterId, limit]
+    );
+
+    return rows.reverse();
+  }
+
+  async function saveMessage({ userId, characterId, role, content, messageType, mediaUrl }) {
+    const useIsDeleted = await messagesSupportIsDeleted();
+    const insertColumns = useIsDeleted
+      ? '(user_id, character_id, role, content, message_type, media_url, is_active, is_deleted, created_at)'
+      : '(user_id, character_id, role, content, message_type, media_url, is_active, created_at)';
+    const insertValues = useIsDeleted
+      ? 'VALUES (?, ?, ?, ?, ?, ?, 1, 0, NOW())'
+      : 'VALUES (?, ?, ?, ?, ?, ?, 1, NOW())';
+
+    const [result] = await pool.query(
+      `
+        INSERT INTO messages
+          ${insertColumns}
+        ${insertValues}
+      `,
+      [userId, characterId, role, content, messageType, mediaUrl]
+    );
+
+    const [rows] = await pool.query(
+      `
+        SELECT id, user_id, character_id, role, content, message_type, media_url, is_active, created_at
+        FROM messages
+        WHERE id = ? AND user_id = ?
+        LIMIT 1
+      `,
+      [result.insertId, userId]
+    );
+
+    return rows[0];
+  }
+
+  async function getActiveModelConfig(userId) {
+    const [rows] = await pool.query(
+      `
+        SELECT id, name, provider_type, api_base, api_key, model, purpose, is_active
+        FROM model_configs
+        WHERE user_id = ? AND purpose = 'chat' AND is_active = 1
+        ORDER BY id DESC
+        LIMIT 1
+      `,
+      [userId]
+    );
+
+    return rows[0] || null;
+  }
+
+  async function incrementDailyUsage(userId) {
+    await pool.query(
+      `
+        UPDATE users
+        SET
+          daily_chat_used = IF(daily_chat_reset_at IS NULL OR DATE(daily_chat_reset_at) <> CURRENT_DATE(), 1, daily_chat_used + 1),
+          daily_chat_reset_at = IF(daily_chat_reset_at IS NULL OR DATE(daily_chat_reset_at) <> CURRENT_DATE(), NOW(), daily_chat_reset_at)
+        WHERE id = ?
+      `,
+      [userId]
+    );
+  }
+
+  router.get('/', async (req, res) => {
+    try {
+      const characterId = getRequestCharacterId(req);
+      if (!characterId) {
+        return res.status(400).json({
+          success: false,
+          error: '缺少 character_id'
+        });
+      }
+
+      await requireCharacterForUser(req.userId, characterId, pool);
+      const limit = normalizeLimit(req.query?.limit, 50, 200);
+      const messages = await loadRecentMessages(req.userId, characterId, limit);
+
+      return res.json({
+        success: true,
+        items: messages
+      });
+    } catch (error) {
+      return res.status(mapChatErrorStatus(error)).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  router.post('/', async (req, res) => {
+    try {
+      const characterId = getRequestCharacterId(req);
+      if (!characterId) {
+        return res.status(400).json({
+          success: false,
+          error: '缺少 character_id'
+        });
+      }
+
+      const character = await requireCharacterForUser(req.userId, characterId, pool);
+      const role = String(req.body?.role || 'user');
+      const content = String(req.body?.content || '').trim();
+      const messageType = String(req.body?.message_type || 'text');
+      const mediaUrl = req.body?.media_url ? String(req.body.media_url) : null;
+
+      if (!['user', 'assistant', 'system'].includes(role)) {
+        return res.status(400).json({
+          success: false,
+          error: 'role 非法（必须是 user / assistant / system）'
+        });
+      }
+
+      if (!content) {
+        return res.status(400).json({
+          success: false,
+          error: '娑堟伅鍐呭涓嶈兘涓虹┖'
+        });
+      }
+
+      if (!req.body?.skip_server_persistence) {
+        const saved = await saveMessage({
+          userId: req.userId,
+          characterId,
+          role,
+          content,
+          messageType,
+          mediaUrl
+        });
+
+        return res.status(201).json({
+          success: true,
+          item: saved
+        });
+      }
+
+      const modelConfig = await getActiveModelConfig(req.userId);
+      if (!modelConfig) {
+        if (wantsEventStream(req)) {
+          sendSyntheticStream(res, NO_MODEL_MESSAGE);
+          return;
+        }
+
+        return res.json({
+          success: true,
+          item: {
+            role: 'assistant',
+            content: NO_MODEL_MESSAGE
+          }
+        });
+      }
+
+      const recent = await loadRecentMessages(req.userId, characterId, 20);
+      const messages = [];
+
+      messages.push({ role: 'system', content: buildSystemPrompt(character) });
+
+      messages.push(
+        ...recent
+          .filter(item => ['user', 'assistant', 'system'].includes(item.role) && item.content)
+          .map(item => ({
+            role: item.role,
+            content: item.content
+          }))
+      );
+
+      messages.push({ role: 'user', content });
+
+      const shouldStream = wantsEventStream(req);
+      const upstream = await fetch(buildChatCompletionsUrl(modelConfig.api_base), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${modelConfig.api_key}`
+        },
+        body: JSON.stringify({
+          model: modelConfig.model,
+          stream: shouldStream,
+          messages
+        })
+      });
+
+      if (!upstream.ok) {
+        const detail = await upstream.text().catch(() => '');
+        throw new Error(detail || `妯″瀷璇锋眰澶辫触: ${upstream.status}`);
+      }
+
+      await incrementDailyUsage(req.userId);
+
+      if (shouldStream) {
+        res.status(200);
+        res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache, no-transform');
+        res.setHeader('Connection', 'keep-alive');
+        res.flushHeaders?.();
+
+        try {
+          for await (const chunk of upstream.body) {
+            res.write(Buffer.from(chunk));
+          }
+          res.end();
+        } catch (streamError) {
+          console.error('AI 娴佷腑鏂?', streamError.message);
+          if (!res.writableEnded) {
+            res.write(`data: ${JSON.stringify({ error: 'AI 鏈嶅姟杩炴帴涓柇锛岃閲嶈瘯' })}\n\n`);
+            res.end();
+          }
+        }
+        return;
+      }
+
+      const payload = await upstream.json();
+      return res.json({
+        success: true,
+        item: {
+          role: 'assistant',
+          content: payload?.choices?.[0]?.message?.content || ''
+        },
+        raw: payload
+      });
+    } catch (error) {
+      if (wantsEventStream(req)) {
+        sendSyntheticStream(res, `妯″瀷鏆傛椂涓嶅彲鐢細${error.message}`);
+        return;
+      }
+
+      return res.status(mapChatErrorStatus(error)).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  router.post('/save', async (req, res) => {
+    try {
+      const characterId = getRequestCharacterId(req);
+      if (!characterId) {
+        return res.status(400).json({
+          success: false,
+          error: '缺少 character_id'
+        });
+      }
+
+      await requireCharacterForUser(req.userId, characterId, pool);
+
+      const role = String(req.body?.role || '').trim();
+      const content = String(req.body?.content || '').trim();
+      const messageType = String(req.body?.message_type || 'text');
+      const mediaUrl = req.body?.media_url ? String(req.body.media_url) : null;
+
+      if (!['user', 'assistant', 'system'].includes(role)) {
+        return res.status(400).json({
+          success: false,
+          error: 'role 非法（必须是 user / assistant / system）'
+        });
+      }
+
+      if (!content) {
+        return res.status(400).json({
+          success: false,
+          error: '娑堟伅鍐呭涓嶈兘涓虹┖'
+        });
+      }
+
+      const saved = await saveMessage({
+        userId: req.userId,
+        characterId,
+        role,
+        content,
+        messageType,
+        mediaUrl
+      });
+
+      return res.status(201).json({
+        success: true,
+        item: saved
+      });
+    } catch (error) {
+      return res.status(mapChatErrorStatus(error)).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  router.delete('/', async (req, res) => {
+    try {
+      const characterId = getRequestCharacterId(req);
+      if (!characterId) {
+        return res.status(400).json({
+          success: false,
+          error: '缺少 character_id'
+        });
+      }
+
+      await requireCharacterForUser(req.userId, characterId, pool);
+      const useIsDeleted = await messagesSupportIsDeleted();
+      const [result] = await pool.query(
+        `
+          UPDATE messages
+          SET is_active = 0${useIsDeleted ? ', is_deleted = 1' : ''}
+          WHERE user_id = ? AND character_id = ? AND is_active = 1${useIsDeleted ? ' AND is_deleted = 0' : ''}
+        `,
+        [req.userId, characterId]
+      );
+
+      return res.json({
+        success: true,
+        deleted: result.affectedRows || 0
+      });
+    } catch (error) {
+      return res.status(mapChatErrorStatus(error)).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  router.delete('/:id', async (req, res) => {
+    try {
+      const messageId = parseInteger(req.params.id);
+      if (!messageId) {
+        return res.status(400).json({
+          success: false,
+          error: '娑堟伅 ID 闈炴硶'
+        });
+      }
+
+      const useIsDeleted = await messagesSupportIsDeleted();
+      const [result] = await pool.query(
+        `UPDATE messages
+         SET is_active = 0${useIsDeleted ? ', is_deleted = 1' : ''}
+         WHERE id = ? AND user_id = ? AND is_active = 1${useIsDeleted ? ' AND is_deleted = 0' : ''}`,
+        [messageId, req.userId]
+      );
+
+      if (!result.affectedRows) {
+        return res.status(404).json({
+          success: false,
+          error: '娑堟伅涓嶅瓨鍦?'
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: '娑堟伅宸插垹闄?'
+      });
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        error: error.message
+      });
+    
