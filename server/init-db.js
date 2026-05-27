@@ -246,6 +246,12 @@ const schemaFixups = [
       WHERE status IS NULL OR status = ''
     `
   },
+  { table: 'characters', column: 'char_key', definition: "VARCHAR(50) DEFAULT ''", after: 'user_id' },
+  { table: 'characters', column: 'tag', definition: "VARCHAR(50) DEFAULT '恋人'", after: 'name' },
+  { table: 'characters', column: 'persona', definition: 'TEXT', after: 'tag' },
+  { table: 'characters', column: 'mood', definition: 'INT DEFAULT 80', after: 'portrait_custom_url' },
+  { table: 'characters', column: 'intimacy', definition: 'INT DEFAULT 50', after: 'mood' },
+  { table: 'characters', column: 'is_deleted', definition: 'TINYINT(1) DEFAULT 0', after: 'is_active' },
   { table: 'characters', column: 'delete_after', definition: 'DATETIME DEFAULT NULL', after: 'is_deleted' },
   { table: 'characters', column: 'auto_moments_enabled', definition: 'TINYINT(1) DEFAULT 0', after: 'intimacy' },
   { table: 'characters', column: 'first_chat_at', definition: 'DATETIME DEFAULT NULL', after: 'intimacy' },
@@ -258,12 +264,70 @@ const schemaFixups = [
   { table: 'memories', column: 'category', definition: "VARCHAR(50) DEFAULT ''", after: 'tag' },
   { table: 'memories', column: 'is_important', definition: 'TINYINT(1) DEFAULT 0', after: 'category' },
   { table: 'memories', column: 'is_deleted', definition: 'TINYINT(1) DEFAULT 0', after: 'is_important' },
+  { table: 'model_configs', column: 'provider_type', definition: "VARCHAR(50) DEFAULT 'openai-compatible'", after: 'name' },
+  { table: 'model_configs', column: 'api_base', definition: "VARCHAR(500) DEFAULT ''", after: 'provider_type' },
+  { table: 'model_configs', column: 'model', definition: "VARCHAR(100) DEFAULT ''", after: 'api_key' },
   { table: 'model_configs', column: 'purpose', definition: "VARCHAR(20) DEFAULT 'chat'", after: 'model' },
+  { table: 'model_configs', column: 'is_active', definition: 'TINYINT(1) DEFAULT 0', after: 'purpose' },
   { table: 'user_settings', column: 'auto_moments_enabled', definition: 'TINYINT(1) DEFAULT 0', after: 'max_tokens' },
   { table: 'user_settings', column: 'auto_moments_frequency_hours', definition: 'INT DEFAULT 24', after: 'auto_moments_enabled' },
   { table: 'user_settings', column: 'auto_moments_quiet_enabled', definition: 'TINYINT(1) DEFAULT 1', after: 'auto_moments_frequency_hours' },
   { table: 'user_settings', column: 'auto_moments_quiet_start', definition: "VARCHAR(5) DEFAULT '23:00'", after: 'auto_moments_quiet_enabled' },
   { table: 'user_settings', column: 'auto_moments_quiet_end', definition: "VARCHAR(5) DEFAULT '08:00'", after: 'auto_moments_quiet_start' },
+  {
+    requiredColumns: ['relationship', 'personality', 'profile_json', 'deleted_at'],
+    sql: `
+      UPDATE characters
+      SET
+        char_key = CASE
+          WHEN char_key IS NULL OR char_key = '' THEN CONCAT('role-', id)
+          ELSE char_key
+        END,
+        tag = CASE
+          WHEN tag IS NULL OR tag = '' THEN COALESCE(NULLIF(relationship, ''), '恋人')
+          ELSE tag
+        END,
+        persona = CASE
+          WHEN persona IS NULL OR persona = '' THEN COALESCE(NULLIF(personality, ''), NULLIF(profile_json, ''), '')
+          ELSE persona
+        END,
+        mood = CASE
+          WHEN mood IS NULL THEN 80
+          ELSE mood
+        END,
+        intimacy = CASE
+          WHEN intimacy IS NULL THEN 50
+          ELSE intimacy
+        END,
+        is_deleted = CASE
+          WHEN deleted_at IS NULL THEN 0
+          ELSE 1
+        END
+    `
+  },
+  {
+    requiredColumns: ['type', 'base_url', 'model_name', 'is_enabled'],
+    sql: `
+      UPDATE model_configs
+      SET
+        provider_type = CASE
+          WHEN provider_type IS NULL OR provider_type = '' THEN COALESCE(NULLIF(type, ''), 'openai-compatible')
+          ELSE provider_type
+        END,
+        api_base = CASE
+          WHEN api_base IS NULL OR api_base = '' THEN COALESCE(NULLIF(base_url, ''), '')
+          ELSE api_base
+        END,
+        model = CASE
+          WHEN model IS NULL OR model = '' THEN COALESCE(NULLIF(model_name, ''), '')
+          ELSE model
+        END,
+        is_active = CASE
+          WHEN is_active IS NULL THEN COALESCE(is_enabled, 0)
+          ELSE is_active
+        END
+    `
+  },
   {
     sql: `
       UPDATE model_configs
@@ -310,9 +374,30 @@ async function columnExists(tableName, columnName) {
   return rows.length > 0;
 }
 
+async function tableColumns(tableName) {
+  const [rows] = await pool.query(
+    `
+      SELECT COLUMN_NAME
+      FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+    `,
+    [tableName]
+  );
+
+  return new Set(rows.map(row => row.COLUMN_NAME));
+}
+
 async function applySchemaFixups() {
   for (const fixup of schemaFixups) {
     if (fixup.sql) {
+      if (fixup.requiredColumns) {
+        const existingColumns = await tableColumns(fixup.table);
+        if (!fixup.requiredColumns.every(column => existingColumns.has(column))) {
+          continue;
+        }
+      }
+
       await pool.query(fixup.sql);
       continue;
     }
@@ -321,8 +406,11 @@ async function applySchemaFixups() {
       continue;
     }
 
+    const existingColumns = await tableColumns(fixup.table);
+    const afterClause = fixup.after && existingColumns.has(fixup.after) ? ` AFTER ${fixup.after}` : '';
+
     await pool.query(
-      `ALTER TABLE ${fixup.table} ADD COLUMN ${fixup.column} ${fixup.definition} AFTER ${fixup.after}`
+      `ALTER TABLE ${fixup.table} ADD COLUMN ${fixup.column} ${fixup.definition}${afterClause}`
     );
   }
 }
