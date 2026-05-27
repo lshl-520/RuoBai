@@ -235,124 +235,97 @@ const statements = [
 ];
 
 const schemaFixups = [
-  `
-    ALTER TABLE users
-    MODIFY COLUMN role VARCHAR(20) DEFAULT 'user'
-  `,
-  `
-    ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active' AFTER role
-  `,
-  `
-    ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS nickname VARCHAR(50) DEFAULT '' AFTER username
-  `,
-  `
-    ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS avatar VARCHAR(500) DEFAULT '' AFTER nickname
-  `,
-  `
-    UPDATE users
-    SET status = CASE WHEN is_enabled = 1 THEN 'active' ELSE 'banned' END
-    WHERE status IS NULL OR status = ''
-  `,
-  `
-    ALTER TABLE characters
-    ADD COLUMN IF NOT EXISTS delete_after DATETIME DEFAULT NULL AFTER is_deleted
-  `,
-  `
-    ALTER TABLE characters
-    ADD COLUMN IF NOT EXISTS auto_moments_enabled TINYINT(1) DEFAULT 0 AFTER intimacy
-  `,
-  `
-    ALTER TABLE characters
-    ADD COLUMN IF NOT EXISTS first_chat_at DATETIME DEFAULT NULL AFTER intimacy
-  `,
-  `
-    ALTER TABLE characters
-    ADD COLUMN IF NOT EXISTS auto_moments_daily_min INT DEFAULT 0 AFTER auto_moments_enabled
-  `,
-  `
-    ALTER TABLE characters
-    ADD COLUMN IF NOT EXISTS auto_moments_daily_max INT DEFAULT 0 AFTER auto_moments_daily_min
-  `,
-  `
-    ALTER TABLE characters
-    ADD COLUMN IF NOT EXISTS auto_moments_min_interval_hours INT DEFAULT 4 AFTER auto_moments_daily_max
-  `,
-  `
-    ALTER TABLE characters
-    ADD COLUMN IF NOT EXISTS auto_moments_last_posted_at DATETIME DEFAULT NULL AFTER auto_moments_min_interval_hours
-  `,
-  `
-    ALTER TABLE characters
-    ADD COLUMN IF NOT EXISTS portrait_id INT DEFAULT NULL AFTER avatar
-  `,
-  `
-    ALTER TABLE characters
-    ADD COLUMN IF NOT EXISTS portrait_custom_url VARCHAR(255) DEFAULT NULL AFTER portrait_id
-  `,
-  `
-    ALTER TABLE memories
-    ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT '' AFTER tag
-  `,
-  `
-    ALTER TABLE memories
-    ADD COLUMN IF NOT EXISTS is_important TINYINT(1) DEFAULT 0 AFTER category
-  `,
-  `
-    ALTER TABLE memories
-    ADD COLUMN IF NOT EXISTS is_deleted TINYINT(1) DEFAULT 0 AFTER is_important
-  `,
-  `
-    ALTER TABLE model_configs
-    ADD COLUMN IF NOT EXISTS purpose VARCHAR(20) DEFAULT 'chat' AFTER model
-  `,
-  `
-    ALTER TABLE user_settings
-    ADD COLUMN IF NOT EXISTS auto_moments_enabled TINYINT(1) DEFAULT 0 AFTER max_tokens
-  `,
-  `
-    ALTER TABLE user_settings
-    ADD COLUMN IF NOT EXISTS auto_moments_frequency_hours INT DEFAULT 24 AFTER auto_moments_enabled
-  `,
-  `
-    ALTER TABLE user_settings
-    ADD COLUMN IF NOT EXISTS auto_moments_quiet_enabled TINYINT(1) DEFAULT 1 AFTER auto_moments_frequency_hours
-  `,
-  `
-    ALTER TABLE user_settings
-    ADD COLUMN IF NOT EXISTS auto_moments_quiet_start VARCHAR(5) DEFAULT '23:00' AFTER auto_moments_quiet_enabled
-  `,
-  `
-    ALTER TABLE user_settings
-    ADD COLUMN IF NOT EXISTS auto_moments_quiet_end VARCHAR(5) DEFAULT '08:00' AFTER auto_moments_quiet_start
-  `,
-  `
-    UPDATE model_configs
-    SET purpose = 'chat'
-    WHERE purpose IS NULL OR purpose = ''
-  `,
-  `
-    INSERT INTO invites (code, note, status, created_at, used_by, used_at)
-    SELECT
-      code,
-      COALESCE(note, ''),
-      CASE
-        WHEN COALESCE(is_active, 1) = 0 THEN 'revoked'
-        WHEN COALESCE(used_count, 0) >= COALESCE(max_uses, 1) THEN 'used'
-        ELSE 'unused'
-      END,
-      created_at,
-      used_by,
-      used_at
-    FROM invite_codes
-    WHERE code IS NOT NULL
-      AND NOT EXISTS (
-        SELECT 1 FROM invites WHERE invites.code = invite_codes.code
-      )
-  `
+  { sql: "ALTER TABLE users MODIFY COLUMN role VARCHAR(20) DEFAULT 'user'" },
+  { table: 'users', column: 'status', definition: "VARCHAR(20) DEFAULT 'active'", after: 'role' },
+  { table: 'users', column: 'nickname', definition: "VARCHAR(50) DEFAULT ''", after: 'username' },
+  { table: 'users', column: 'avatar', definition: "VARCHAR(500) DEFAULT ''", after: 'nickname' },
+  {
+    sql: `
+      UPDATE users
+      SET status = CASE WHEN is_enabled = 1 THEN 'active' ELSE 'banned' END
+      WHERE status IS NULL OR status = ''
+    `
+  },
+  { table: 'characters', column: 'delete_after', definition: 'DATETIME DEFAULT NULL', after: 'is_deleted' },
+  { table: 'characters', column: 'auto_moments_enabled', definition: 'TINYINT(1) DEFAULT 0', after: 'intimacy' },
+  { table: 'characters', column: 'first_chat_at', definition: 'DATETIME DEFAULT NULL', after: 'intimacy' },
+  { table: 'characters', column: 'auto_moments_daily_min', definition: 'INT DEFAULT 0', after: 'auto_moments_enabled' },
+  { table: 'characters', column: 'auto_moments_daily_max', definition: 'INT DEFAULT 0', after: 'auto_moments_daily_min' },
+  { table: 'characters', column: 'auto_moments_min_interval_hours', definition: 'INT DEFAULT 4', after: 'auto_moments_daily_max' },
+  { table: 'characters', column: 'auto_moments_last_posted_at', definition: 'DATETIME DEFAULT NULL', after: 'auto_moments_min_interval_hours' },
+  { table: 'characters', column: 'portrait_id', definition: 'INT DEFAULT NULL', after: 'avatar' },
+  { table: 'characters', column: 'portrait_custom_url', definition: 'VARCHAR(255) DEFAULT NULL', after: 'portrait_id' },
+  { table: 'memories', column: 'category', definition: "VARCHAR(50) DEFAULT ''", after: 'tag' },
+  { table: 'memories', column: 'is_important', definition: 'TINYINT(1) DEFAULT 0', after: 'category' },
+  { table: 'memories', column: 'is_deleted', definition: 'TINYINT(1) DEFAULT 0', after: 'is_important' },
+  { table: 'model_configs', column: 'purpose', definition: "VARCHAR(20) DEFAULT 'chat'", after: 'model' },
+  { table: 'user_settings', column: 'auto_moments_enabled', definition: 'TINYINT(1) DEFAULT 0', after: 'max_tokens' },
+  { table: 'user_settings', column: 'auto_moments_frequency_hours', definition: 'INT DEFAULT 24', after: 'auto_moments_enabled' },
+  { table: 'user_settings', column: 'auto_moments_quiet_enabled', definition: 'TINYINT(1) DEFAULT 1', after: 'auto_moments_frequency_hours' },
+  { table: 'user_settings', column: 'auto_moments_quiet_start', definition: "VARCHAR(5) DEFAULT '23:00'", after: 'auto_moments_quiet_enabled' },
+  { table: 'user_settings', column: 'auto_moments_quiet_end', definition: "VARCHAR(5) DEFAULT '08:00'", after: 'auto_moments_quiet_start' },
+  {
+    sql: `
+      UPDATE model_configs
+      SET purpose = 'chat'
+      WHERE purpose IS NULL OR purpose = ''
+    `
+  },
+  {
+    sql: `
+      INSERT INTO invites (code, note, status, created_at, used_by, used_at)
+      SELECT
+        code,
+        COALESCE(note, ''),
+        CASE
+          WHEN COALESCE(is_active, 1) = 0 THEN 'revoked'
+          WHEN COALESCE(used_count, 0) >= COALESCE(max_uses, 1) THEN 'used'
+          ELSE 'unused'
+        END,
+        created_at,
+        used_by,
+        used_at
+      FROM invite_codes
+      WHERE code IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM invites WHERE invites.code = invite_codes.code
+        )
+    `
+  }
 ];
+
+async function columnExists(tableName, columnName) {
+  const [rows] = await pool.query(
+    `
+      SELECT COLUMN_NAME
+      FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+        AND COLUMN_NAME = ?
+      LIMIT 1
+    `,
+    [tableName, columnName]
+  );
+
+  return rows.length > 0;
+}
+
+async function applySchemaFixups() {
+  for (const fixup of schemaFixups) {
+    if (fixup.sql) {
+      await pool.query(fixup.sql);
+      continue;
+    }
+
+    if (await columnExists(fixup.table, fixup.column)) {
+      continue;
+    }
+
+    await pool.query(
+      `ALTER TABLE ${fixup.table} ADD COLUMN ${fixup.column} ${fixup.definition} AFTER ${fixup.after}`
+    );
+  }
+}
 
 async function init() {
   try {
@@ -362,9 +335,7 @@ async function init() {
       await pool.query(statement);
     }
 
-    for (const statement of schemaFixups) {
-      await pool.query(statement);
-    }
+    await applySchemaFixups();
 
     // 检查是否已有管理员，没有则创建默认管理员
     const [adminRows] = await pool.query(
