@@ -7,7 +7,7 @@ const logDir = path.join(projectRoot, 'logs');
 module.exports = {
   apps: [
     {
-      name: 'ruobai-server',
+      name: 'ruobai',
       cwd: serverDir,
       script: 'server.js',
       instances: 1,

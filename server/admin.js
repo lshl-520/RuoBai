@@ -3,6 +3,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import { pool, withTransaction } from './db.js';
 import { asyncHandler, parseInteger } from './helpers.js';
+import { createUpdateService } from './admin-update.js';
 
 function buildInviteCode(now = new Date()) {
   const year = now.getFullYear();
@@ -45,7 +46,8 @@ async function getInviteByCode(db, code) {
 export function createAdminRouter({
   pool: db = pool,
   withTransaction: transaction = withTransaction,
-  now = () => new Date()
+  now = () => new Date(),
+  updateService = createUpdateService()
 } = {}) {
   const router = express.Router();
 
@@ -278,6 +280,21 @@ export function createAdminRouter({
         version: 'v1.0.0'
       }
     });
+  }));
+
+  router.post('/update-check', asyncHandler(async (_req, res) => {
+    const data = await updateService.checkForUpdates();
+    return res.json({ success: true, data });
+  }));
+
+  router.post('/update-apply', asyncHandler(async (_req, res) => {
+    const data = await updateService.applyUpdate();
+    return res.json({ success: true, data });
+  }));
+
+  router.get('/update-history', asyncHandler(async (_req, res) => {
+    const items = await updateService.listHistory(10);
+    return res.json({ success: true, items });
   }));
 
   return router;

@@ -393,6 +393,25 @@
     }
     .info-key { color: var(--text-muted); }
     .info-val { color: var(--text); font-weight: 500; }
+    .update-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+    .file-list,
+    .history-list {
+      margin-top: 12px;
+      padding-left: 18px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      line-height: 1.7;
+    }
+    .muted-note {
+      color: var(--text-muted);
+      font-size: 12px;
+      margin-top: 10px;
+    }
 
     /* Mobile responsive */
     @media (max-width: 1024px) {
@@ -603,6 +622,27 @@
           <span class="info-key">当前版本</span><span class="info-val" id="sysVersion">--</span>
         </div>
       </div>
+
+      <div class="card" id="updateCard">
+        <div class="card-header">
+          <span class="card-title">网站更新</span>
+          <span class="badge badge-gray" id="updateStatusBadge">未检测</span>
+        </div>
+        <div class="info-grid">
+          <span class="info-key">当前版本</span><span class="info-val" id="updateCurrent">--</span>
+          <span class="info-key">远端版本</span><span class="info-val" id="updateRemote">--</span>
+          <span class="info-key">版本差距</span><span class="info-val" id="updateBehind">--</span>
+          <span class="info-key">上次更新</span><span class="info-val" id="updateAge">--</span>
+        </div>
+        <div class="update-actions">
+          <button class="btn btn-ghost" id="checkUpdateBtn">检测更新</button>
+          <button class="btn btn-primary" id="applyUpdateBtn" disabled>备份并更新</button>
+        </div>
+        <div class="muted-note" id="updateMessage">点击“检测更新”查看 GitHub 上有没有新版本。</div>
+        <ul class="file-list" id="updateChangedFiles"></ul>
+        <div class="muted-note">最近 10 次更新记录</div>
+        <ul class="history-list" id="updateHistoryList"></ul>
+      </div>
     </div>
   </main>
 
@@ -620,7 +660,7 @@
 
   <script>
   const REDIRECT = '/admin-login.html';
-  const state = { session: null, users: [], invites: [] };
+  const state = { session: null, users: [], invites: [], updateInfo: null, updateHistory: [] };
 
   // === Helpers ===
   function escHtml(s) {
@@ -704,14 +744,16 @@
   }
 
   async function loadData() {
-    const [usersRes, invitesRes, systemRes] = await Promise.all([
+    const [usersRes, invitesRes, systemRes, historyRes] = await Promise.all([
       api('/api/admin/users'),
       api('/api/admin/invites'),
-      api('/api/admin/system/status')
+      api('/api/admin/system/status'),
+      api('/api/admin/update-history')
     ]);
     state.users = usersRes?.items || [];
     state.invites = invitesRes?.items || [];
     state.systemStatus = systemRes?.data || null;
+    state.updateHistory = historyRes?.items || [];
     renderAll();
   }
 
@@ -721,6 +763,7 @@
     renderUsers();
     renderInvites();
     renderSystem();
+    renderUpdateCard();
   }
 
   function renderDashboard() {
@@ -808,6 +851,47 @@
     document.getElementById('sysTotalCharacters').textContent = `${s.statistics.total_characters}个`;
 
     document.getElementById('sysVersion').textContent = s.version;
+  }
+
+  function shortHash(hash) {
+    return hash ? String(hash).slice(0, 8) : '--';
+  }
+
+  function renderUpdateCard() {
+    const info = state.updateInfo;
+    const badge = document.getElementById('updateStatusBadge');
+    const applyBtn = document.getElementById('applyUpdateBtn');
+    const files = document.getElementById('updateChangedFiles');
+    const history = document.getElementById('updateHistoryList');
+
+    if (!badge || !applyBtn || !files || !history) return;
+
+    if (!info) {
+      badge.className = 'badge badge-gray';
+      badge.textContent = '未检测';
+      applyBtn.disabled = true;
+    } else {
+      badge.className = `badge ${info.is_behind ? 'badge-yellow' : 'badge-green'}`;
+      badge.textContent = info.is_behind ? '有新版本' : '已是最新';
+      applyBtn.disabled = !info.is_behind;
+    }
+
+    document.getElementById('updateCurrent').textContent = info
+      ? `${shortHash(info.current?.hash)} ${fmtDateTime(info.current?.committed_at)}`
+      : '--';
+    document.getElementById('updateRemote').textContent = info
+      ? `${shortHash(info.remote?.hash)} ${fmtDateTime(info.remote?.committed_at)}`
+      : '--';
+    document.getElementById('updateBehind').textContent = info
+      ? (info.is_behind ? `落后 ${info.behind_count || 0} 个提交` : '没有落后')
+      : '--';
+    document.getElementById('updateAge').textContent = info?.time_since_current || '--';
+    files.innerHTML = (info?.changed_files || []).slice(0, 12)
+      .map(file => `<li>${escHtml(file)}</li>`)
+      .join('');
+    history.innerHTML = (state.updateHistory || []).slice(0, 10)
+      .map(item => `<li>${escHtml(fmtDateTime(item.at))} · ${item.status === 'success' ? '成功' : '失败'} · ${escHtml(shortHash(item.new_hash || item.previous_hash))}</li>`)
+      .join('') || '<li>暂无记录</li>';
   }
 
   // === Actions ===
@@ -904,6 +988,52 @@
       toast('修改成功，请重新登录');
       setTimeout(() => window.location.replace('admin-login.html'), 1500);
     } catch (e) { toast(e.message, 'error'); }
+  };
+
+  document.getElementById('checkUpdateBtn').onclick = async () => {
+    const btn = document.getElementById('checkUpdateBtn');
+    const message = document.getElementById('updateMessage');
+    btn.disabled = true;
+    message.textContent = '正在检测 GitHub 新版本...';
+    try {
+      const res = await api('/api/admin/update-check', { method: 'POST' });
+      state.updateInfo = res?.data || null;
+      renderUpdateCard();
+      message.textContent = state.updateInfo?.is_behind ? '检测到新版本，可以备份并更新。' : '当前已经是最新版本。';
+      toast('检测完成');
+    } catch (e) {
+      message.textContent = e.message || '检测失败，请稍后再试。';
+      toast(message.textContent, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  document.getElementById('applyUpdateBtn').onclick = async () => {
+    const ok = await showModal(
+      '备份并更新',
+      '<p style="color:var(--text-secondary)">系统会先备份数据库，再拉取 GitHub 最新代码。更新期间请不要重复点击。</p>',
+      { okText: '开始更新' }
+    );
+    if (!ok) return;
+
+    const btn = document.getElementById('applyUpdateBtn');
+    const message = document.getElementById('updateMessage');
+    btn.disabled = true;
+    message.textContent = '正在备份数据库并更新，请稍等...';
+    try {
+      const res = await api('/api/admin/update-apply', { method: 'POST' });
+      const data = res?.data || {};
+      message.textContent = `更新成功，新版本 ${shortHash(data.new_hash)}，耗时 ${Math.round((data.duration_ms || 0) / 1000)} 秒。`;
+      toast('更新成功');
+      const historyRes = await api('/api/admin/update-history');
+      state.updateHistory = historyRes?.items || [];
+      await document.getElementById('checkUpdateBtn').onclick();
+    } catch (e) {
+      message.textContent = e.message || '更新失败，系统已尽量回滚到上一版。';
+      toast(message.textContent, 'error');
+      renderUpdateCard();
+    }
   };
 
   // === Logout ===
