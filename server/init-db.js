@@ -11,8 +11,8 @@ const statements = [
       id INT AUTO_INCREMENT PRIMARY KEY,
       username VARCHAR(50) UNIQUE NOT NULL,
       password_hash VARCHAR(255) NOT NULL,
-      role TEXT DEFAULT 'user',
-      status TEXT DEFAULT 'active',
+      role VARCHAR(20) DEFAULT 'user',
+      status VARCHAR(20) DEFAULT 'active',
       is_enabled TINYINT(1) DEFAULT 1,
       daily_chat_used INT DEFAULT 0,
       daily_chat_reset_at DATETIME DEFAULT NULL,
@@ -88,7 +88,7 @@ const statements = [
       user_id INT NOT NULL,
       character_id INT DEFAULT NULL,
       content TEXT NOT NULL,
-      image_url TEXT DEFAULT NULL,
+      image_url VARCHAR(1000) DEFAULT NULL,
       likes INT DEFAULT 0,
       comments_count INT DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -127,7 +127,7 @@ const statements = [
       user_id INT NOT NULL,
       character_id INT DEFAULT NULL,
       content TEXT NOT NULL,
-      images JSON DEFAULT NULL,
+      images JSON,
       likes_count INT DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       is_deleted TINYINT(1) DEFAULT 0,
@@ -212,7 +212,7 @@ const statements = [
     CREATE TABLE IF NOT EXISTS invites (
       code VARCHAR(50) PRIMARY KEY,
       note VARCHAR(200) DEFAULT '',
-      status TEXT DEFAULT 'unused',
+      status VARCHAR(20) DEFAULT 'unused',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       used_by INT DEFAULT NULL,
       used_at DATETIME DEFAULT NULL
@@ -237,11 +237,11 @@ const statements = [
 const schemaFixups = [
   `
     ALTER TABLE users
-    MODIFY COLUMN role TEXT DEFAULT 'user'
+    MODIFY COLUMN role VARCHAR(20) DEFAULT 'user'
   `,
   `
     ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active' AFTER role
+    ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active' AFTER role
   `,
   `
     ALTER TABLE users
