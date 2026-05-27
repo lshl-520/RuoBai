@@ -155,6 +155,9 @@ async function start() {
         console.log(`  前台：http://localhost:${port}/index.html`);
         console.log(`  后台：http://localhost:${port}/admin.html`);
         console.log(`  ─────────────────────────────────`);
+        console.log(`  默认管理员账号：admin`);
+        console.log(`  默认管理员密码：123456`);
+        console.log(`  ⚠️  请尽快登录后台更改账号密码`);
         console.log(`  ─────────────────────────────────\n`);
         return;
       } catch (error) {
