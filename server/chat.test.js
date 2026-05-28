@@ -572,7 +572,7 @@ test('POST /api/chat includes active memories and anti-roleplay rules in the sys
     assert.match(systemPrompt, /I like blueberry cake/);
     assert.match(systemPrompt, /Preference/);
     assert.match(systemPrompt, /说话风格/);
-    assert.match(systemPrompt, /不要每句都加动作描写/);
+    assert.match(systemPrompt, /禁止动作描写/);
     assert.match(systemPrompt, /只输出可直接发送的聊天回复/);
   });
 });

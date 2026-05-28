@@ -615,6 +615,17 @@
       cursor: pointer;
       box-shadow: 0 8px 18px rgba(212, 83, 126, .12);
     }
+    .msg-sticker {
+      width: 120px; height: 120px;
+      display: block;
+      object-fit: contain;
+      cursor: pointer;
+    }
+    .msg-bubble.has-sticker {
+      background: transparent !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+    }
     .msg-image-text {
       white-space: pre-wrap;
       word-break: break-word;
@@ -788,31 +799,29 @@
     }
     .emoji-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 8px;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 4px;
+      padding: 4px;
     }
     .emoji-item {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 4px;
-      padding: 6px;
-      border-radius: 12px;
+      padding: 4px;
+      border-radius: 10px;
       cursor: pointer;
       transition: transform .2s, background .15s;
     }
     .emoji-item:hover { background: var(--pink-50); }
     .emoji-item:active { transform: scale(.85); }
     .emoji-item img {
-      width: 100%; aspect-ratio: 1;
-      border-radius: 10px;
+      width: 56px; height: 56px;
+      border-radius: 8px;
       object-fit: cover;
       background: var(--pink-50);
     }
     .emoji-item-label {
-      font-size: 10px;
-      color: var(--subtle);
-      white-space: nowrap;
+      display: none;
     }
     .emoji-unicode-grid {
       display: grid;
@@ -1431,7 +1440,15 @@
         </div>`;
       const bubbleWrap = row.querySelector('.msg-bubble-wrap');
       const bubble = row.querySelector('.msg-bubble');
-      if (message_type === 'image' && media_url) {
+      if (message_type === 'sticker' && media_url) {
+        bubble.classList.add('has-sticker');
+        const image = document.createElement('img');
+        image.className = 'msg-sticker';
+        image.src = media_url;
+        image.alt = content || '表情包';
+        image.loading = 'lazy';
+        bubble.appendChild(image);
+      } else if (message_type === 'image' && media_url) {
         bubble.classList.add('has-image');
         const image = document.createElement('img');
         image.className = 'msg-image';
@@ -1538,7 +1555,7 @@
     async function loadHistory() {
       if (!role.id) return;
       try {
-        const res = await fetch(`/api/chat?character_id=${role.id}&limit=50`, { credentials: 'include' });
+        const res = await fetch(`/api/chat?character_id=${role.id}&limit=200`, { credentials: 'include' });
         const data = await res.json();
         if (!data?.success) return;
         // 清除占位，保留 today divider
@@ -1553,7 +1570,7 @@
     let sending = false;
     let historyCache = [];
     let searchCache = [];
-    let currentHistoryLimit = 50;
+    let currentHistoryLimit = 200;
 
     async function fetchHistory(limit) {
       if (!role.id) return [];
@@ -1562,7 +1579,7 @@
       return data?.success && Array.isArray(data.items) ? data.items : [];
     }
 
-    async function loadHistoryWithLimit(limit = 50) {
+    async function loadHistoryWithLimit(limit = 200) {
       if (!role.id) return [];
       currentHistoryLimit = limit;
       try {
@@ -1869,6 +1886,92 @@
       }
     }
 
+    async function sendSticker(em) {
+      if (sending || !role.id) return;
+      sending = true;
+      const mediaUrl = `images/xiaobai-emotions/${em.file}`;
+      const content = `[表情:${em.name}]`;
+
+      appendMessage({ role: 'user', content, created_at: Date.now(), message_type: 'sticker', media_url: mediaUrl });
+
+      try {
+        await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ character_id: role.id, role: 'user', content, message_type: 'sticker', media_url: mediaUrl }),
+        });
+      } catch (e) { console.warn('表情消息落库失败', e); }
+
+      // 触发AI回复
+      const typingRow = appendTypingIndicator();
+      let aiRow = null;
+      let aiBubble = null;
+      let aiText = '';
+      let firstChunk = true;
+
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+          credentials: 'include',
+          body: JSON.stringify({ character_id: role.id, role: 'user', content: `用户发了一个表情包：${em.name}`, skip_server_persistence: true }),
+        });
+
+        if (!res.body) throw new Error('无响应流');
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let idx;
+          while ((idx = buffer.indexOf('\n\n')) !== -1) {
+            const chunk = buffer.slice(0, idx);
+            buffer = buffer.slice(idx + 2);
+            for (const line of chunk.split('\n')) {
+              if (!line.startsWith('data:')) continue;
+              const payload = line.slice(5).trim();
+              if (!payload || payload === '[DONE]') continue;
+              try {
+                const obj = JSON.parse(payload);
+                const token = obj?.choices?.[0]?.delta?.content;
+                if (!token) continue;
+                if (firstChunk) { typingRow.remove(); firstChunk = false; }
+                aiText += token;
+                if (!aiRow) {
+                  aiRow = appendMessage({ role: 'assistant', content: aiText, created_at: Date.now() });
+                  aiBubble = aiRow.querySelector('.msg-bubble');
+                } else {
+                  aiBubble.textContent = aiText;
+                  msgArea.scrollTop = msgArea.scrollHeight;
+                }
+              } catch (_) {}
+            }
+          }
+        }
+        if (firstChunk) typingRow.remove();
+      } catch (e) {
+        if (firstChunk) typingRow.remove();
+        console.warn('AI回复失败', e);
+      }
+
+      // 保存AI回复
+      if (aiText) {
+        try {
+          await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ character_id: role.id, role: 'assistant', content: aiText }),
+          });
+        } catch (_) {}
+      }
+      sending = false;
+    }
+
     async function sendMessage() {
       const text = textarea.value.trim();
       if (!text || sending || !role.id) return;
@@ -2103,28 +2206,29 @@
     });
 
     const xiaobaiEmotions = [
-      { file: '01_Ĭ认温柔.png', name: '温柔' },
+      { file: '01_默认温柔.png', name: '温柔' },
       { file: '02_开心明亮.png', name: '开心' },
-      { file: '03_害羞΢Ц.png', name: '害羞' },
+      { file: '03_害羞微笑.png', name: '害羞' },
       { file: '04_认真倾听.png', name: '认真' },
       { file: '05_关心担忧.png', name: '担忧' },
-      { file: '06_ί屈С嘴.png', name: 'ί屈' },
-      { file: '07_轻΢惊讶.png', name: '惊讶' },
+      { file: '06_委屈小嘴.png', name: '委屈' },
+      { file: '07_轻微惊讶.png', name: '惊讶' },
       { file: '08_无奈温柔.png', name: '无奈' },
       { file: '09_困倦慵懒.png', name: '困了' },
       { file: '10_生气但不凶.png', name: '生气' },
       { file: '11_撒娇期待.png', name: '撒娇' },
-      { file: '12_晚安΢Ц.png', name: '晚安' }
+      { file: '12_晚安微笑.png', name: '晚安' }
     ];
 
     xiaobaiEmotions.forEach(em => {
       const div = document.createElement('div');
       div.className = 'emoji-item';
       div.title = em.name;
-      div.innerHTML = `<img src="images/xiaobai-emotions/${em.file}" alt="${em.name}"><span class="emoji-item-label">${em.name}</span>`;
+      div.innerHTML = `<img src="images/xiaobai-emotions/${em.file}" alt="${em.name}">`;
       div.addEventListener('click', () => {
         emojiPanel.classList.remove('show');
         emojiBtn.classList.remove('active');
+        sendSticker(em);
       });
       customEmojis.appendChild(div);
     });

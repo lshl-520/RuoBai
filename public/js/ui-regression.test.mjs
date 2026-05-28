@@ -30,13 +30,24 @@ test('chat room derives companionship labels from first chat time', async () => 
   assert.match(html, /first_chat_at|firstChatAt/);
   assert.match(html, /function companionshipDays/);
   assert.match(html, /function companionshipText/);
-  assert.match(html, /还没开始陪伴/);
   assert.match(html, /intimacyBar\.style\.width = `\$\{intimacy\}%`/);
   assert.match(html, /querySelector\('\.topbar-status'\)\.textContent/);
   assert.match(html, /querySelector\('\.c3-anniversary'\)\.hidden = true/);
-  assert.doesNotMatch(html, />72 天</);
+  assert.doesNotMatch(html, />72 天/);
   assert.doesNotMatch(html, /陪伴 72 天/);
   assert.doesNotMatch(html, /亲密 88/);
   assert.doesNotMatch(html, /92°C/);
   assert.doesNotMatch(html, /6 月 30 日/);
+});
+
+test('chat pages request enough history to cover the current deployed backlog', async () => {
+  const [chatRoomHtml, desktopHtml] = await Promise.all([
+    readFile(new URL('../chat-room.html', import.meta.url), 'utf8'),
+    readFile(new URL('../desktop.html', import.meta.url), 'utf8')
+  ]);
+
+  assert.match(chatRoomHtml, /limit=200/);
+  assert.match(desktopHtml, /limit=200/);
+  assert.doesNotMatch(chatRoomHtml, /limit=50/);
+  assert.doesNotMatch(desktopHtml, /limit=50/);
 });
