@@ -66,7 +66,7 @@ test('update apply backs up database before pulling code and reloads pm2 after h
   const calls = [];
   const service = createUpdateService({
     projectRoot: '/app',
-    backupDir: '/root/backups',
+    backupDir: '/app/_manual_backups',
     appName: 'ruobai',
     dbConfig: {
       host: 'localhost',
@@ -104,7 +104,7 @@ test('update apply backs up database before pulling code and reloads pm2 after h
 
   assert.equal(result.success, true);
   assert.equal(result.previous_hash, 'old111');
-  assert.equal(result.backup_file, '/root/backups/update-20260527-010203.sql');
+  assert.equal(result.backup_file, '/app/_manual_backups/update-20260527-010203.sql');
   assert.ok(calls.indexOf('mysqldump --host localhost --port 3306 --user root --single-transaction --routines --triggers ruobai') < calls.indexOf('git pull --ff-only origin main'));
   assert.ok(calls.includes('npm install --production'));
   assert.ok(calls.includes('node server/init-db.js'));
