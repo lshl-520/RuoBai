@@ -9,7 +9,7 @@ const execFileAsync = promisify(execFile);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const defaultProjectRoot = path.resolve(__dirname, '..');
-const DEFAULT_BACKUP_DIR = process.env.BACKUP_DIR || '/root/backups';
+const DEFAULT_BACKUP_DIR = process.env.BACKUP_DIR || path.join(defaultProjectRoot, '_manual_backups');
 
 function pad(value) {
   return String(value).padStart(2, '0');
