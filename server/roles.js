@@ -99,6 +99,7 @@ function sanitizeCharacterPayload(body = {}) {
     portrait_custom_url: portraitId === 999 ? portraitCustomUrl : null,
     mood: Math.min(100, Math.max(0, parseInteger(body.mood, 80))),
     intimacy: Math.min(100, Math.max(0, parseInteger(body.intimacy, 50))),
+    speech_style: ['natural', 'compact', 'roleplay'].includes(body.speech_style) ? body.speech_style : 'natural',
     auto_moments_enabled: autoMomentsEnabled ? 1 : 0,
     auto_moments_daily_min: autoMomentsEnabled ? Math.min(dailyMin, dailyMax) : 0,
     auto_moments_daily_max: autoMomentsEnabled ? Math.max(dailyMin, dailyMax) : 0,
@@ -199,7 +200,7 @@ async function loadRoles(userId, { includeDeleted = false } = {}, connection = p
 
   const [rows] = await connection.query(
     `
-      SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, first_chat_at,
+      SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, speech_style, first_chat_at,
              auto_moments_enabled, auto_moments_daily_min, auto_moments_daily_max,
              auto_moments_min_interval_hours, auto_moments_last_posted_at,
              is_active, is_deleted, delete_after, created_at
@@ -245,6 +246,7 @@ router.post('/', asyncHandler(async (req, res) => {
         INSERT INTO characters
           (
             user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy,
+            speech_style,
             auto_moments_enabled, auto_moments_daily_min, auto_moments_daily_max,
             auto_moments_min_interval_hours,
             is_active, is_deleted, delete_after, created_at
@@ -262,6 +264,7 @@ router.post('/', asyncHandler(async (req, res) => {
         payload.portrait_custom_url,
         payload.mood,
         payload.intimacy,
+        payload.speech_style,
         payload.auto_moments_enabled,
         payload.auto_moments_daily_min,
         payload.auto_moments_daily_max,
@@ -272,7 +275,7 @@ router.post('/', asyncHandler(async (req, res) => {
 
     const [rows] = await connection.query(
       `
-        SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, first_chat_at,
+        SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, speech_style, first_chat_at,
                auto_moments_enabled, auto_moments_daily_min, auto_moments_daily_max,
                auto_moments_min_interval_hours, auto_moments_last_posted_at,
                is_active, is_deleted, delete_after, created_at
@@ -348,6 +351,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
           portrait_custom_url = CASE WHEN ? = 1 THEN ? ELSE portrait_custom_url END,
           mood = COALESCE(?, mood),
           intimacy = COALESCE(?, intimacy),
+          speech_style = COALESCE(?, speech_style),
           auto_moments_enabled = COALESCE(?, auto_moments_enabled),
           auto_moments_daily_min = COALESCE(?, auto_moments_daily_min),
           auto_moments_daily_max = COALESCE(?, auto_moments_daily_max),
@@ -367,6 +371,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
         payload.portrait_custom_url,
         req.body?.mood !== undefined ? payload.mood : null,
         req.body?.intimacy !== undefined ? payload.intimacy : null,
+        req.body?.speech_style !== undefined ? payload.speech_style : null,
         req.body?.auto_moments_enabled !== undefined ? payload.auto_moments_enabled : null,
         req.body?.auto_moments_daily_min !== undefined ? payload.auto_moments_daily_min : null,
         req.body?.auto_moments_daily_max !== undefined ? payload.auto_moments_daily_max : null,
@@ -380,7 +385,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
 
     const [updatedRows] = await connection.query(
       `
-        SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, first_chat_at,
+        SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, speech_style, first_chat_at,
                auto_moments_enabled, auto_moments_daily_min, auto_moments_daily_max,
                auto_moments_min_interval_hours, auto_moments_last_posted_at,
                is_active, is_deleted, delete_after, created_at
@@ -538,7 +543,7 @@ router.post('/:id/restore', asyncHandler(async (req, res) => {
 
     const [updatedRows] = await connection.query(
       `
-        SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, first_chat_at,
+        SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, speech_style, first_chat_at,
                auto_moments_enabled, auto_moments_daily_min, auto_moments_daily_max,
                auto_moments_min_interval_hours, auto_moments_last_posted_at,
                is_active, is_deleted, delete_after, created_at

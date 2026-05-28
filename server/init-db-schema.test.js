@@ -22,3 +22,26 @@ test('init-db schema backfills legacy columns used by the previous deployment', 
   assert.match(initDbSource, /base_url/);
   assert.match(initDbSource, /model_name/);
 });
+
+test('init-db schema backfills moments images column for older deployments', () => {
+  assert.match(
+    initDbSource,
+    /table:\s*'moments'[\s\S]*column:\s*'images'[\s\S]*definition:\s*'JSON'/
+  );
+  assert.match(
+    initDbSource,
+    /table:\s*'moments'[\s\S]*column:\s*'likes_count'[\s\S]*definition:\s*'INT DEFAULT 0'/
+  );
+  assert.match(
+    initDbSource,
+    /table:\s*'moments'[\s\S]*column:\s*'is_deleted'[\s\S]*definition:\s*'TINYINT\(1\) DEFAULT 0'/
+  );
+});
+
+test('init-db schema allows personal moments without a character', () => {
+  assert.match(initDbSource, /character_id INT DEFAULT NULL/);
+  assert.match(
+    initDbSource,
+    /ALTER TABLE `?\$\{fixup\.table\}`? MODIFY COLUMN `?\$\{fixup\.column\}`? \$\{fixup\.definition\}/
+  );
+});

@@ -3071,7 +3071,7 @@
     async function loadHistory(role) {
       messagesArea.innerHTML = '<div style="text-align:center;color:var(--subtle);font-size:12px;padding:20px 0">加载历史…</div>';
       try {
-        const res = await fetch(`/api/chat?character_id=${role.id}&limit=50`, { credentials: 'include' });
+        const res = await fetch(`/api/chat?character_id=${role.id}&limit=200`, { credentials: 'include' });
         const data = await res.json();
         messagesArea.innerHTML = '';
         if (!data?.success) {

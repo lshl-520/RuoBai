@@ -43,7 +43,7 @@ export async function getOwnedCharacter(userId, characterId, connection = pool) 
 
   const [rows] = await connection.query(
     `
-      SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, is_active, is_deleted, created_at
+      SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, speech_style, is_active, is_deleted, created_at
       FROM characters
       WHERE id = ? AND user_id = ? AND is_deleted = 0
       LIMIT 1

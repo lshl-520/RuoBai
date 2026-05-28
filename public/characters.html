@@ -926,6 +926,13 @@
               </label>
               <input id="roleAutoMoments" name="auto_moments_enabled" type="checkbox" ${roleToEdit?.autoMomentsEnabled ? 'checked' : ''}>
             </div>
+            <div class="role-switch-field">
+              <label for="roleSpeechCompact">
+                紧凑回复（不换行）
+                <small>勾选后她的回复会连成一句，不会每句都换行。不勾就是正常一句一行。</small>
+              </label>
+              <input id="roleSpeechCompact" name="speech_compact" type="checkbox" ${roleToEdit?.speechStyle === 'compact' ? 'checked' : ''}>
+            </div>
             <div class="auto-moment-grid">
               <div class="role-field">
                 <label for="roleAutoMomentMin">每天最少</label>
@@ -1034,7 +1041,8 @@
       auto_moments_enabled: form.auto_moments_enabled.checked,
       auto_moments_daily_min: form.auto_moments_daily_min.value,
       auto_moments_daily_max: form.auto_moments_daily_max.value,
-      auto_moments_min_interval_hours: form.auto_moments_min_interval_hours.value
+      auto_moments_min_interval_hours: form.auto_moments_min_interval_hours.value,
+      speech_style: form.speech_compact.checked ? 'compact' : 'natural'
     });
 
     if (payload.error) {

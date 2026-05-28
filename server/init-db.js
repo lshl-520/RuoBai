@@ -261,9 +261,14 @@ const schemaFixups = [
   { table: 'characters', column: 'auto_moments_last_posted_at', definition: 'DATETIME DEFAULT NULL', after: 'auto_moments_min_interval_hours' },
   { table: 'characters', column: 'portrait_id', definition: 'INT DEFAULT NULL', after: 'avatar' },
   { table: 'characters', column: 'portrait_custom_url', definition: 'VARCHAR(255) DEFAULT NULL', after: 'portrait_id' },
+  { table: 'characters', column: 'speech_style', definition: "VARCHAR(20) DEFAULT 'natural'", after: 'mood' },
   { table: 'memories', column: 'category', definition: "VARCHAR(50) DEFAULT ''", after: 'tag' },
   { table: 'memories', column: 'is_important', definition: 'TINYINT(1) DEFAULT 0', after: 'category' },
   { table: 'memories', column: 'is_deleted', definition: 'TINYINT(1) DEFAULT 0', after: 'is_important' },
+  { table: 'moments', column: 'character_id', definition: 'INT DEFAULT NULL', modify: true },
+  { table: 'moments', column: 'images', definition: 'JSON', after: 'content' },
+  { table: 'moments', column: 'likes_count', definition: 'INT DEFAULT 0', after: 'images' },
+  { table: 'moments', column: 'is_deleted', definition: 'TINYINT(1) DEFAULT 0', after: 'created_at' },
   { table: 'model_configs', column: 'provider_type', definition: "VARCHAR(50) DEFAULT 'openai-compatible'", after: 'name' },
   { table: 'model_configs', column: 'api_base', definition: "VARCHAR(500) DEFAULT ''", after: 'provider_type' },
   { table: 'model_configs', column: 'model', definition: "VARCHAR(100) DEFAULT ''", after: 'api_key' },
@@ -403,6 +408,11 @@ async function applySchemaFixups() {
     }
 
     if (await columnExists(fixup.table, fixup.column)) {
+      if (fixup.modify) {
+        await pool.query(
+          `ALTER TABLE ${fixup.table} MODIFY COLUMN ${fixup.column} ${fixup.definition}`
+        );
+      }
       continue;
     }
 

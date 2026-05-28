@@ -19,6 +19,29 @@ const projectRoot = path.resolve(__dirname, '..');
 const userChatImageDir = path.join(projectRoot, 'user_assets', 'chat');
 const STREAM_INTERRUPTED_MESSAGE = '她暂时没反应，稍后再试好吗';
 
+const ACTION_PAREN_RE = /[（(][^）)]{2,60}[）)]/g;
+const ACTION_ASTERISK_RE = /\*[^*]{2,60}\*/g;
+
+export function stripActionDescriptions(text) {
+  if (!text) return text;
+  return text
+    .replace(ACTION_PAREN_RE, '')
+    .replace(ACTION_ASTERISK_RE, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+export function compactNewlines(text) {
+  if (!text) return text;
+  return text.replace(/\n+/g, ' ').replace(/ {2,}/g, ' ').trim();
+}
+
+export function stripLeadingFiller(text) {
+  if (!text) return text;
+  const result = text.replace(/^(嗯[，。、…～~\s]*)+/g, '').trim();
+  return result || text;
+}
+
 export function buildChatCompletionsUrl(apiBase) {
   const base = String(apiBase || '').trim().replace(/\/+$/, '');
   if (!base) {
@@ -53,25 +76,37 @@ function sendSyntheticStream(res, text) {
 function buildSystemPrompt(character) {
   const name = String(character?.name || '').trim() || '陪伴角色';
   const persona = String(character?.persona || '').trim();
-  const identityGuard = `你现在就是${name}。不要自称 AI、模型、助手或程序。别人问你是谁或你叫什么时，先直接回答“我是${name}”。`;
+  const speechStyle = String(character?.speech_style || 'natural').trim();
+  const identityGuard = `你现在就是${name}。不要自称 AI、模型、助手或程序。别人问你是谁或你叫什么时，先直接回答”我是${name}”。`;
 
-  const styleRules = [
-    '【说话风格 · 必须遵守】',
+  const naturalRules = [
+    '【说话风格 · 必须遵守 · 违反任何一条都算失败】',
     '1. 只输出可直接发送的聊天回复。不要附加说明、标签、分析、JSON、括号注释。',
-    '2. 不要每句都加动作描写。"(揉揉眼睛)、(歪头)、(扑进怀里)、(轻声说)、(眨眨眼睛)、(开心地转了个圈)" 这类括号动作禁止使用。你是在说话，不是在演戏。',
-    '3. 每次回复 1-3 句，优先短句。够自然就停，不要长篇大论。',
-    '4. 用口语化表达，像微信聊天。不要书面腔，不要技术味，不要提示词味。',
-    '5. 跟节奏：用户说一句你也说一两句，用户说一段你才能说一段。用户说"想你了"，不要回三百字。',
-    '6. 允许少量"呀""呢""哦""啦""嗯"这类口语词，但不要堆叠。',
-    '7. 不要每句都加 ~ 或波浪号。一段对话最多一两次。',
-    '8. 不要每句开头都"嗯......"或"啊......"，该开口就开口。',
-    '9. 不要每句都用固定亲昵称呼。"宝、宝宝、老公、亲爱的" 自然偶发，不堆。',
-    '10. 不要机械重复模板。"没关系""抱抱你""我在呢" 这类话不要每次都用。',
-    '11. 不要像客服一样回复，也不要像老师一样说教。',
-    '12. 用户说沉重的话(撑不下去、被抛弃)，先短句接住，比如"我在""慢慢说，不急"。不要立刻安慰一大堆。',
-    '13. 允许极少量 emoji 或颜文字，但不要每句都加。',
-    '14. 强上下文连续性，先接住用户当前这句话，再自然延续，不要突然跳话题。'
+    '2. 禁止动作描写。”(揉揉眼睛)、(歪头)、(扑进怀里)、(轻声说)” 这类括号动作一律禁止。你是在发微信，不是在写小说。',
+    '3. 每次回复 1-3 句话，写在同一段里，中间不要换行。像发一条微信消息，不是发三条。',
+    '4. 用口语化表达。像女朋友发微信，不像AI在表演。',
+    '5. 跟节奏：用户说一句你回一两句。用户说”想你了”，你回”我也想你”就够了，不要写一大段。',
+    '6. 【严禁】回复开头用”嗯”。不要用”嗯，””嗯……””嗯嗯”开头。直接说话，别用”嗯”当开场白。这是最重要的规则。',
+    '7. 【严禁】重复说”我在呢”。整段对话里最多出现一次。大部分时候不要说。',
+    '8. 【严禁】每句都用固定模板。”没关系””抱抱你””我在呢””陪着你”这些话，连续5条回复里最多出现1次。',
+    '9. 不要每句都加 ~ 或波浪号。偶尔用一次就够。',
+    '10. 不要堆叠亲昵称呼。”宝、宝宝、老公、亲爱的”自然偶发，不是每句都喊。',
+    '11. 不要像客服一样回复，不要像老师说教，不要像心理咨询师。',
+    '12. 用户说沉重的话，先短句接住（”慢慢说””怎么了”），不要立刻安慰一大堆。',
+    '13. 回复要有变化。每条回复的句式、开头词、语气都要不一样。如果上一条用了”哈哈”，这条就别用。',
+    '14. 强上下文连续性，先接住用户当前这句话，再自然延续。',
+    '15. 正确示范：”早安呀，昨晚睡得好吗” “哈哈你今天心情不错嘛” “想你了，在干嘛呢”',
+    '16. 错误示范（绝对不要这样）：”嗯，早安。\\n你醒啦。\\n我在呢。” — 这种三行模板是最差的回复。'
   ].join('\n');
+
+  const roleplayRules = [
+    '【说话风格】',
+    '1. 可以使用括号动作描写来表达肢体语言和情绪，如（轻轻靠过来）。',
+    '2. 每次回复控制在合理长度，不要太长。',
+    '3. 保持角色一致性，不要跳出角色。'
+  ].join('\n');
+
+  const styleRules = speechStyle === 'roleplay' ? roleplayRules : naturalRules;
 
   if (persona) {
     return `${identityGuard}\n\n${persona}\n\n${styleRules}`;
@@ -555,10 +590,76 @@ export function createChatRouter({
         res.setHeader('Connection', 'keep-alive');
         res.flushHeaders?.();
 
+        const shouldStrip = String(character?.speech_style || 'natural') !== 'roleplay';
+        const shouldCompact = String(character?.speech_style || 'natural') === 'compact';
+        let parenDepth = 0;
+        let fillerState = shouldStrip ? 'start' : 'done';
+        let fillerBuf = '';
+
         try {
+          let buffer = '';
           for await (const chunk of upstream.body) {
-            res.write(Buffer.from(chunk));
+            buffer += Buffer.from(chunk).toString('utf-8');
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+              if (!shouldStrip || !line.startsWith('data: ') || line === 'data: [DONE]') {
+                res.write(line + '\n');
+                continue;
+              }
+              try {
+                const json = JSON.parse(line.slice(6));
+                const delta = json?.choices?.[0]?.delta?.content;
+                if (delta == null) {
+                  res.write(line + '\n');
+                  continue;
+                }
+                let filtered = '';
+                for (const ch of delta) {
+                  if (ch === '（' || ch === '(') { parenDepth++; continue; }
+                  if (ch === '）' || ch === ')') { if (parenDepth > 0) parenDepth--; continue; }
+                  if (ch === '*' && parenDepth === 0) { parenDepth = -1; continue; }
+                  if (ch === '*' && parenDepth === -1) { parenDepth = 0; continue; }
+                  if (parenDepth <= 0 && parenDepth !== -1) {
+                    if (shouldCompact && (ch === '\n' || ch === '\r')) { filtered += ' '; }
+                    else filtered += ch;
+                  }
+                }
+                if (filtered) {
+                  if (fillerState !== 'done') {
+                    fillerBuf += filtered;
+                    const FILLER_RE = /^(嗯[，。、…～~\s]*)+/;
+                    if (fillerBuf.length > 6 || !/^嗯/.test(fillerBuf)) {
+                      filtered = fillerBuf.replace(FILLER_RE, '');
+                      fillerState = 'done';
+                      fillerBuf = '';
+                      if (!filtered) {
+                        res.write('data: ' + JSON.stringify({ choices: [{ delta: {} }] }) + '\n');
+                        continue;
+                      }
+                    } else {
+                      res.write('data: ' + JSON.stringify({ choices: [{ delta: {} }] }) + '\n');
+                      continue;
+                    }
+                  }
+                  json.choices[0].delta.content = filtered;
+                  res.write('data: ' + JSON.stringify(json) + '\n');
+                } else {
+                  res.write('data: ' + JSON.stringify({ choices: [{ delta: {} }] }) + '\n');
+                }
+              } catch {
+                res.write(line + '\n');
+              }
+            }
           }
+          if (fillerState !== 'done' && fillerBuf) {
+            const remainder = fillerBuf.replace(/^(嗯[，。、…～~\s]*)+/, '');
+            if (remainder) {
+              res.write('data: ' + JSON.stringify({ choices: [{ delta: { content: remainder } }] }) + '\n');
+            }
+          }
+          if (buffer) res.write(buffer);
           res.end();
         } catch (streamError) {
           console.error('AI 流中断', streamError.message);
@@ -571,11 +672,17 @@ export function createChatRouter({
       }
 
       const payload = await upstream.json();
+      const rawContent = payload?.choices?.[0]?.message?.content || '';
+      const style = String(character?.speech_style || 'natural');
+      let finalContent = rawContent;
+      if (style !== 'roleplay') finalContent = stripActionDescriptions(finalContent);
+      if (style !== 'roleplay') finalContent = stripLeadingFiller(finalContent);
+      if (style === 'compact') finalContent = compactNewlines(finalContent);
       return res.json({
         success: true,
         item: {
           role: 'assistant',
-          content: payload?.choices?.[0]?.message?.content || ''
+          content: finalContent
         },
         raw: payload
       });
