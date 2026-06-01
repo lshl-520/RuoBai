@@ -12,16 +12,102 @@ body,
 body {
   font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
   background:
-    radial-gradient(circle at top right, color-mix(in srgb, var(--primary) 8%, transparent), transparent 32%),
-    radial-gradient(circle at bottom left, color-mix(in srgb, var(--bg-accent) 70%, transparent), transparent 42%),
+    radial-gradient(circle at top right, color-mix(in srgb, var(--primary) 10%, transparent), transparent 28%),
+    radial-gradient(circle at bottom left, color-mix(in srgb, var(--bg-accent) 74%, transparent), transparent 42%),
+    linear-gradient(180deg, color-mix(in srgb, var(--card) 45%, transparent), transparent),
     var(--bg);
   color: var(--ink);
 }
 
-.rb-shell {
-  width: min(1120px, calc(100% - 40px));
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.rb-app {
+  min-height: 100vh;
+}
+
+.rb-topbar {
+  width: min(1160px, calc(100% - 40px));
   margin: 0 auto;
-  padding: 48px 0 64px;
+  padding: 22px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.rb-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.rb-brand-mark,
+.auth-brand-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--primary), var(--primary-deep));
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 16px 32px color-mix(in srgb, var(--primary) 28%, transparent);
+}
+
+.rb-brand-title,
+.rb-brand-sub {
+  margin: 0;
+}
+
+.rb-brand-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.rb-brand-sub {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.rb-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px;
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+}
+
+.rb-nav-link {
+  padding: 10px 16px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 14px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.rb-nav-link.active {
+  background: var(--primary);
+  color: white;
+}
+
+.rb-shell {
+  width: min(1160px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 28px 0 64px;
 }
 
 .rb-card {
@@ -32,7 +118,55 @@ body {
 }
 
 .hero-card {
-  padding: 32px;
+  padding: 36px;
+}
+
+.home-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.8fr);
+  gap: 24px;
+  align-items: stretch;
+}
+
+.hero-copy,
+.hero-panel {
+  min-width: 0;
+}
+
+.hero-panel {
+  display: flex;
+  align-items: stretch;
+}
+
+.hero-note {
+  width: 100%;
+  padding: 24px;
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--primary) 8%, white), color-mix(in srgb, var(--bg-accent) 76%, white));
+  border: 1px solid color-mix(in srgb, var(--primary) 16%, var(--line));
+}
+
+.hero-note-label {
+  display: inline-block;
+  margin-bottom: 10px;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.hero-note strong {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 20px;
+}
+
+.hero-note p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.75;
 }
 
 .eyebrow {
@@ -40,33 +174,75 @@ body {
   font-size: 13px;
   color: var(--primary);
   font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .hero-card h1 {
   margin: 0 0 14px;
-  font-size: clamp(32px, 4vw, 56px);
-  line-height: 1.1;
+  font-size: clamp(34px, 4vw, 58px);
+  line-height: 1.05;
+  max-width: 11ch;
 }
 
 .lead {
   margin: 0;
-  max-width: 760px;
+  max-width: 720px;
   color: var(--muted);
   line-height: 1.8;
 }
 
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 28px;
+  flex-wrap: wrap;
+}
+
+.primary-link,
+.secondary-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.primary-link {
+  background: var(--primary);
+  color: white;
+}
+
+.secondary-link {
+  border: 1px solid var(--line);
+  color: var(--ink);
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+}
+
+.primary-link:hover,
+.secondary-link:hover,
+.theme-btn:hover,
+.btn-submit:hover:not(:disabled),
+.auth-tab:hover,
+.rb-nav-link:hover {
+  transform: translateY(-1px);
+}
+
 .theme-row {
   display: flex;
-  gap: 12px;
-  margin-top: 24px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .theme-btn {
   border: 1px solid var(--line);
-  background: transparent;
+  background: color-mix(in srgb, var(--card) 92%, transparent);
   color: var(--ink);
   border-radius: 999px;
-  padding: 10px 18px;
+  padding: 10px 16px;
   cursor: pointer;
 }
 
@@ -83,34 +259,201 @@ body {
   margin-top: 24px;
 }
 
-.rb-grid .rb-card {
+.section-card {
   padding: 24px;
 }
 
-.rb-grid h2 {
-  margin-top: 0;
-  margin-bottom: 12px;
+.section-card h2 {
+  margin: 0 0 12px;
 }
 
-.rb-grid ul {
+.rb-list {
   margin: 0;
   padding-left: 18px;
   color: var(--muted);
   line-height: 1.9;
 }
 
-@media (max-width: 760px) {
+.auth-page {
+  display: flex;
+  justify-content: center;
+  padding-top: 16px;
+}
+
+.auth-card {
+  width: min(100%, 460px);
+  padding: 34px 32px 28px;
+}
+
+.auth-brand {
+  display: inline-flex;
+  margin-bottom: 18px;
+}
+
+.auth-title {
+  margin: 0 0 8px;
+  font-size: 30px;
+}
+
+.auth-sub {
+  margin: 0 0 24px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.auth-tabs {
+  display: flex;
+  gap: 6px;
+  background: color-mix(in srgb, var(--bg-accent) 78%, white);
+  border-radius: 999px;
+  padding: 5px;
+  margin: 0 0 20px;
+}
+
+.auth-tab {
+  flex: 1;
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+}
+
+.auth-tab.active {
+  background: white;
+  color: var(--primary-deep);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.auth-msg {
+  display: none;
+  font-size: 13px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  margin-bottom: 14px;
+  line-height: 1.6;
+}
+
+.auth-msg.show {
+  display: block;
+}
+
+.auth-msg.error {
+  background: #fff0f3;
+  color: #b54564;
+  border: 1px solid #ffd4de;
+}
+
+.auth-msg.success {
+  background: color-mix(in srgb, var(--bg-accent) 68%, white);
+  color: var(--primary-deep);
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, white);
+}
+
+.form-group {
+  text-align: left;
+  margin-bottom: 14px;
+}
+
+.form-label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.form-input {
+  width: 100%;
+  padding: 13px 14px;
+  border: 1px solid color-mix(in srgb, var(--primary) 16%, var(--line));
+  border-radius: 14px;
+  font-size: 15px;
+  background: color-mix(in srgb, var(--card) 95%, white);
+  color: var(--ink);
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+.btn-submit {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 14px;
+  background: var(--primary);
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 8px;
+}
+
+.btn-submit:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.auth-foot {
+  margin-top: 20px;
+  font-size: 13px;
+  color: var(--muted);
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.divider {
+  color: color-mix(in srgb, var(--muted) 44%, transparent);
+}
+
+@media (max-width: 900px) {
+  .rb-topbar,
   .rb-shell {
     width: min(100% - 24px, 100%);
-    padding: 20px 0 36px;
+  }
+
+  .home-hero,
+  .rb-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .rb-topbar {
+    align-items: flex-start;
+  }
+
+  .rb-nav {
+    order: 3;
+    width: 100%;
+    justify-content: space-between;
   }
 
   .hero-card,
-  .rb-grid .rb-card {
-    padding: 20px;
+  .section-card,
+  .auth-card {
+    padding: 22px;
   }
 
-  .rb-grid {
-    grid-template-columns: 1fr;
+  .hero-card h1 {
+    max-width: none;
+    font-size: clamp(32px, 10vw, 44px);
+  }
+
+  .theme-row {
+    width: 100%;
+  }
+
+  .theme-btn {
+    flex: 1;
   }
 }
