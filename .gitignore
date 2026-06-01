@@ -13,6 +13,7 @@ test-*.png
 # Node.js 依赖
 node_modules/
 **/node_modules/
+frontend-react/node_modules/
 
 # 日志
 *.log
