@@ -52,11 +52,16 @@ input {
   gap: 14px;
 }
 
-.rb-brand-mark,
+.rb-brand-avatar,
 .auth-brand-mark {
   width: 44px;
   height: 44px;
   border-radius: 16px;
+  object-fit: cover;
+  box-shadow: 0 16px 32px color-mix(in srgb, var(--primary) 28%, transparent);
+}
+
+.auth-brand-mark {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -64,7 +69,6 @@ input {
   color: white;
   font-size: 14px;
   font-weight: 700;
-  box-shadow: 0 16px 32px color-mix(in srgb, var(--primary) 28%, transparent);
 }
 
 .rb-brand-title,
@@ -448,6 +452,7 @@ input {
   height: 100%;
   object-fit: cover;
   display: block;
+  color: transparent;
 }
 
 .home-hero-art img {
