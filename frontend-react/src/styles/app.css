@@ -1024,6 +1024,249 @@ input {
   color: color-mix(in srgb, var(--muted) 44%, transparent);
 }
 
+.chat-list-page {
+  display: grid;
+  gap: 24px;
+}
+
+.chat-list-hero,
+.chat-list-feedback {
+  padding: 28px;
+}
+
+.chat-list-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  align-items: end;
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--primary) 14%, transparent), transparent 30%),
+    linear-gradient(180deg, color-mix(in srgb, var(--card) 98%, white), color-mix(in srgb, var(--bg-accent) 70%, white));
+}
+
+.chat-list-kicker {
+  margin: 0 0 12px;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.chat-list-title {
+  margin: 0;
+  font-family: "Noto Serif SC", "Songti SC", "STSong", "Microsoft YaHei", serif;
+  font-size: clamp(30px, 5vw, 44px);
+  font-weight: 500;
+  line-height: 1.15;
+}
+
+.chat-list-subtitle {
+  margin: 14px 0 0;
+  max-width: 42rem;
+  color: var(--muted);
+  line-height: 1.85;
+}
+
+.chat-list-summary {
+  min-width: 140px;
+  padding: 18px 20px;
+  border-radius: 22px;
+  border: 1px solid color-mix(in srgb, var(--primary) 12%, var(--line));
+  background: color-mix(in srgb, var(--card) 92%, white);
+  text-align: center;
+}
+
+.chat-list-summary-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.chat-list-summary strong {
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.chat-list-section {
+  display: grid;
+  gap: 18px;
+}
+
+.chat-list-section-head h2,
+.chat-list-feedback p {
+  margin: 0;
+}
+
+.chat-list-section-head p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.chat-role-list {
+  display: grid;
+  gap: 14px;
+}
+
+.chat-role-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px 10px 10px;
+  border-radius: 24px;
+  border: 1px solid color-mix(in srgb, var(--primary) 10%, var(--line));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--card) 98%, white), color-mix(in srgb, var(--bg-accent) 52%, white));
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--primary) 8%, transparent);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.chat-role-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--primary) 24%, var(--line));
+  box-shadow: 0 16px 32px color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.chat-role-card.active {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--line));
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--primary) 18%, transparent), transparent 34%),
+    linear-gradient(135deg, color-mix(in srgb, var(--bg-accent) 78%, white), color-mix(in srgb, var(--card) 98%, white));
+}
+
+.chat-role-card.active::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.chat-role-avatar {
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid color-mix(in srgb, var(--primary) 12%, var(--line));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--bg-accent) 88%, white), white);
+  box-shadow: 0 10px 20px color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.chat-role-avatar-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.chat-role-avatar-fallback {
+  font-family: "Sora", "Segoe UI", sans-serif;
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--primary-deep);
+}
+
+.chat-role-content {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 10px;
+}
+
+.chat-role-top,
+.chat-role-name-row,
+.chat-role-intimacy {
+  display: flex;
+  align-items: center;
+}
+
+.chat-role-top {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chat-role-name-row {
+  min-width: 0;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chat-role-name {
+  font-family: "Noto Serif SC", "Songti SC", "STSong", "Microsoft YaHei", serif;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.chat-role-tag,
+.chat-role-active-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.chat-role-tag {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--bg-accent) 86%, white);
+}
+
+.chat-role-active-pill {
+  color: white;
+  background: linear-gradient(135deg, var(--primary), var(--primary-deep));
+}
+
+.chat-role-snippet {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.75;
+}
+
+.chat-role-intimacy {
+  gap: 10px;
+}
+
+.chat-role-intimacy-track {
+  flex: 1;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-accent) 88%, white);
+}
+
+.chat-role-intimacy-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--primary) 48%, white), var(--primary));
+}
+
+.chat-role-intimacy-label {
+  min-width: 44px;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.chat-list-feedback {
+  background: color-mix(in srgb, var(--card) 98%, white);
+}
+
+.chat-list-feedback.error {
+  border-color: #ffd4de;
+  background: #fff4f7;
+  color: #b54564;
+}
+
 @media (max-width: 900px) {
   .rb-topbar,
   .rb-shell {
@@ -1068,6 +1311,10 @@ input {
 
   .home-footer-grid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .chat-list-hero {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1156,6 +1403,31 @@ input {
   .hero-card h1 {
     max-width: none;
     font-size: clamp(32px, 10vw, 44px);
+  }
+
+  .chat-list-hero,
+  .chat-list-feedback {
+    padding: 22px;
+  }
+
+  .chat-role-card {
+    align-items: flex-start;
+    padding: 12px;
+  }
+
+  .chat-role-avatar {
+    width: 60px;
+    height: 60px;
+    border-radius: 18px;
+  }
+
+  .chat-role-top {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .chat-role-name {
+    font-size: 17px;
   }
 
   .theme-row {

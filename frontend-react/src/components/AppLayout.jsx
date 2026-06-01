@@ -8,12 +8,12 @@ export function AppLayout() {
       <header className="rb-topbar">
         <div className="rb-brand">
           <img
-            alt="若白头像"
+            alt="RuoBai brand avatar"
             className="rb-brand-avatar"
             src="/images/brand-avatar.png"
           />
           <div>
-            <p className="rb-brand-title">若白</p>
+            <p className="rb-brand-title">RuoBai</p>
             <p className="rb-brand-sub">RuoBai</p>
           </div>
         </div>
@@ -25,7 +25,15 @@ export function AppLayout() {
             }
             to="/"
           >
-            首页
+            Home
+          </NavLink>
+          <NavLink
+            className={({ isActive }) =>
+              isActive ? "rb-nav-link active" : "rb-nav-link"
+            }
+            to="/chat"
+          >
+            Chat
           </NavLink>
           <NavLink
             className={({ isActive }) =>
@@ -33,7 +41,7 @@ export function AppLayout() {
             }
             to="/auth"
           >
-            进入
+            Auth
           </NavLink>
         </nav>
 
