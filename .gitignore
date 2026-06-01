@@ -86,6 +86,7 @@ docs/*
 !docs/.gitkeep
 !docs/部署指南.md
 !docs/开源与隐私说明.md
+# 仅放行 React 主线实施所需的 spec / plan Markdown，避免重新打开整个 docs 目录
 !docs/superpowers/
 !docs/superpowers/specs/
 !docs/superpowers/specs/*.md
