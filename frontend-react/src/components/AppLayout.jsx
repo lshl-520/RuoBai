@@ -7,10 +7,14 @@ export function AppLayout() {
     <div className="rb-app">
       <header className="rb-topbar">
         <div className="rb-brand">
-          <span className="rb-brand-mark">RB</span>
+          <img
+            alt="若白头像"
+            className="rb-brand-avatar"
+            src="/images/brand-avatar.png"
+          />
           <div>
-            <p className="rb-brand-title">RuoBai React</p>
-            <p className="rb-brand-sub">Mainline migration shell</p>
+            <p className="rb-brand-title">若白</p>
+            <p className="rb-brand-sub">RuoBai</p>
           </div>
         </div>
 
@@ -21,7 +25,7 @@ export function AppLayout() {
             }
             to="/"
           >
-            Home
+            首页
           </NavLink>
           <NavLink
             className={({ isActive }) =>
@@ -29,7 +33,7 @@ export function AppLayout() {
             }
             to="/auth"
           >
-            Auth
+            进入
           </NavLink>
         </nav>
 
