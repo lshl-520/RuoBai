@@ -194,6 +194,10 @@ export function AuthPage() {
         type: "success",
         text: todoMessages[todo],
       });
+    } else {
+      setStatus((current) =>
+        current.type === "success" ? { type: "", text: "" } : current,
+      );
     }
   }, [todo]);
 
@@ -207,7 +211,11 @@ export function AuthPage() {
       }
 
       const nextPath = await resolvePostAuthRedirect();
-      if (!cancelled && location.search !== nextPath.replace("/auth", "")) {
+      if (
+        !cancelled &&
+        location.pathname === "/auth" &&
+        location.search !== nextPath.replace("/auth", "")
+      ) {
         navigate(nextPath, { replace: true });
       }
     }
@@ -217,7 +225,7 @@ export function AuthPage() {
     return () => {
       cancelled = true;
     };
-  }, [location.search, navigate]);
+  }, [location.pathname, navigate]);
 
   async function completeAuth(runRequest, payload, fallback) {
     setStatus({ type: "", text: "" });
@@ -270,30 +278,37 @@ export function AuthPage() {
           <span className="auth-brand-mark">RB</span>
         </Link>
 
-        <h1 className="auth-title">Welcome back</h1>
+        <h1 className="auth-title">
+          {tab === "login" ? "欢迎回来" : "进入她的世界"}
+        </h1>
         <p className="auth-sub">
-          Real backend auth is wired here. Downstream onboarding is still
-          intentionally temporary.
+          {tab === "login"
+            ? "真实后端登录已接通，后续 onboarding 先保持临时跳转。"
+            : "邀请码注册已接通，后续资料页和首个角色引导还在迁移中。"}
         </p>
 
         <div className="auth-tabs" role="tablist" aria-label="Auth modes">
           <button
+            aria-controls="auth-panel-login"
             aria-selected={tab === "login"}
             className={tab === "login" ? "auth-tab active" : "auth-tab"}
+            id="auth-tab-login"
             onClick={() => selectTab("login")}
             role="tab"
             type="button"
           >
-            Login
+            登录
           </button>
           <button
+            aria-controls="auth-panel-register"
             aria-selected={tab === "register"}
             className={tab === "register" ? "auth-tab active" : "auth-tab"}
+            id="auth-tab-register"
             onClick={() => selectTab("register")}
             role="tab"
             type="button"
           >
-            Register
+            注册
           </button>
         </div>
 
@@ -305,23 +320,37 @@ export function AuthPage() {
         </div>
 
         {tab === "login" ? (
-          <LoginForm
-            busy={busy}
-            onSubmit={(payload) => completeAuth(login, payload, "Login failed.")}
-          />
+          <div
+            aria-labelledby="auth-tab-login"
+            id="auth-panel-login"
+            role="tabpanel"
+          >
+            <LoginForm
+              busy={busy}
+              onSubmit={(payload) =>
+                completeAuth(login, payload, "登录失败，请重试。")
+              }
+            />
+          </div>
         ) : (
-          <RegisterForm
-            busy={busy}
-            onSubmit={(payload) =>
-              completeAuth(register, payload, "Registration failed.")
-            }
-          />
+          <div
+            aria-labelledby="auth-tab-register"
+            id="auth-panel-register"
+            role="tabpanel"
+          >
+            <RegisterForm
+              busy={busy}
+              onSubmit={(payload) =>
+                completeAuth(register, payload, "注册失败，请重试。")
+              }
+            />
+          </div>
         )}
 
         <div className="auth-foot">
-          <Link to="/">Back to home</Link>
+          <Link to="/">返回首页</Link>
           <span className="divider">/</span>
-          <span>Same-origin credentials enabled</span>
+          <span>已启用同源凭证</span>
         </div>
       </div>
     </section>

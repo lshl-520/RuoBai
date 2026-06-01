@@ -3,9 +3,9 @@ export const DEFAULT_THEME = "guangwei";
 
 export const themes = {
   guangwei: {
-    name: "Guangwei",
+    name: "微光",
   },
   classic: {
-    name: "Classic",
+    name: "原版",
   },
 };
