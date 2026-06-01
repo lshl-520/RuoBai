@@ -86,6 +86,11 @@ docs/*
 !docs/.gitkeep
 !docs/部署指南.md
 !docs/开源与隐私说明.md
+!docs/superpowers/
+!docs/superpowers/specs/
+!docs/superpowers/specs/*.md
+!docs/superpowers/plans/
+!docs/superpowers/plans/*.md
 
 # 对话导出过程产物
 docs/体检/*-019*.md
