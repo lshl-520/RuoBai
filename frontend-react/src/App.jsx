@@ -1,3 +1,4 @@
+import React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "./components/AppLayout.jsx";
 import { AuthPage } from "./pages/AuthPage.jsx";
