@@ -1,3 +1,4 @@
+import React from "react";
 import { useTheme } from "../theme/ThemeProvider.jsx";
 
 export function ThemeToggle() {

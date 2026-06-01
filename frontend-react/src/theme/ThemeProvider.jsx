@@ -1,4 +1,10 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { DEFAULT_THEME, THEME_KEY, themes } from "./themes.js";
 
 const ThemeContext = createContext({
