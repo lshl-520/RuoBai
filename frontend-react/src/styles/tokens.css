@@ -59,6 +59,19 @@
   --t-fast: 180ms;
   --t: 320ms;
   --t-slow: 480ms;
+
+  /* ============================================================
+     兼容别名 — 内页 CSS 沿用旧变量名，统一指向微光 2.0 设计色。
+     加这一段后，/chat /characters /memory /moments /profile
+     等内页的 ~270 处颜色引用会一次性套上微光视觉。
+     ============================================================ */
+  --primary: var(--rose);
+  --primary-deep: var(--rose-deep);
+  --primary-soft: var(--rose-soft);
+  --muted: var(--ink-soft);
+  --bg-accent: var(--rose-tint);
+  --bg: var(--paper);
+  --radius: var(--r-lg);
 }
 
 /* 经典主题（可选） */
