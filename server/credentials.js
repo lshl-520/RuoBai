@@ -60,13 +60,17 @@ function guessCapabilities(modelId) {
   if (
     name.includes('vl') ||
     name.includes('vision') ||
-    name.includes('-v') ||
     name.includes('omni') ||
     name.includes('multimodal') ||
     name.includes('4o') ||
     name.includes('5o') ||
+    name.includes('gpt-4') ||
+    name.includes('gpt-5') ||
     name.includes('claude-3') ||
-    name.includes('claude-4')
+    name.includes('claude-4') ||
+    name.includes('claude-opus') ||
+    name.includes('claude-sonnet') ||
+    name.includes('claude-haiku')
   ) {
     result.add('vision');
   }

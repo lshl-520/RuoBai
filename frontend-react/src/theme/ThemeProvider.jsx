@@ -26,6 +26,32 @@ export function ThemeProvider({ children }) {
   const [theme, setTheme] = useState(readTheme);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadSavedTheme() {
+      try {
+        const response = await fetch("/api/settings", {
+          credentials: "same-origin",
+        });
+        const data = await response.json().catch(() => null);
+        const nextTheme = String(data?.item?.theme || "").trim();
+
+        if (!cancelled && themes[nextTheme]) {
+          setTheme(nextTheme);
+        }
+      } catch {
+        // Not logged in or settings unavailable: keep local theme.
+      }
+    }
+
+    loadSavedTheme();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     document.documentElement.dataset.theme = theme;
     window.localStorage.setItem(THEME_KEY, theme);
   }, [theme]);

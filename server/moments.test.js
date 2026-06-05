@@ -251,7 +251,7 @@ test('POST /api/moments/draft generates a character moment draft without saving 
       upstreamCalls.push({ url, options });
       return {
         ok: true,
-        json: async () => ({
+        text: async () => JSON.stringify({
           choices: [{ message: { content: 'Rain made the evening softer.' } }]
         })
       };
@@ -276,6 +276,71 @@ test('POST /api/moments/draft generates a character moment draft without saving 
     const requestBody = JSON.parse(upstreamCalls[0].options.body);
     assert.equal(requestBody.model, 'gpt-test');
     assert.equal(calls.filter(call => call.sql.includes('INSERT INTO moments')).length, 0);
+  });
+});
+
+test('POST /api/moments/draft accepts SSE-style upstream payloads', async () => {
+  const router = createMomentsRouter({
+    pool: {
+      query: async (sql) => {
+        if (sql.includes('FROM capability_assignments ca')) {
+          return [[{
+            id: 4,
+            name: 'chat provider',
+            provider_type: 'openai',
+            api_base: 'https://api.example.test',
+            api_key: 'sk-test',
+            model: 'gpt-test'
+          }]];
+        }
+
+        if (sql.includes('FROM messages')) {
+          return [[
+            { role: 'user', content: 'We talked about rain.', created_at: '2026-05-25 20:00:00' }
+          ]];
+        }
+
+        if (sql.includes('FROM memories')) {
+          return [[
+            { tag: 'preference', content: 'She likes tea.' }
+          ]];
+        }
+
+        throw new Error(`Unexpected query: ${sql}`);
+      }
+    },
+    requireCharacter: async () => ({
+      id: 6,
+      user_id: 1,
+      name: 'Ruobai',
+      persona: 'Warm companion'
+    }),
+    fetchImpl: async () => ({
+      ok: true,
+      json: async () => {
+        throw new SyntaxError(`Unexpected token 'd', "data: {\\"id\\"..." is not valid JSON`);
+      },
+      text: async () => [
+        'data: {"choices":[{"delta":{"content":"Rain made "}}]}',
+        'data: {"choices":[{"delta":{"content":"the evening softer."}}]}',
+        'data: [DONE]'
+      ].join('\n')
+    }),
+    withTransaction: async work => work({ query: async () => { throw new Error('unused'); } })
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/moments/draft`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ character_id: 6 })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.success, true);
+    assert.equal(payload.item.character_id, 6);
+    assert.equal(payload.item.content, 'Rain made the evening softer.');
   });
 });
 

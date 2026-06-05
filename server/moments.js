@@ -35,6 +35,46 @@ function buildInClause(values) {
   return values.map(() => '?').join(', ');
 }
 
+function extractDraftTextFromPayload(payload) {
+  if (!payload || typeof payload !== 'object') return '';
+  return String(
+    payload?.choices?.[0]?.message?.content
+    || payload?.choices?.[0]?.delta?.content
+    || payload?.message?.content
+    || payload?.content
+    || ''
+  );
+}
+
+function extractDraftTextFromSse(raw) {
+  let content = '';
+  for (const rawLine of String(raw || '').split('\n')) {
+    const line = rawLine.trim();
+    if (!line.startsWith('data:')) continue;
+
+    const data = line.slice(5).trim();
+    if (!data || data === '[DONE]') continue;
+
+    try {
+      content += extractDraftTextFromPayload(JSON.parse(data));
+    } catch {
+      content += data;
+    }
+  }
+  return content;
+}
+
+async function readDraftContent(upstream) {
+  const raw = await upstream.text().catch(() => '');
+  if (!raw) return '';
+
+  try {
+    return stripDraftContent(extractDraftTextFromPayload(JSON.parse(raw)));
+  } catch {
+    return stripDraftContent(extractDraftTextFromSse(raw));
+  }
+}
+
 function stripDraftContent(value) {
   return String(value || '')
     .replace(/^["'“”‘’\s]+|["'“”‘’\s]+$/g, '')
@@ -288,10 +328,12 @@ export function createMomentsRouter({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Accept: 'application/json',
           Authorization: `Bearer ${modelConfig.api_key}`
         },
         body: JSON.stringify({
           model: modelConfig.model,
+          stream: false,
           temperature: 0.85,
           max_tokens: 160,
           messages: buildMomentDraftMessages(character, context)
@@ -306,8 +348,7 @@ export function createMomentsRouter({
         });
       }
 
-      const payload = await upstream.json();
-      const content = stripDraftContent(payload?.choices?.[0]?.message?.content);
+      const content = await readDraftContent(upstream);
       if (!content) {
         return res.status(502).json({ success: false, error: '动态草稿为空' });
       }

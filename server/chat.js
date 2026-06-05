@@ -1,5 +1,6 @@
 import express from 'express';
 import fs from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pool as defaultPool } from './db.js';
@@ -217,11 +218,21 @@ export function createChatRouter({
 
     if (messageType === 'image' && mediaUrl) {
       if (useVision) {
+        let imageUrlForApi = mediaUrl;
+        const rawPath = String(message.media_url || '').trim();
+        if (rawPath && !(/^https?:\/\//i.test(rawPath))) {
+          try {
+            const filePath = path.join(projectRoot, rawPath.replace(/^\/+/, ''));
+            const buffer = readFileSync(filePath);
+            const ext = path.extname(filePath).slice(1).replace('jpg', 'jpeg');
+            imageUrlForApi = `data:image/${ext || 'png'};base64,${buffer.toString('base64')}`;
+          } catch { /* fall back to URL */ }
+        }
         return {
           role: message.role,
           content: [
             { type: 'text', text: textContent },
-            { type: 'image_url', image_url: { url: mediaUrl } }
+            { type: 'image_url', image_url: { url: imageUrlForApi } }
           ]
         };
       }

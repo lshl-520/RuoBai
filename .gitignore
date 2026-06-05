@@ -96,3 +96,8 @@ docs/*
 
 # 对话导出过程产物
 docs/体检/*-019*.md
+
+# === 构建产物（可随时重新生成，不进 git）===
+frontend-react/dist/
+public-vue/
+public-vue/*

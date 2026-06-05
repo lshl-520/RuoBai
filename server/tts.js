@@ -250,7 +250,12 @@ export function createTtsRouter({
 
       const ttsConfig = await loadTtsCapability(pool, req.session.userId);
       if (!ttsConfig) {
-        return res.status(404).json({ success: false, error: 'TTS 能力还没启用' });
+        return res.json({
+          success: true,
+          use_browser_tts: true,
+          text: message.content,
+          voice_id: 'browser'
+        });
       }
 
       const extras = normalizeExtras(ttsConfig.extras) || {};

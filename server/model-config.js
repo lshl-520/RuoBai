@@ -1,9 +1,9 @@
-import express from 'express';
+﻿import express from 'express';
 import { pool as defaultPool, withTransaction as defaultWithTransaction } from './db.js';
 import { DEFAULT_MODEL_CONFIG } from './defaults.js';
 import { asyncHandler, maskSecret, parseInteger, toBoolean } from './helpers.js';
 
-const ONBOARDING_MESSAGE = '先配置你自己的模型，或先启用测试配置体验聊天。';
+const ONBOARDING_MESSAGE = '先配置你自己的模型，或者先启用测试配置体验聊天。';
 
 function hasDefaultTestConfig() {
   return Boolean(
@@ -461,7 +461,7 @@ export function createModelConfigRouter({
     if (!apiBase || !apiKey) {
       return res.status(400).json({
         success: false,
-        error: '请先填写网址和 key'
+        error: '请先填写地址和 key'
       });
     }
 
@@ -491,7 +491,7 @@ export function createModelConfigRouter({
       } catch {
         return res.status(400).json({
           success: false,
-          error: '对方回的不是正常模型列表'
+          error: '对方返回的不是正常模型列表'
         });
       }
 
