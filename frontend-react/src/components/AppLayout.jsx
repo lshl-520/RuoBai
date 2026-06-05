@@ -8,7 +8,7 @@ export function AppLayout() {
       <header className="rb-topbar">
         <div className="rb-brand">
           <img
-            alt="RuoBai brand avatar"
+            alt="若白头像"
             className="rb-brand-avatar"
             src="/images/brand-avatar.png"
           />
@@ -18,14 +18,14 @@ export function AppLayout() {
           </div>
         </div>
 
-        <nav className="rb-nav" aria-label="Primary">
+        <nav className="rb-nav" aria-label="主导航">
           <NavLink
             className={({ isActive }) =>
               isActive ? "rb-nav-link active" : "rb-nav-link"
             }
             to="/"
           >
-            Home
+            首页
           </NavLink>
           <NavLink
             className={({ isActive }) =>
@@ -33,7 +33,31 @@ export function AppLayout() {
             }
             to="/chat"
           >
-            Chat
+            聊天
+          </NavLink>
+          <NavLink
+            className={({ isActive }) =>
+              isActive ? "rb-nav-link active" : "rb-nav-link"
+            }
+            to="/characters"
+          >
+            角色
+          </NavLink>
+          <NavLink
+            className={({ isActive }) =>
+              isActive ? "rb-nav-link active" : "rb-nav-link"
+            }
+            to="/moments"
+          >
+            动态
+          </NavLink>
+          <NavLink
+            className={({ isActive }) =>
+              isActive ? "rb-nav-link active" : "rb-nav-link"
+            }
+            to="/memory"
+          >
+            记忆
           </NavLink>
           <NavLink
             className={({ isActive }) =>
@@ -41,7 +65,15 @@ export function AppLayout() {
             }
             to="/auth"
           >
-            Auth
+            登录
+          </NavLink>
+          <NavLink
+            className={({ isActive }) =>
+              isActive ? "rb-nav-link active" : "rb-nav-link"
+            }
+            to="/profile"
+          >
+            我的
           </NavLink>
         </nav>
 

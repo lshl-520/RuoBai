@@ -68,14 +68,14 @@ export async function resolvePostAuthRedirect() {
     rolesData?.success && Array.isArray(rolesData.items) ? rolesData.items.length : 0;
 
   if (needsKey) {
-    return "/auth?todo=profile-key";
+    return "/profile?todo=profile-key";
   }
 
   if (roleCount === 0) {
-    return "/auth?todo=first-role";
+    return "/characters?onboard=first-role";
   }
 
-  return "/auth?todo=profile";
+  return "/chat";
 }
 
 export function normalizeErrorMessage(data, fallback) {

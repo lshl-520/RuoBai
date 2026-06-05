@@ -1,34 +1,74 @@
+/* ============================================================
+   若白 · 微光 2.0 — 设计系统
+   概念: 晨光里的陪伴。暖米白底, 克制的柔粉 + 薰衣草微光。
+   2.0 新增: 环境光氛围层、呼吸与浮动动画、时辰渐变。
+   ============================================================ */
+
 :root {
-  --bg: #faf6f2;
-  --bg-accent: #f3ebf6;
-  --card: rgba(255, 255, 255, 0.88);
+  /* 底色 / 纸面 */
+  --paper: #faf6f2;
+  --paper-2: #f4ece6;
+  --card: #ffffff;
+  --card-warm: #fffcfa;
+
+  /* 墨色 / 文字 */
   --ink: #2b2528;
-  --muted: #7a6f73;
+  --ink-soft: #7a6f73;
+  --ink-faint: #ada1a6;
+  --ink-ghost: #cabfc3;
+
+  /* 线 */
   --line: rgba(43, 37, 40, 0.08);
-  --primary: #c16579;
-  --primary-deep: #a64f64;
-  --shadow: 0 18px 50px rgba(60, 40, 45, 0.12);
-  --radius: 24px;
+  --line-strong: rgba(43, 37, 40, 0.14);
+
+  /* 玫瑰 — 主点缀 (有质感的脏粉) */
+  --rose: #c16579;
+  --rose-deep: #a64f64;
+  --rose-tint: #fbeff1;
+  --rose-soft: #f3dbe1;
+
+  /* 陶土暖 — 次点缀 */
+  --clay: #d2906f;
+  --clay-tint: #fbeee5;
+
+  /* 薰衣草微光 — 她的发与眼 / AI 气息 */
+  --lav: #9a8fc0;
+  --lav-deep: #7d70ab;
+  --lav-tint: #f0edf7;
+
+  /* 鼠尾草绿 — 在线 / 完成 */
+  --sage: #6fae8e;
+
+  /* 阴影 */
+  --shadow-sm: 0 1px 3px rgba(60, 40, 45, 0.05);
+  --shadow: 0 6px 24px rgba(60, 40, 45, 0.08);
+  --shadow-lg: 0 18px 50px rgba(60, 40, 45, 0.14);
+  --shadow-rose: 0 10px 28px rgba(193, 101, 121, 0.22);
+
+  /* 圆角 */
+  --r-sm: 12px;
+  --r: 18px;
+  --r-lg: 24px;
+  --r-xl: 30px;
+
+  /* 字体 */
+  --serif: "Noto Serif SC", "Songti SC", serif;
+  --sans: "Noto Sans SC", -apple-system, "PingFang SC", system-ui, sans-serif;
+
+  /* 动画时长 */
+  --t-fast: 180ms;
+  --t: 320ms;
+  --t-slow: 480ms;
 }
 
-:root[data-theme="guangwei"] {
-  --bg: #faf6f2;
-  --bg-accent: #f0edf7;
-  --card: rgba(255, 255, 255, 0.88);
-  --ink: #2b2528;
-  --muted: #7a6f73;
-  --line: rgba(43, 37, 40, 0.08);
-  --primary: #c16579;
-  --primary-deep: #a64f64;
-}
-
+/* 经典主题（可选） */
 :root[data-theme="classic"] {
-  --bg: #fdf7f6;
-  --bg-accent: #fbeaf0;
+  --paper: #fdf7f6;
+  --paper-2: #fbeaf0;
   --card: rgba(255, 250, 246, 0.92);
   --ink: #4b1528;
-  --muted: #993556;
+  --ink-soft: #993556;
   --line: rgba(244, 192, 209, 0.55);
-  --primary: #d4537e;
-  --primary-deep: #b73d67;
+  --rose: #d4537e;
+  --rose-deep: #b73d67;
 }
