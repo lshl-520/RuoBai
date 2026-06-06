@@ -275,16 +275,7 @@ function CharacterDetail({ agent, memCount, onClose, onChat, onEdit, onDelete, o
 }
 
 /* ============ 创建 / 编辑 ============ */
-const PORTRAIT_OPTIONS = [
-  "assets/portraits/round/0.png",
-  "assets/portraits/full/2.png",
-  "assets/portraits/full/1.png",
-  "assets/portraits/full/5.png",
-  "assets/portraits/full/3.png",
-  "assets/portraits/full/8.png",
-  "assets/emotions/03_害羞微笑.png",
-  "assets/emotions/02_开心明亮.png",
-];
+const PORTRAIT_OPTIONS = Array.from({ length: 18 }, (_, i) => `/assets/portraits/square/${i}.png`);
 
 function AgentEditor({ agent, onClose, onSave }) {
   const editing = !!agent;
@@ -322,19 +313,21 @@ function AgentEditor({ agent, onClose, onSave }) {
         </div>
 
         <div className="sheet-body">
-          <label className="field-label">形象 / 立绘 <span className="lbl-hint">可上传你自己的图</span></label>
+          <label className="field-label">形象 / 立绘</label>
           <div className="portrait-row">
-            <div className="portrait-preview"><img src={portrait} alt="" /></div>
-            <div className="portrait-pick">
-              <label className="pp pp-upload">
+            <div className="portrait-left">
+              <div className="portrait-preview"><img src={portrait} alt="" /></div>
+              <label className="pp pp-upload" style={{ marginTop: 8, width: "100%" }}>
                 <input type="file" accept="image/*" onChange={onUpload} hidden />
-                <Icon name="image" /><span>上传</span>
+                <Icon name="image" /><span>上传自定义</span>
               </label>
               {uploads.map((u) => (
-                <button key={u} className={"pp" + (u === portrait ? " on" : "")} onClick={() => setPortrait(u)}>
+                <button key={u} className={"pp" + (u === portrait ? " on" : "")} onClick={() => setPortrait(u)} style={{ marginTop: 4 }}>
                   <img src={u} alt="" />
                 </button>
               ))}
+            </div>
+            <div className="portrait-pick">
               {PORTRAIT_OPTIONS.map((p) => (
                 <button key={p} className={"pp" + (p === portrait ? " on" : "")} onClick={() => setPortrait(p)}>
                   <img src={p} alt="" />
