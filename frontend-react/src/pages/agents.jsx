@@ -1,7 +1,32 @@
 import React from "react";
 import { Icon, AGENTS } from "../store.jsx";
+import { getRoles, getRolePortraitSrc, clampIntimacy, createRole, updateRole, switchRole, buildRolePayload } from "../lib/roles.js";
 /* 角色 — 列表(Hero + 网格) + 详情 + 创建/编辑 */
-const { useState: useStateA } = React;
+const { useState: useStateA, useEffect: useEffectA, useRef: useRefA } = React;
+
+/* 后端角色 → 2.0 agent 格式 */
+function toAgent(role) {
+  return {
+    id: role.id,
+    name: role.name || "未命名",
+    avatar: getRolePortraitSrc(role) || "/assets/portraits/round/0.png",
+    cover: getRolePortraitSrc(role) || "/assets/portraits/full/0.png",
+    tag: role.tag || "",
+    tagline: role.persona ? role.persona.slice(0, 30) + "…" : "",
+    persona: role.persona || "",
+    tags: role.tag ? [role.tag] : [],
+    intimacy: clampIntimacy(role.intimacy),
+    temp: Number(role.mood) || 36.5,
+    days: role.first_chat_at ? Math.max(1, Math.ceil((Date.now() - new Date(role.first_chat_at).getTime()) / 86400000)) : 0,
+    online: Boolean(role.is_active),
+    isDefault: Boolean(role.is_active),
+    autoMoments: Boolean(role.auto_moments_enabled),
+    handle: role.tag || "角色",
+    voice: "默认",
+    lastMsg: "",
+    _raw: role,
+  };
+}
 
 /* ---- Hero: 主陪伴(置顶) ---- */
 function AgentHero({ agent, onChat, onDetail }) {
@@ -21,7 +46,7 @@ function AgentHero({ agent, onChat, onDetail }) {
         <div className="hero-stats">
           <div className="hs"><b>{agent.days}</b><span>在一起 · 天</span></div>
           <div className="hs-div" />
-          <div className="hs"><b>{agent.temp.toFixed(1)}°</b><span>关系温度</span></div>
+          <div className="hs"><b>{(Number(agent.temp) || 36.5).toFixed(1)}°</b><span>关系温度</span></div>
           <div className="hs-div" />
           <div className="hs"><b>{agent.intimacy}</b><span>亲密度</span></div>
         </div>
@@ -47,7 +72,7 @@ function AgentCard({ agent, onDetail }) {
         {agent.online && <span className="ac-online" />}
         <div className="ac-overlay">
           <div className="ac-name serif">{agent.name}</div>
-          <div className="ac-temp"><Icon name="flame" /> {agent.temp.toFixed(1)}° · {agent.days}天</div>
+          <div className="ac-temp"><Icon name="flame" /> {(Number(agent.temp) || 36.5).toFixed(1)}° · {agent.days}天</div>
         </div>
       </div>
       <div className="ac-meta">
@@ -60,21 +85,58 @@ function AgentCard({ agent, onDetail }) {
   );
 }
 
-function AgentsScreen({ agents, onChat, onDetail, onCreate }) {
-  const hero = agents.find((a) => a.isDefault) || agents[0];
-  const rest = agents.filter((a) => a.id !== (hero?.id));
+function AgentsScreen({ agents: fallbackAgents, onChat, onDetail, onCreate }) {
+  const [agents, setAgents] = useStateA(null);
+  const seqRef = useRefA(0);
 
-  if (agents.length === 0) {
+  useEffectA(() => {
+    let cancelled = false;
+    async function load() {
+      const id = ++seqRef.current;
+      try {
+        const data = await getRoles();
+        if (cancelled || seqRef.current !== id) return;
+        const items = Array.isArray(data) ? data : (data?.items || []);
+        setAgents(items.map(toAgent));
+      } catch {
+        // 后端没开就用兜底
+      }
+    }
+    load();
+    const onFocus = () => load();
+    const onVisible = () => { if (document.visibilityState === "visible") load(); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+
+  const list = agents ?? fallbackAgents;
+  const hero = list.find((a) => a.isDefault) || list[0];
+  const rest = list.filter((a) => a.id !== (hero?.id));
+
+  const reloadRoles = async () => {
+    try {
+      const data = await getRoles();
+      const items = Array.isArray(data) ? data : (data?.items || []);
+      setAgents(items.map(toAgent));
+    } catch {}
+  };
+
+  if (list.length === 0) {
     return (
       <div className="screen anim-screen">
-        <div className="statusbar">
-          <span className="time">9:41</span><span className="notch" /><span className="icons"><Bars /></span>
-        </div>
-        <div className="empty-state">
-          <img className="empty-state-img" src="/assets/empty-characters.webp" alt="" />
-          <div className="empty-state-title">不着急</div>
-          <div className="empty-state-desc">想好了再创建她，她会一直在这里等你。</div>
-          <button className="empty-state-btn" onClick={onCreate}>创建第一个她</button>
+        <div className="empty-immersive">
+          <img className="empty-immersive-img" src="/assets/empty-characters.webp" alt="" />
+          <div className="empty-immersive-scrim" />
+          <div className="empty-immersive-guide">
+            <div className="empty-state-title">不着急</div>
+            <div className="empty-state-desc">想好了再创建她，她会一直在这里等你。</div>
+            <button className="empty-state-btn" onClick={onCreate}>创建第一个她</button>
+          </div>
         </div>
       </div>
     );
@@ -82,9 +144,6 @@ function AgentsScreen({ agents, onChat, onDetail, onCreate }) {
 
   return (
     <div className="screen anim-screen">
-      <div className="statusbar">
-        <span className="time">9:41</span><span className="notch" /><span className="icons"><Bars /></span>
-      </div>
       <div className="topbar">
         <div>
           <h1>角色</h1>
@@ -122,7 +181,6 @@ function CharacterDetail({ agent, memCount, onClose, onChat, onEdit, onDelete, o
   const [confirm, setConfirm] = useStateA(false);
   return (
     <div className="detail-screen anim-screen">
-      <div className="statusbar on-photo"><span className="time">9:41</span><span className="notch" /><span className="icons"><Bars /></span></div>
       <div className="detail-photo">
         <img src={agent.cover} alt={agent.name} />
         <div className="detail-scrim" />
@@ -230,6 +288,8 @@ function AgentEditor({ agent, onClose, onSave }) {
   const [auto, setAuto] = useStateA(agent?.autoMoments ?? true);
   const [freq, setFreq] = useStateA(agent?.momentFreq ?? 4);
   const [style, setStyle] = useStateA(agent?.figureStyle || "anime");
+  const [busy, setBusy] = useStateA(false);
+  const [error, setError] = useStateA("");
 
   const onUpload = (e) => {
     const file = e.target.files && e.target.files[0];
@@ -314,8 +374,23 @@ function AgentEditor({ agent, onClose, onSave }) {
         </div>
 
         <div className="sheet-foot">
-          <button className="pill pill-primary grow" onClick={() => onSave({ id: agent?.id, name, persona, tagline, avatar: portrait, tags: tagsStr.split(/\s+/).filter(Boolean), autoMoments: auto, figureStyle: style, momentFreq: freq })}>
-            {editing ? "保存修改" : "创建她"}
+          {error && <div className="chat-error" style={{marginBottom:10}} onClick={() => setError("")}>{error} 点击关闭</div>}
+          <button className="pill pill-primary grow" disabled={busy} onClick={async () => {
+            if (!name.trim() || !persona.trim()) { setError("名字和人设不能为空"); return; }
+            setBusy(true); setError("");
+            try {
+              const payload = { name: name.trim(), persona: persona.trim(), tag: tagsStr.split(/\s+/).filter(Boolean)[0] || "", avatar: portrait, auto_moments_enabled: auto };
+              if (editing && agent._raw?.id) {
+                await updateRole(agent._raw.id, payload);
+              } else {
+                await createRole(payload);
+              }
+              onSave({ id: agent?.id, name, persona, tagline, avatar: portrait, tags: tagsStr.split(/\s+/).filter(Boolean), autoMoments: auto });
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "保存失败");
+            } finally { setBusy(false); }
+          }}>
+            {busy ? "保存中…" : (editing ? "保存修改" : "创建她")}
           </button>
         </div>
       </div>
