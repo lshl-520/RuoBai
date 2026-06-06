@@ -400,10 +400,11 @@ function ChatRoom({ agent, onBack }) {
       let fullReply = "";
       const replyId = Date.now(); // 临时ID用于更新流式消息
 
-      // 先插入一条空的 AI 消息占位
+      // 先插入一条空的 AI 消息占位，同时关掉 typing 动画避免重复
       setMsgs((p) => [...p, { who: "her", type: "text", text: "", time: "", _streaming: true, _id: replyId }]);
+      setTyping(false);
 
-      await streamAssistantReply(roleId, { message: t }, {
+      await streamAssistantReply(roleId, { content: t, role: "user" }, {
         onToken: (token) => {
           fullReply += token;
           setMsgs((p) => p.map((m) => m._id === replyId ? { ...m, text: fullReply } : m));
@@ -443,8 +444,6 @@ function ChatRoom({ agent, onBack }) {
           <div className="chat-fig-fade" />
         </div>
       )}
-
-      <div className="statusbar"><span className="time">9:41</span><span className="notch" /><span className="icons"><Bars /></span></div>
 
       <header className="chat-top">
         <button className="ct-back" onClick={onBack}><Icon name="back" /></button>
