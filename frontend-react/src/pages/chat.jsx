@@ -65,7 +65,7 @@ function ChatListScreen({ agents: fallbackAgents, onOpen }) {
         </div>
         <button className="icon-btn"><Icon name="search" /></button>
       </div>
-      <div className="chat-list pad">
+      <div className={list.length === 0 && agents !== null ? "chat-list" : "chat-list pad"}>
         {list.map((a) => (
           <button key={a.id} className="cl-item" onClick={() => onOpen(a)}>
             <div className="cl-avatar">
@@ -85,11 +85,14 @@ function ChatListScreen({ agents: fallbackAgents, onOpen }) {
           </button>
         ))}
         {list.length === 0 && agents !== null && (
-          <div className="empty-state">
-            <img className="empty-state-img" src="/assets/empty-chat.png" alt="" />
-            <div className="empty-state-title">这里还空着</div>
-            <div className="empty-state-desc">但她已经准备好了，随时等你开口。</div>
-            <button className="empty-state-btn" onClick={() => window.location.href = '/characters'}>去创建第一个她</button>
+          <div className="empty-immersive">
+            <img className="empty-immersive-img" src="/assets/empty-chat.png" alt="" />
+            <div className="empty-immersive-scrim" />
+            <div className="empty-immersive-guide">
+              <div className="empty-state-title">这里还空着</div>
+              <div className="empty-state-desc">但她已经准备好了，随时等你开口。</div>
+              <button className="empty-state-btn" onClick={() => window.location.href = '/characters'}>去创建第一个她</button>
+            </div>
           </div>
         )}
       </div>
