@@ -1,34 +1,34 @@
-chcp 65001 >nul
+chcp 936 >nul
 @echo off
-title RuoBai React å…³é—­
+title RuoBai React ¹Ø±Õ
 
 echo.
 echo ====================================
-echo   RuoBai React å…³é—­ä¸­...
+echo   RuoBai React ¹Ø±ÕÖÐ...
 echo ====================================
 echo.
 
-echo [1/3] å…³é—­ React å‰ç«¯å’ŒåŽç«¯
+echo [1/3] ¹Ø±Õ React Ç°¶ËºÍºó¶Ë
 taskkill /F /FI "WINDOWTITLE eq RuoBai React*" >nul 2>nul
 taskkill /F /FI "WINDOWTITLE eq RuoBai Server*" >nul 2>nul
 taskkill /F /IM node.exe >nul 2>nul
-echo   OK å‰ç«¯å’ŒåŽç«¯å·²åœæ­¢
+echo   OK Ç°¶ËºÍºó¶ËÒÑÍ£Ö¹
 
-echo [2/3] å…³é—­åŽå°çª—å£
+echo [2/3] ¹Ø±ÕºóÌ¨´°¿Ú
 taskkill /F /FI "WINDOWTITLE eq MariaDB*" >nul 2>nul
-echo   OK åŽå°çª—å£å·²å…³é—­
+echo   OK ºóÌ¨´°¿ÚÒÑ¹Ø±Õ
 
-echo [3/3] åœæ­¢æ•°æ®åº“
+echo [3/3] Í£Ö¹Êý¾Ý¿â
 taskkill /F /IM mysqld.exe >nul 2>nul
 if errorlevel 1 (
-    echo   - æ•°æ®åº“æ²¡æœ‰è¿è¡Œ
+    echo   - Êý¾Ý¿âÃ»ÓÐÔËÐÐ
 ) else (
-    echo   OK æ•°æ®åº“å·²åœæ­¢
+    echo   OK Êý¾Ý¿âÒÑÍ£Ö¹
 )
 
 echo.
 echo ====================================
-echo   å…¨éƒ¨å…³é—­ï¼å¯ä»¥æ”¾å¿ƒå…³ç”µè„‘äº†
+echo   È«²¿¹Ø±Õ£¡¿ÉÒÔ·ÅÐÄ¹ØµçÄÔÁË
 echo ====================================
 echo.
 timeout /t 2 >nul

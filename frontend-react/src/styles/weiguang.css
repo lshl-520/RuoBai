@@ -1,0 +1,294 @@
+/* ============================================================
+   若白 · 微光 2.0 — 设计系统
+   概念: 晨光里的陪伴。暖米白底, 克制的柔粉 + 薰衣草微光。
+   2.0 新增: 环境光氛围层、呼吸与浮动动画、时辰渐变。
+   ============================================================ */
+
+:root {
+  /* 底色 / 纸面 */
+  --paper: #faf6f2;
+  --paper-2: #f4ece6;
+  --card: #ffffff;
+  --card-warm: #fffcfa;
+
+  /* 墨色 / 文字 */
+  --ink: #2b2528;
+  --ink-soft: #7a6f73;
+  --ink-faint: #ada1a6;
+  --ink-ghost: #cabfc3;
+
+  /* 线 */
+  --line: rgba(43, 37, 40, 0.08);
+  --line-strong: rgba(43, 37, 40, 0.14);
+
+  /* 玫瑰 — 主点缀 (有质感的脏粉) */
+  --rose: #c16579;
+  --rose-deep: #a64f64;
+  --rose-tint: #fbeff1;
+  --rose-soft: #f3dbe1;
+
+  /* 陶土暖 — 次点缀 */
+  --clay: #d2906f;
+  --clay-tint: #fbeee5;
+
+  /* 薰衣草微光 — 她的发与眼 / AI 气息 */
+  --lav: #9a8fc0;
+  --lav-deep: #7d70ab;
+  --lav-tint: #f0edf7;
+
+  /* 鼠尾草绿 — 在线 / 完成 */
+  --sage: #6fae8e;
+
+  /* 阴影 */
+  --shadow-sm: 0 1px 3px rgba(60, 40, 45, 0.05);
+  --shadow: 0 6px 24px rgba(60, 40, 45, 0.08);
+  --shadow-lg: 0 18px 50px rgba(60, 40, 45, 0.14);
+  --shadow-rose: 0 10px 28px rgba(193, 101, 121, 0.22);
+
+  /* 圆角 */
+  --r-sm: 12px;
+  --r: 18px;
+  --r-lg: 24px;
+  --r-xl: 30px;
+
+  --serif: "Noto Serif SC", "Songti SC", serif;
+  --sans: "Noto Sans SC", -apple-system, "PingFang SC", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  height: 100%;
+  font-family: var(--sans);
+  color: var(--ink);
+  background:
+    radial-gradient(1200px 700px at 18% -8%, #f7ece9 0%, transparent 55%),
+    radial-gradient(1000px 820px at 112% 8%, #f1ecf6 0%, transparent 52%),
+    radial-gradient(900px 700px at 50% 120%, #f6ebe6 0%, transparent 60%),
+    #ece3dd;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+
+#root { min-height: 100%; }
+
+button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+input, textarea, select { font-family: inherit; }
+img { display: block; }
+::selection { background: var(--rose-soft); }
+
+/* ---- 居中舞台 ---- */
+.stage {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 16px;
+  gap: 40px;
+  overflow: hidden;
+}
+
+/* 环境光斑 — 缓慢呼吸漂浮 */
+.ambient { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+.ambient .orb {
+  position: absolute; border-radius: 50%; filter: blur(60px); opacity: 0.55;
+  animation: drift 26s ease-in-out infinite;
+}
+.ambient .orb.a { width: 460px; height: 460px; left: -120px; top: 8%; background: radial-gradient(circle, #f4c9d3, transparent 70%); }
+.ambient .orb.b { width: 520px; height: 520px; right: -160px; top: 30%; background: radial-gradient(circle, #d9d0ee, transparent 70%); animation-delay: -8s; animation-duration: 32s; }
+.ambient .orb.c { width: 380px; height: 380px; left: 30%; bottom: -140px; background: radial-gradient(circle, #f3d8c4, transparent 70%); animation-delay: -15s; animation-duration: 30s; }
+@keyframes drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(40px, -30px) scale(1.08); }
+  66% { transform: translate(-30px, 24px) scale(0.96); }
+}
+
+/* 飘浮微光尘 */
+.motes { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
+.mote {
+  position: absolute; bottom: -10px; width: 6px; height: 6px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.95), rgba(244,201,211,0.4) 60%, transparent 70%);
+  animation: floatUp linear infinite;
+}
+@keyframes floatUp {
+  0% { transform: translateY(0) translateX(0); opacity: 0; }
+  10% { opacity: 0.9; }
+  90% { opacity: 0.7; }
+  100% { transform: translateY(-104vh) translateX(30px); opacity: 0; }
+}
+
+/* ---- 手机壳 ---- */
+.phone {
+  position: relative;
+  width: 393px;
+  height: 852px;
+  background: var(--paper);
+  border-radius: 46px;
+  box-shadow:
+    0 0 0 11px #1c1517,
+    0 0 0 13px #2c2326,
+    var(--shadow-lg);
+  overflow: hidden;
+  flex-shrink: 0;
+  z-index: 2;
+  animation: phoneIn 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes phoneIn { from { opacity: 0; transform: translateY(24px) scale(0.98); } to { opacity: 1; transform: none; } }
+
+.phone-screen {
+  position: absolute;
+  inset: 0;
+  border-radius: 46px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 状态栏 */
+.statusbar {
+  height: 50px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 0 26px 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  position: relative;
+  z-index: 30;
+}
+.statusbar.on-photo { color: #fff; }
+.statusbar .time { letter-spacing: 0.3px; }
+.statusbar .icons { display: flex; align-items: center; gap: 6px; }
+.statusbar .notch {
+  position: absolute;
+  top: 9px; left: 50%; transform: translateX(-50%);
+  width: 118px; height: 30px;
+  background: #161012; border-radius: 18px;
+}
+
+/* 滚动视图区 */
+.viewport { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+.screen {
+  position: absolute; inset: 0;
+  overflow-y: auto; overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+.screen::-webkit-scrollbar { width: 0; }
+
+/* 底部导航 */
+.tabbar {
+  flex-shrink: 0;
+  height: 76px;
+  background: rgba(255, 252, 250, 0.86);
+  backdrop-filter: saturate(1.4) blur(20px);
+  -webkit-backdrop-filter: saturate(1.4) blur(20px);
+  border-top: 1px solid var(--line);
+  display: flex;
+  padding: 8px 10px 18px;
+  position: relative;
+  z-index: 20;
+}
+.tab {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  color: var(--ink-faint);
+  transition: color 0.25s;
+  position: relative;
+}
+.tab.active { color: var(--rose); }
+.tab svg { width: 24px; height: 24px; stroke-width: 1.8; transition: transform 0.3s cubic-bezier(0.3, 1.6, 0.5, 1); }
+.tab.active svg { transform: translateY(-2px) scale(1.12); }
+.tab .lbl { font-size: 10.5px; font-weight: 600; letter-spacing: 0.2px; }
+.tab .dot {
+  position: absolute; top: -1px; right: calc(50% - 16px);
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--rose); border: 1.5px solid var(--card);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(193,101,121,0.5); } 50% { box-shadow: 0 0 0 5px rgba(193,101,121,0); } }
+
+/* 通用 */
+.pad { padding: 0 18px; }
+.serif { font-family: var(--serif); }
+
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 6px 18px 14px; }
+.topbar h1 { font-family: var(--serif); font-size: 25px; font-weight: 600; letter-spacing: 0.5px; }
+.topbar .sub { font-size: 12px; color: var(--ink-faint); margin-top: 2px; }
+
+.icon-btn {
+  width: 40px; height: 40px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--card); box-shadow: var(--shadow-sm);
+  color: var(--ink-soft);
+  transition: transform 0.15s, background 0.2s;
+}
+.icon-btn:active { transform: scale(0.9); }
+.icon-btn svg { width: 20px; height: 20px; stroke-width: 1.8; }
+
+/* 温度芯片 */
+.temp-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 9px 3px 7px; border-radius: 999px;
+  background: var(--rose-tint); color: var(--rose-deep);
+  font-size: 11px; font-weight: 600;
+}
+.temp-chip svg { width: 12px; height: 12px; }
+
+/* 药丸按钮 */
+.pill {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 11px 20px; border-radius: 999px;
+  font-size: 14px; font-weight: 600;
+  transition: transform 0.15s, box-shadow 0.2s, background 0.2s;
+}
+.pill:active { transform: scale(0.96); }
+.pill-primary { background: var(--rose); color: #fff; box-shadow: var(--shadow-rose); }
+.pill-ghost { background: var(--card); color: var(--ink); box-shadow: var(--shadow-sm); }
+.pill svg { width: 16px; height: 16px; stroke-width: 2; }
+.pill.grow { flex: 1; }
+
+/* 动画 */
+@keyframes screenIn { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+@keyframes sheetUp { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes bubbleIn { from { opacity: 0; transform: translateY(8px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes pop { 0% { transform: scale(0.8); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
+.anim-screen { animation: screenIn 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+/* 关系温度条 */
+.temp-bar { height: 5px; border-radius: 999px; background: var(--rose-soft); overflow: hidden; }
+.temp-bar > i { display: block; height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, #e7a9b6, var(--rose));
+  animation: fillBar 1.1s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes fillBar { from { width: 0 !important; } }
+
+/* 小标签 */
+.tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 600; }
+.tag-rose { background: var(--rose-tint); color: var(--rose-deep); }
+.tag-lav { background: var(--lav-tint); color: var(--lav-deep); }
+.tag-clay { background: var(--clay-tint); color: #b06a44; }
+.tag-line { background: transparent; border: 1px solid var(--line-strong); color: var(--ink-soft); }
+
+.card { background: var(--card); border-radius: var(--r-lg); box-shadow: var(--shadow); }
+
+.micro-tag { display: inline-block; padding: 2.5px 9px; border-radius: 999px; background: var(--paper-2); color: var(--ink-soft); font-size: 10.5px; font-weight: 500; }
+
+.section-label { display: flex; align-items: center; gap: 12px; margin: 22px 0 12px; }
+.section-label > span:first-child { font-size: 13px; font-weight: 600; color: var(--ink-soft); letter-spacing: 0.5px; white-space: nowrap; }
+.sl-line { flex: 1; height: 1px; background: var(--line); }
+
+/* 桌面端旁注 */
+.side-note { width: 290px; align-self: center; color: #6c615f; display: none; position: relative; z-index: 2; }
+@media (min-width: 940px) { .side-note { display: block; } }
+.side-note .badge { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: 1px; color: var(--rose-deep); background: var(--rose-tint); padding: 4px 12px; border-radius: 999px; margin-bottom: 16px; }
+.side-note h2 { font-family: var(--serif); font-size: 27px; color: #46383b; margin-bottom: 14px; font-weight: 600; line-height: 1.3; }
+.side-note p { font-size: 14px; line-height: 1.75; margin-bottom: 12px; }
+.side-note .k { color: var(--rose-deep); font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient .orb, .mote, .tab .dot { animation: none !important; }
+}

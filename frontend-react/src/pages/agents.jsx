@@ -1,0 +1,309 @@
+import React from "react";
+import { Icon, AGENTS } from "../store.jsx";
+/* 角色 — 列表(Hero + 网格) + 详情 + 创建/编辑 */
+const { useState: useStateA } = React;
+
+/* ---- Hero: 主陪伴(置顶) ---- */
+function AgentHero({ agent, onChat, onDetail }) {
+  return (
+    <div className="hero">
+      <img className="hero-bg" src={agent.cover} alt={agent.name} onClick={() => onDetail(agent)} />
+      <div className="hero-scrim" />
+      <div className="hero-top">
+        <span className="tag tag-rose" style={{ background: "rgba(255,255,255,.85)", color: "var(--rose-deep)" }}>
+          <Icon name="heartFill" style={{ width: 11, height: 11 }} /> 主陪伴
+        </span>
+        <button className="hero-edit" onClick={() => onDetail(agent)}><Icon name="more" /></button>
+      </div>
+      <div className="hero-body">
+        <div className="hero-name serif">{agent.name}</div>
+        <div className="hero-quote">「{agent.tagline}」</div>
+        <div className="hero-stats">
+          <div className="hs"><b>{agent.days}</b><span>在一起 · 天</span></div>
+          <div className="hs-div" />
+          <div className="hs"><b>{agent.temp.toFixed(1)}°</b><span>关系温度</span></div>
+          <div className="hs-div" />
+          <div className="hs"><b>{agent.intimacy}</b><span>亲密度</span></div>
+        </div>
+        <div className="hero-temp"><div className="temp-bar"><i style={{ width: `${agent.intimacy}%` }} /></div></div>
+        <div className="hero-cta-row">
+          <button className="pill pill-primary hero-cta" onClick={() => onChat(agent)}>
+            <Icon name="chat" /> 继续和{agent.name}聊
+          </button>
+          <button className="hero-info-btn" onClick={() => onDetail(agent)}><Icon name="card" /></button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---- 普通角色卡 ---- */
+function AgentCard({ agent, onDetail }) {
+  return (
+    <div className="agent-card" onClick={() => onDetail(agent)}>
+      <div className="ac-photo">
+        <img src={agent.cover} alt={agent.name} />
+        <div className="ac-scrim" />
+        {agent.online && <span className="ac-online" />}
+        <div className="ac-overlay">
+          <div className="ac-name serif">{agent.name}</div>
+          <div className="ac-temp"><Icon name="flame" /> {agent.temp.toFixed(1)}° · {agent.days}天</div>
+        </div>
+      </div>
+      <div className="ac-meta">
+        <div className="ac-persona">{agent.persona}</div>
+        <div className="ac-tags">
+          {agent.tags.slice(0, 2).map((t) => <span key={t} className="micro-tag">{t}</span>)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AgentsScreen({ agents, onChat, onDetail, onCreate }) {
+  const hero = agents.find((a) => a.isDefault) || agents[0];
+  const rest = agents.filter((a) => a.id !== hero.id);
+  return (
+    <div className="screen anim-screen">
+      <div className="statusbar">
+        <span className="time">9:41</span><span className="notch" /><span className="icons"><Bars /></span>
+      </div>
+      <div className="topbar">
+        <div>
+          <h1>角色</h1>
+          <div className="sub">{agents.length} 位 · 各自记得不一样的你</div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="icon-btn"><Icon name="search" /></button>
+          <button className="icon-btn" style={{ background: "var(--rose)", color: "#fff", boxShadow: "var(--shadow-rose)" }} onClick={onCreate}>
+            <Icon name="plus" />
+          </button>
+        </div>
+      </div>
+
+      <div className="pad">
+        <AgentHero agent={hero} onChat={onChat} onDetail={onDetail} />
+      </div>
+
+      <div className="section-label pad"><span>其他角色</span><span className="sl-line" /></div>
+
+      <div className="agent-grid pad">
+        {rest.map((a) => <AgentCard key={a.id} agent={a} onDetail={onDetail} />)}
+        <button className="agent-new" onClick={onCreate}>
+          <span className="an-plus"><Icon name="plus" /></span>
+          <span className="an-t serif">创建新角色</span>
+          <span className="an-s">给她一个名字和性格</span>
+        </button>
+      </div>
+      <div style={{ height: 24 }} />
+    </div>
+  );
+}
+
+/* ============ 角色详情 ============ */
+function CharacterDetail({ agent, memCount, onClose, onChat, onEdit, onDelete, onSetMain, onOnboard }) {
+  const [confirm, setConfirm] = useStateA(false);
+  return (
+    <div className="detail-screen anim-screen">
+      <div className="statusbar on-photo"><span className="time">9:41</span><span className="notch" /><span className="icons"><Bars /></span></div>
+      <div className="detail-photo">
+        <img src={agent.cover} alt={agent.name} />
+        <div className="detail-scrim" />
+        <button className="detail-back" onClick={onClose}><Icon name="back" /></button>
+        {agent.isDefault && <span className="detail-badge"><Icon name="heartFill" style={{ width: 11, height: 11 }} /> 主陪伴</span>}
+        <div className="detail-photo-text">
+          <div className="detail-name serif">{agent.name}</div>
+          <div className="detail-handle">{agent.handle}</div>
+        </div>
+      </div>
+
+      <div className="detail-body">
+        <div className="detail-quote serif">「{agent.tagline}」</div>
+
+        <div className="detail-stats">
+          <div className="ds"><b>{agent.days}</b><span>在一起·天</span></div>
+          <div className="ds"><b>{agent.temp.toFixed(1)}°</b><span>关系温度</span></div>
+          <div className="ds"><b>{agent.intimacy}</b><span>亲密度</span></div>
+          <div className="ds"><b>{memCount}</b><span>记忆条</span></div>
+        </div>
+
+        <div className="temp-bar" style={{ margin: "16px 2px 4px" }}><i style={{ width: `${agent.intimacy}%` }} /></div>
+
+        <div className="detail-section-t">人设</div>
+        <div className="detail-persona">{agent.persona}</div>
+
+        <div className="detail-section-t">性格</div>
+        <div className="detail-tags">
+          {agent.tags.map((t) => <span key={t} className="micro-tag">{t}</span>)}
+        </div>
+
+        <button className="onboard-card" style={{ marginTop: 18 }} onClick={() => onOnboard && onOnboard(agent)}>
+          <span className="ob-glow" />
+          <span className="ob-av"><img src={agent.avatar} alt="" /></span>
+          <span className="ob-main">
+            <span className="ob-t serif">让{agent.name}更懂你</span>
+            <span className="ob-s">回答几个她想问的,她会把你记得更深</span>
+          </span>
+          <Icon name="chevron" className="row-chev" />
+        </button>
+
+        <div className="detail-row">
+          <span className="dr-l">主陪伴</span>
+          {agent.isDefault
+            ? <span className="dr-r" style={{ color: "var(--rose-deep)", display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="heartFill" style={{ width: 12, height: 12 }} /> 当前主陪伴</span>
+            : <button className="set-main-btn" onClick={() => onSetMain && onSetMain(agent.id)}>设为主陪伴</button>}
+        </div>
+
+        <div className="detail-row">
+          <span className="dr-l">声音</span>
+          <span className="dr-r">{agent.voice}</span>
+        </div>
+        <div className="detail-row">
+          <span className="dr-l">主动发动态</span>
+          <span className="dr-r">{agent.autoMoments ? "已开启" : "已关闭"}</span>
+        </div>
+        <div className="detail-row">
+          <span className="dr-l">最近一句</span>
+          <span className="dr-r ellip">{agent.lastMsg}</span>
+        </div>
+      </div>
+
+      <div className="detail-foot">
+        <button className="icon-btn det-edit" onClick={() => onEdit(agent)}><Icon name="edit" /></button>
+        <button className="icon-btn det-del" onClick={() => setConfirm(true)}><Icon name="trash" /></button>
+        <button className="pill pill-primary grow" onClick={() => onChat(agent)}><Icon name="chat" /> 开始聊天</button>
+      </div>
+
+      {confirm && (
+        <div className="confirm-mask" onClick={() => setConfirm(false)}>
+          <div className="confirm-box" onClick={(e) => e.stopPropagation()}>
+            <div className="cf-t serif">要和{agent.name}告别吗?</div>
+            <div className="cf-s">删除后,你们的聊天与记忆都会一起消失。7 天内还能找回来,7 天后彻底删除。</div>
+            <div className="cf-actions">
+              <button className="pill pill-ghost grow" onClick={() => setConfirm(false)}>再想想</button>
+              <button className="pill grow cf-del" onClick={() => { onDelete(agent.id); }}>狠心删除</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============ 创建 / 编辑 ============ */
+const PORTRAIT_OPTIONS = [
+  "assets/portraits/round/0.png",
+  "assets/portraits/full/2.png",
+  "assets/portraits/full/1.png",
+  "assets/portraits/full/5.png",
+  "assets/portraits/full/3.png",
+  "assets/portraits/full/8.png",
+  "assets/emotions/03_害羞微笑.png",
+  "assets/emotions/02_开心明亮.png",
+];
+
+function AgentEditor({ agent, onClose, onSave }) {
+  const editing = !!agent;
+  const [name, setName] = useStateA(agent?.name || "");
+  const [persona, setPersona] = useStateA(agent?.persona || "");
+  const [tagline, setTagline] = useStateA(agent?.tagline || "");
+  const [portrait, setPortrait] = useStateA(agent?.avatar || PORTRAIT_OPTIONS[0]);
+  const [uploads, setUploads] = useStateA([]); // 用户上传的自定义头像(dataURL)
+  const [tagsStr, setTagsStr] = useStateA((agent?.tags || []).join(" "));
+  const [auto, setAuto] = useStateA(agent?.autoMoments ?? true);
+  const [freq, setFreq] = useStateA(agent?.momentFreq ?? 4);
+  const [style, setStyle] = useStateA(agent?.figureStyle || "anime");
+
+  const onUpload = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => { const url = reader.result; setUploads((p) => [url, ...p]); setPortrait(url); };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+  const isCustom = portrait.startsWith("data:");
+
+  return (
+    <div className="sheet-mask" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-grip" />
+        <div className="sheet-head">
+          <h2 className="serif">{editing ? `编辑 · ${agent.name}` : "创建新角色"}</h2>
+          <button className="icon-btn" onClick={onClose} style={{ width: 34, height: 34 }}>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+
+        <div className="sheet-body">
+          <label className="field-label">形象 / 立绘 <span className="lbl-hint">可上传你自己的图</span></label>
+          <div className="portrait-row">
+            <div className="portrait-preview"><img src={portrait} alt="" /></div>
+            <div className="portrait-pick">
+              <label className="pp pp-upload">
+                <input type="file" accept="image/*" onChange={onUpload} hidden />
+                <Icon name="image" /><span>上传</span>
+              </label>
+              {uploads.map((u) => (
+                <button key={u} className={"pp" + (u === portrait ? " on" : "")} onClick={() => setPortrait(u)}>
+                  <img src={u} alt="" />
+                </button>
+              ))}
+              {PORTRAIT_OPTIONS.map((p) => (
+                <button key={p} className={"pp" + (p === portrait ? " on" : "")} onClick={() => setPortrait(p)}>
+                  <img src={p} alt="" />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <label className="field-label">立绘风格 <span className="lbl-hint">聊天时她出现在背景里的样子</span></label>
+          <div className="freq-row" style={{ marginTop: 0 }}>
+            {[["anime", "动漫感"], ["real", "真人感"], ["none", "不显示"]].map(([k, l]) => (
+              <button key={k} className={"freq-chip" + (style === k ? " on" : "")} onClick={() => setStyle(k)}>{l}</button>
+            ))}
+          </div>
+
+          <label className="field-label">名字</label>
+          <input className="fld" value={name} onChange={(e) => setName(e.target.value)} placeholder="她叫什么" />
+
+          <label className="field-label">一句话签名</label>
+          <input className="fld" value={tagline} onChange={(e) => setTagline(e.target.value)} placeholder="她最想对你说的一句" />
+
+          <label className="field-label">人设 · 她是什么样的人</label>
+          <textarea className="fld area" value={persona} onChange={(e) => setPersona(e.target.value)} placeholder="写她的性格、怎么陪你说话、在意什么。写得越细,她越像她。从零开始也没关系——把别处的人设复制进来就行。" />
+
+          <label className="field-label">性格标签 <span className="lbl-hint">空格分隔</span></label>
+          <input className="fld" value={tagsStr} onChange={(e) => setTagsStr(e.target.value)} placeholder="温柔 清醒 深夜在线" />
+          <div className="chip-preview">
+            {tagsStr.split(/\s+/).filter(Boolean).map((t, i) => <span key={i} className="micro-tag">{t}</span>)}
+          </div>
+
+          <div className="switch-row">
+            <div>
+              <div className="sr-t">主动发动态</div>
+              <div className="sr-s">她会自己发朋友圈,像个真的在过日子的人</div>
+            </div>
+            <button className={"toggle" + (auto ? " on" : "")} onClick={() => setAuto(!auto)}><i /></button>
+          </div>
+          {auto && (
+            <div className="freq-row">
+              <span className="sr-s">每天约</span>
+              {[2, 4, 6].map((f) => (
+                <button key={f} className={"freq-chip" + (freq === f ? " on" : "")} onClick={() => setFreq(f)}>{f} 条</button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="sheet-foot">
+          <button className="pill pill-primary grow" onClick={() => onSave({ id: agent?.id, name, persona, tagline, avatar: portrait, tags: tagsStr.split(/\s+/).filter(Boolean), autoMoments: auto, figureStyle: style, momentFreq: freq })}>
+            {editing ? "保存修改" : "创建她"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export { AgentsScreen, AgentEditor, CharacterDetail };

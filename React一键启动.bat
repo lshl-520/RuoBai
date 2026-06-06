@@ -1,53 +1,48 @@
-chcp 65001 >nul
+chcp 936 >nul
 @echo off
-title RuoBai React å¯åŠ¨
+title RuoBai React Æô¶¯
 cd /d "%~dp0"
 
 echo.
 echo ====================================
-echo   RuoBai React å‰ç«¯å¯åŠ¨ä¸­...
+echo   RuoBai React Ç°¶ËÆô¶¯ÖÐ...
 echo ====================================
 echo.
 
-echo [1/4] æ£€æŸ¥æ•°æ®åº“
+echo [1/4] ¼ì²éÊý¾Ý¿â
 tasklist /FI "IMAGENAME eq mysqld.exe" 2>NUL | find /I "mysqld.exe" >NUL
 if errorlevel 1 (
     start "MariaDB" /MIN "D:\Program Files (x86)\Mysql\bin\mysqld.exe" --defaults-file="D:\Program Files (x86)\Mysql\data\my.ini"
     timeout /t 5 /nobreak >nul
-    echo   OK æ•°æ®åº“å·²å¯åŠ¨
+    echo   OK Êý¾Ý¿âÒÑÆô¶¯
 ) else (
-    echo   OK æ•°æ®åº“å·²åœ¨è¿è¡Œ
+    echo   OK Êý¾Ý¿âÒÑÔÚÔËÐÐ
 )
 
-echo [2/4] å¯åŠ¨åŽç«¯
-tasklist /FI "WINDOWTITLE eq RuoBai Server*" 2>NUL | find /I "cmd.exe" >NUL
-if errorlevel 1 (
-    cd /d "%~dp0server"
-    start "RuoBai Server" /MIN cmd /k "node server.js"
-    timeout /t 3 /nobreak >nul
-    echo   OK åŽç«¯å·²å¯åŠ¨ (ç«¯å£ 3000)
-) else (
-    echo   OK åŽç«¯å·²åœ¨è¿è¡Œ
-)
+echo [2/4] Æô¶¯ºó¶Ë
+cd /d "%~dp0server"
+start "RuoBai Server" /MIN cmd /k "node server.js"
+timeout /t 3 /nobreak >nul
+echo   OK ºó¶ËÒÑÆô¶¯ ^(¶Ë¿Ú 3000^)
 
-echo [3/4] å¯åŠ¨ React å‰ç«¯
+echo [3/4] Æô¶¯ React Ç°¶Ë
 cd /d "%~dp0frontend-react"
 start "RuoBai React" cmd /k "npx vite"
 timeout /t 5 /nobreak >nul
-echo   OK React å‰ç«¯å·²å¯åŠ¨ (ç«¯å£ 4175)
+echo   OK React Ç°¶ËÒÑÆô¶¯ ^(¶Ë¿Ú 4175^)
 
-echo [4/4] æ‰“å¼€æµè§ˆå™¨
+echo [4/4] ´ò¿ªä¯ÀÀÆ÷
 start "" "http://127.0.0.1:4175/"
-echo   OK æµè§ˆå™¨å·²æ‰“å¼€
+echo   OK ä¯ÀÀÆ÷ÒÑ´ò¿ª
 
 echo.
 echo ====================================
-echo   React å‰ç«¯: http://127.0.0.1:4175/
-echo   åŽç«¯ API:   http://127.0.0.1:3000/
-echo   å…³é—­: åŒå‡» Reactä¸€é”®å…³é—­.bat
+echo   React Ç°¶Ë: http://127.0.0.1:4175/
+echo   ºó¶Ë API:   http://127.0.0.1:3000/
+echo   ¹Ø±Õ: Ë«»÷ ReactÒ»¼ü¹Ø±Õ.bat
 echo ====================================
 echo.
-echo æ­¤çª—å£å°†åœ¨ 3 ç§’åŽè‡ªåŠ¨å…³é—­
-echo æ•°æ®åº“ã€åŽç«¯å’ŒReactå‰ç«¯éƒ½åœ¨åŽå°è¿è¡Œï¼
+echo ´Ë´°¿Ú½«ÔÚ 3 Ãëºó×Ô¶¯¹Ø±Õ
+echo Êý¾Ý¿â¡¢ºó¶ËºÍReactÇ°¶Ë¶¼ÔÚºóÌ¨ÔËÐÐ
 timeout /t 3 >nul
 exit
