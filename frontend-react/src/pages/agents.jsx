@@ -114,7 +114,16 @@ function AgentsScreen({ agents: fallbackAgents, onChat, onDetail, onCreate }) {
     };
   }, []);
 
-  const list = agents ?? fallbackAgents;
+  const list = agents ?? fallbackAgents ?? [];
+
+  if (agents === null) {
+    return (
+      <div className="screen anim-screen">
+        <div className="topbar"><div><h1>角色</h1><div className="sub">加载中…</div></div></div>
+      </div>
+    );
+  }
+
   const hero = list.find((a) => a.isDefault) || list[0];
   const rest = list.filter((a) => a.id !== (hero?.id));
 
