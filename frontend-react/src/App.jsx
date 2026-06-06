@@ -101,16 +101,25 @@ function RuobaiApp({ authed, setAuthed }) {
   );
 }
 
+import { getSession } from "./lib/auth.js";
+
 export default function App() {
   const navigate = useNavigate();
   const [authed, setAuthed] = useState(false);
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
     try {
       const t = localStorage.getItem("ruobai_theme");
       if (t) document.documentElement.dataset.theme = t;
     } catch {}
+
+    getSession().then((data) => {
+      if (data?.loggedIn) setAuthed(true);
+    }).catch(() => {}).finally(() => setChecking(false));
   }, []);
+
+  if (checking) return null; // 等 session 检查完再渲染
 
   return (
     <Routes>

@@ -1,34 +1,72 @@
 import React from "react";
 import { Icon, Bars, greetByHour } from "../store.jsx";
+import { getRoles, getRolePortraitSrc, clampIntimacy } from "../lib/roles.js";
 /* 聊天列表 + 聊天室(沉浸: 常驻立绘随情绪变化 / 全屏立绘 / 语音 / 表情包 / 思考过程 / 搜索) */
 const { useState: useStateC, useRef: useRefC, useEffect: useEffectC } = React;
 
-/* 小白拥有的情绪立绘 */
-const EMO_SET = {
-  "01_默认温柔": "assets/emotions/01_默认温柔.png",
-  "02_开心明亮": "assets/emotions/02_开心明亮.png",
-  "03_害羞微笑": "assets/emotions/03_害羞微笑.png",
-  "05_关心担忧": "assets/emotions/05_关心担忧.png",
-  "11_撒娇期待": "assets/emotions/11_撒娇期待.png",
-  "12_晚安微笑": "assets/emotions/12_晚安微笑.png",
-};
+/* 后端角色 → 2.0 agent 格式 */
+function toAgent(role) {
+  return {
+    id: role.id,
+    name: role.name,
+    avatar: getRolePortraitSrc(role) || `/assets/portraits/round/0.png`,
+    tag: role.tag || "",
+    lastMsg: role.persona ? role.persona.slice(0, 30) + "…" : "点击开始聊天",
+    lastTime: "",
+    unread: 0,
+    online: Boolean(role.is_active),
+    intimacy: clampIntimacy(role.intimacy),
+    isDefault: Boolean(role.is_active),
+    _raw: role,
+  };
+}
 
 /* ---------------- 聊天列表 ---------------- */
-function ChatListScreen({ agents, onOpen }) {
+function ChatListScreen({ agents: fallbackAgents, onOpen }) {
+  const [agents, setAgents] = useStateC(null); // null = 加载中
+  const seqRef = useRefC(0);
+
+  useEffectC(() => {
+    let cancelled = false;
+    async function load() {
+      const id = ++seqRef.current;
+      try {
+        const data = await getRoles();
+        if (cancelled || seqRef.current !== id) return;
+        if (Array.isArray(data)) {
+          setAgents(data.map(toAgent));
+        } else if (data?.success !== false && Array.isArray(data?.items)) {
+          setAgents(data.items.map(toAgent));
+        }
+      } catch {
+        // 后端没开或未登录，保持 null 走兜底
+      }
+    }
+    load();
+    const onFocus = () => load();
+    const onVisible = () => { if (document.visibilityState === "visible") load(); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+
+  const list = agents ?? fallbackAgents;
+
   return (
     <div className="screen anim-screen">
-      <div className="statusbar">
-        <span className="time">9:41</span><span className="notch" /><span className="icons"><Bars /></span>
-      </div>
       <div className="topbar">
         <div>
           <h1>{greetByHour()}</h1>
-          <div className="sub">她们都在,随时可以说话</div>
+          <div className="sub">{agents === null ? "加载中…" : "她们都在,随时可以说话"}</div>
         </div>
         <button className="icon-btn"><Icon name="search" /></button>
       </div>
       <div className="chat-list pad">
-        {agents.map((a) => (
+        {list.map((a) => (
           <button key={a.id} className="cl-item" onClick={() => onOpen(a)}>
             <div className="cl-avatar">
               <img src={a.avatar} alt={a.name} />
@@ -46,6 +84,9 @@ function ChatListScreen({ agents, onOpen }) {
             </div>
           </button>
         ))}
+        {list.length === 0 && agents !== null && (
+          <div className="empty-hint pad">还没有角色，去"角色"页创建第一个她吧。</div>
+        )}
       </div>
     </div>
   );
