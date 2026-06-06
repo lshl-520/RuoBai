@@ -405,3 +405,23 @@
   cursor: pointer;
   animation: emptyFadeIn 0.3s ease;
 }
+
+/* 立绘选择布局：左侧预览+上传，右侧3列网格 */
+.portrait-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  width: 90px;
+}
+.portrait-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.portrait-pick {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}

@@ -43,7 +43,15 @@ function RuobaiApp({ authed, setAuthed }) {
     setEditAgent(undefined);
   };
   const deleteAgent = (id) => { setAgents((p) => p.filter((a) => a.id !== id)); setDetailAgent(null); };
-  const setMainCompanion = (id) => setAgents((p) => p.map((a) => ({ ...a, isDefault: a.id === id })));
+  const setMainCompanion = async (id) => {
+    try {
+      const { switchRole } = await import("./lib/roles.js");
+      await switchRole(id);
+      setAgents((p) => p.map((a) => ({ ...a, isDefault: a.id === id })));
+    } catch (err) {
+      console.error("切换主陪伴失败", err);
+    }
+  };
 
   const likeMoment = (id) => setMoments((p) => p.map((m) => m.id === id ? { ...m, liked: !m.liked, likes: m.likes + (m.liked ? -1 : 1) } : m));
   const postMoment = (data) => {
