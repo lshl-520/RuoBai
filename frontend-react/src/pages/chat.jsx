@@ -85,7 +85,12 @@ function ChatListScreen({ agents: fallbackAgents, onOpen }) {
           </button>
         ))}
         {list.length === 0 && agents !== null && (
-          <div className="empty-hint pad">还没有角色，去"角色"页创建第一个她吧。</div>
+          <div className="empty-state">
+            <img className="empty-state-img" src="/assets/empty-chat.png" alt="" />
+            <div className="empty-state-title">这里还空着</div>
+            <div className="empty-state-desc">但她已经准备好了，随时等你开口。</div>
+            <button className="empty-state-btn" onClick={() => window.location.href = '/characters'}>去创建第一个她</button>
+          </div>
         )}
       </div>
     </div>

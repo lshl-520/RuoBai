@@ -118,6 +118,13 @@ function MomentsScreen({ moments, agents, user, onLike, onPost }) {
       </div>
 
       <div className="moments-list pad">
+        {list.length === 0 && (
+          <div className="empty-state">
+            <img className="empty-state-img" src="/assets/empty-moments.png" alt="" />
+            <div className="empty-state-title">她们还没来</div>
+            <div className="empty-state-desc">但这里一直留着，等她们过来说说今天的事。</div>
+          </div>
+        )}
         {list.map((m) => <MomentCard key={m.id} m={m} onLike={onLike} />)}
         <div style={{ height: 20 }} />
       </div>
