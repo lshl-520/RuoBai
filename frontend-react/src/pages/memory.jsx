@@ -112,9 +112,10 @@ function MemoryScreen({ agents, memories, onAdd, onUpdate, onDelete, onPin }) {
         </div>
 
         {sorted.length === 0 ? (
-          <div className="mem-empty">
-            <div className="serif">还没有记忆</div>
-            <p>点右上角「新建」,写下要{agent.name}记住的事。</p>
+          <div className="empty-state">
+            <img className="empty-state-img" src="/assets/empty-memory.png" alt="" />
+            <div className="empty-state-title">以后的每一天</div>
+            <div className="empty-state-desc">她都会记住。点右上角「新建」，写下要{agent.name}记住的事。</div>
           </div>
         ) : (
           <div className="mem-list">

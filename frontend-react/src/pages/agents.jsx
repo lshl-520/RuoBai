@@ -62,7 +62,24 @@ function AgentCard({ agent, onDetail }) {
 
 function AgentsScreen({ agents, onChat, onDetail, onCreate }) {
   const hero = agents.find((a) => a.isDefault) || agents[0];
-  const rest = agents.filter((a) => a.id !== hero.id);
+  const rest = agents.filter((a) => a.id !== (hero?.id));
+
+  if (agents.length === 0) {
+    return (
+      <div className="screen anim-screen">
+        <div className="statusbar">
+          <span className="time">9:41</span><span className="notch" /><span className="icons"><Bars /></span>
+        </div>
+        <div className="empty-state">
+          <img className="empty-state-img" src="/assets/empty-characters.webp" alt="" />
+          <div className="empty-state-title">不着急</div>
+          <div className="empty-state-desc">想好了再创建她，她会一直在这里等你。</div>
+          <button className="empty-state-btn" onClick={onCreate}>创建第一个她</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="screen anim-screen">
       <div className="statusbar">

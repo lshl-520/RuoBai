@@ -253,3 +253,64 @@
 .mood-chip { padding: 7px 13px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); font-size: 12px; font-weight: 500; color: var(--ink-soft); }
 .mood-chip.on { background: var(--rose-tint); border-color: var(--rose-soft); color: var(--rose-deep); }
 .compose-note { font-size: 11.5px; color: var(--ink-faint); margin-top: 14px; line-height: 1.5; }
+
+/* ---- 空状态（0角色时的温柔兜底） ---- */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  padding: 40px 28px;
+  text-align: center;
+  animation: emptyFadeIn 0.8s ease;
+}
+@keyframes emptyFadeIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+.empty-state-img {
+  width: min(240px, 56vw);
+  height: auto;
+  border-radius: var(--r-xl, 24px);
+  object-fit: cover;
+  margin-bottom: 24px;
+  box-shadow: 0 20px 48px rgba(193, 101, 121, 0.12);
+  animation: emptyFloat 6s ease-in-out infinite;
+}
+@keyframes emptyFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+.empty-state-title {
+  font-family: var(--serif, serif);
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--rose-deep, #a64f64);
+  margin-bottom: 10px;
+}
+.empty-state-desc {
+  font-size: 14px;
+  color: var(--ink-soft, #7a6f73);
+  line-height: 1.8;
+  max-width: 260px;
+  margin-bottom: 20px;
+}
+.empty-state-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 28px;
+  border-radius: 999px;
+  background: var(--rose, #c16579);
+  color: white;
+  font-size: 15px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.empty-state-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(193, 101, 121, 0.25);
+}
