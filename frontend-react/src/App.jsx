@@ -59,7 +59,7 @@ function RuobaiApp({ authed, setAuthed }) {
   if (!authed) return <Navigate to="/auth" replace />;
 
   if (chatAgent) {
-    return <div className="viewport"><ChatRoom agent={chatAgent} onBack={() => setChatAgent(null)} /></div>;
+    return <div className="rb-app"><div className="viewport"><ChatRoom agent={chatAgent} onBack={() => setChatAgent(null)} /></div></div>;
   }
 
   function openChat(agent) {

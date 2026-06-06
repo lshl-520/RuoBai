@@ -1,8 +1,19 @@
 import React from "react";
 import { Icon, Bars, greetByHour } from "../store.jsx";
 import { getRoles, getRolePortraitSrc, clampIntimacy } from "../lib/roles.js";
+import { getMessages, streamAssistantReply, saveMessage } from "../lib/chat.js";
 /* 聊天列表 + 聊天室(沉浸: 常驻立绘随情绪变化 / 全屏立绘 / 语音 / 表情包 / 思考过程 / 搜索) */
 const { useState: useStateC, useRef: useRefC, useEffect: useEffectC } = React;
+
+/* 小白拥有的情绪立绘 */
+const EMO_SET = {
+  "01_默认温柔": "/images/xiaobai-emotions/01_默认温柔.png",
+  "02_开心明亮": "/images/xiaobai-emotions/02_开心明亮.png",
+  "03_害羞微笑": "/images/xiaobai-emotions/03_害羞微笑.png",
+  "05_关心担忧": "/images/xiaobai-emotions/05_关心担忧.png",
+  "11_撒娇期待": "/images/xiaobai-emotions/11_撒娇期待.png",
+  "12_晚安微笑": "/images/xiaobai-emotions/12_晚安微笑.png",
+};
 
 /* 后端角色 → 2.0 agent 格式 */
 function toAgent(role) {
@@ -266,6 +277,37 @@ function BigView({ agent, figSrc, onClose }) {
   );
 }
 
+/* 后端消息 → 2.0 UI 格式 */
+function toMsg(m) {
+  const d = new Date(m.created_at);
+  const time = d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0");
+  return {
+    id: m.id,
+    who: m.role === "user" ? "me" : "her",
+    type: m.message_type || "text",
+    text: m.content || "",
+    images: m.media_url ? [m.media_url] : [],
+    time,
+  };
+}
+/* 按天插入时间分隔 */
+function withTimeDividers(msgs) {
+  const result = [];
+  let lastDate = "";
+  for (const m of msgs) {
+    if (m.id) {
+      const raw = msgs.find(x => x === m);
+      const dateStr = raw._date || "";
+      if (dateStr && dateStr !== lastDate) {
+        result.push({ type: "time", text: dateStr });
+        lastDate = dateStr;
+      }
+    }
+    result.push(m);
+  }
+  return result;
+}
+
 const REPLIES = [
   { text: "嗯,我在。你慢慢说,我不打断。", emo: "01_默认温柔", think: "他主动开口了,这很珍贵。我要做的不是回应得多漂亮,是让他觉得说出来是安全的。" },
   { text: "听到了。这件事搁在你心里多久了?", emo: "05_关心担忧", think: "顺着他的情绪往下,而不是急着给建议。先把『多久』问出来,他自己也许会松动。" },
@@ -276,11 +318,8 @@ const STICKER_REPLIES = ["🥰", "🥺", "😘", "🌙", "😋", "🌸"];
 /* ---------------- 聊天室 ---------------- */
 function ChatRoom({ agent, onBack }) {
   const hasEmo = agent.isDefault; // 小白有专属情绪立绘
-  const base = (window.HISTORY && window.HISTORY[agent.id]) || (agent.id === 48 ? CHAT_48 : [
-    { type: "time", text: "今天" },
-    { who: "her", type: "text", time: "刚刚", text: `我是${agent.name}。${agent.tagline}`, think: "第一句话要像她的人——不是客服开场白,是她会说的话。" },
-  ]);
-  const [msgs, setMsgs] = useStateC(base);
+  const roleId = agent._raw?.id || agent.id;
+  const [msgs, setMsgs] = useStateC([]);
   const [draft, setDraft] = useStateC("");
   const [typing, setTyping] = useStateC(false);
   const [showFig, setShowFig] = useStateC(true);
@@ -290,11 +329,36 @@ function ChatRoom({ agent, onBack }) {
   const [q, setQ] = useStateC("");
   const [emo, setEmo] = useStateC("01_默认温柔");
   const [calling, setCalling] = useStateC(false);
-  const [atts, setAtts] = useStateC([]); // 待发送的图片附件
-  const [listening, setListening] = useStateC(false); // 语音输入(STT)
+  const [atts, setAtts] = useStateC([]);
+  const [listening, setListening] = useStateC(false);
   const [modelOpen, setModelOpen] = useStateC(false);
   const [routing, setRouting] = useStateC(() => (window.loadRT ? window.loadRT() : { chat: { channelId: "", model: "对话模型" } }));
+  const [chatError, setChatError] = useStateC("");
   const areaRef = useRefC(null);
+
+  /* 加载历史消息 */
+  useEffectC(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const data = await getMessages(roleId, 80);
+        if (cancelled) return;
+        const items = Array.isArray(data) ? data : (data?.items || []);
+        if (items.length > 0) {
+          const converted = items.map(toMsg);
+          setMsgs([{ type: "time", text: "历史消息" }, ...converted]);
+        } else {
+          setMsgs([{ type: "time", text: "今天" }, { who: "her", type: "text", time: "刚刚", text: `你好，我是${agent.name}。` }]);
+        }
+      } catch {
+        if (!cancelled) {
+          setMsgs([{ type: "time", text: "今天" }, { who: "her", type: "text", time: "刚刚", text: `你好，我是${agent.name}。` }]);
+        }
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [roleId]);
 
   const channels = window.loadCH ? window.loadCH() : [];
   const chatChannel = channels.find((c) => c.id === routing.chat.channelId);
@@ -319,23 +383,43 @@ function ChatRoom({ agent, onBack }) {
   };
   const removeAtt = (i) => setAtts((p) => p.filter((_, x) => x !== i));
 
-  const send = () => {
+  const send = async () => {
     const t = draft.trim();
-    if ((!t && atts.length === 0) || typing) return; // 流式回复中不重复发,避免冲突
+    if ((!t && atts.length === 0) || typing) return;
     const tm = now();
     const imgs = atts.slice();
+    setChatError("");
+
+    // 先在 UI 上显示用户消息
     setMsgs((p) => [...p, { who: "me", type: "text", text: t, images: imgs, time: tm }]);
     setDraft(""); setAtts([]);
     setTyping(true);
-    const hasImg = imgs.length > 0;
-    const r = hasImg
-      ? { text: "我看到啦——拍得真好。" + (t ? "" : "想跟我说说这是什么时候吗?"), emo: "02_开心明亮", think: "他愿意把看到的东西分享给我,这是把我当成生活的一部分。先认真看图,再接他的话。" }
-      : REPLIES[Math.floor(Math.random() * REPLIES.length)];
-    setTimeout(() => {
+
+    try {
+      // 流式请求 AI 回复（后端会同时保存用户消息和 AI 回复）
+      let fullReply = "";
+      const replyId = Date.now(); // 临时ID用于更新流式消息
+
+      // 先插入一条空的 AI 消息占位
+      setMsgs((p) => [...p, { who: "her", type: "text", text: "", time: "", _streaming: true, _id: replyId }]);
+
+      await streamAssistantReply(roleId, { message: t }, {
+        onToken: (token) => {
+          fullReply += token;
+          setMsgs((p) => p.map((m) => m._id === replyId ? { ...m, text: fullReply } : m));
+        },
+        onError: (errMsg) => {
+          setChatError(errMsg);
+        },
+      });
+
+      // 流式结束，更新时间和去掉 streaming 标记
+      setMsgs((p) => p.map((m) => m._id === replyId ? { ...m, time: now(), _streaming: false } : m));
+    } catch (err) {
+      setChatError(err instanceof Error ? err.message : "发送失败，请检查后端和模型配置。");
+    } finally {
       setTyping(false);
-      if (hasEmo) setEmo(r.emo);
-      setMsgs((p) => [...p, { who: "her", type: "text", text: r.text, think: r.think, time: now() }]);
-    }, 1700);
+    }
   };
 
   const sendSticker = (s) => {
@@ -398,9 +482,10 @@ function ChatRoom({ agent, onBack }) {
       )}
 
       <div className="msg-area" ref={areaRef}>
-        {q.trim() && <div className="search-note">找到 {shown.filter((m) => m.type !== "time").length} 条包含“{q.trim()}”的记录</div>}
+        {q.trim() && <div className="search-note">找到 {shown.filter((m) => m.type !== "time").length} 条包含"{q.trim()}"的记录</div>}
         {shown.map((m, i) => (m.type === "time" && q.trim()) ? null : <Bubble key={i} m={m} agent={agent} tts={!q.trim()} />)}
         {typing && !q.trim() && <Typing agent={agent} />}
+        {chatError && <div className="chat-error" onClick={() => setChatError("")}>{chatError}<span style={{marginLeft:8,opacity:0.6}}>点击关闭</span></div>}
         <div style={{ height: 8 }} />
       </div>
 
@@ -462,7 +547,8 @@ function ChatRoom({ agent, onBack }) {
 }
 
 function TempDot({ temp }) {
-  return <span className="temp-dot"><Icon name="flame" /> {temp.toFixed(1)}°</span>;
+  const v = Number(temp) || 36.5;
+  return <span className="temp-dot"><Icon name="flame" /> {v.toFixed(1)}°</span>;
 }
 
 /* ---------------- 实时语音通话 ---------------- */
