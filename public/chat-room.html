@@ -729,6 +729,54 @@
     }
     .input-wrap textarea::placeholder { color: var(--subtle); opacity: .6; }
 
+    .pending-image-panel {
+      padding: 8px 10px 0;
+      background: rgba(255, 255, 255, .94);
+      border-top: 1px solid var(--line);
+      flex-shrink: 0;
+      position: relative;
+      z-index: 160;
+    }
+    .pending-image-card {
+      width: 112px;
+      min-height: 104px;
+      border-radius: 16px;
+      background: var(--pink-50);
+      border: 1px solid var(--line);
+      box-shadow: 0 8px 20px rgba(212, 83, 126, .12);
+      padding: 6px;
+      position: relative;
+    }
+    .pending-image-card img {
+      width: 100%;
+      height: 86px;
+      display: block;
+      object-fit: cover;
+      border-radius: 12px;
+      background: #fff;
+    }
+    .pending-image-remove {
+      position: absolute;
+      top: -7px;
+      right: -7px;
+      width: 22px;
+      height: 22px;
+      border: 0;
+      border-radius: 50%;
+      background: var(--pink-400);
+      color: #fff;
+      box-shadow: 0 5px 12px rgba(212, 83, 126, .25);
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 22px;
+    }
+    .pending-image-hint {
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--subtle);
+      white-space: nowrap;
+    }
+
     .send-btn {
       width: 34px; height: 34px; border-radius: 50%;
       background: var(--pink-400);
@@ -973,6 +1021,13 @@
   </div>
 
   <!-- 底部输入区 -->
+  <div class="pending-image-panel" id="pendingImagePanel" hidden>
+    <div class="pending-image-card">
+      <button class="pending-image-remove" id="pendingImageRemove" type="button" aria-label="移除图片">×</button>
+      <img id="pendingImagePreview" alt="待发送图片">
+      <div class="pending-image-hint">可以继续打字一起发</div>
+    </div>
+  </div>
   <div class="input-area">
     <div class="tool-btn" id="phoneBtn" aria-label="打电话">
       <svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
@@ -1779,15 +1834,47 @@
       return data.media_url;
     }
 
-    async function sendImageMessage(file) {
+    let pendingImageFile = null;
+    let pendingImageObjectUrl = '';
+
+    function clearPendingImage() {
+      pendingImageFile = null;
+      if (pendingImageObjectUrl) {
+        URL.revokeObjectURL(pendingImageObjectUrl);
+        pendingImageObjectUrl = '';
+      }
+      const panel = document.getElementById('pendingImagePanel');
+      const preview = document.getElementById('pendingImagePreview');
+      if (preview) preview.removeAttribute('src');
+      if (panel) panel.hidden = true;
+    }
+
+    function setPendingImage(file) {
+      if (!file) return false;
+      if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+        alert('先支持 PNG、JPG、WEBP 图片');
+        return false;
+      }
+      clearPendingImage();
+      pendingImageFile = file;
+      pendingImageObjectUrl = URL.createObjectURL(file);
+      const panel = document.getElementById('pendingImagePanel');
+      const preview = document.getElementById('pendingImagePreview');
+      if (preview) preview.src = pendingImageObjectUrl;
+      if (panel) panel.hidden = false;
+      textarea.focus();
+      return true;
+    }
+
+    async function sendImageMessage(file, text = textarea.value.trim()) {
       if (!file || sending || !role.id) return;
       sending = true;
 
       try {
         const mediaUrl = await uploadChatImage(file);
-        const text = textarea.value.trim();
         textarea.value = '';
         textarea.style.height = 'auto';
+        clearPendingImage();
 
         appendMessage({
           role: 'user',
@@ -1974,6 +2061,14 @@
 
     async function sendMessage() {
       const text = textarea.value.trim();
+      if (pendingImageFile) {
+        try {
+          await sendImageMessage(pendingImageFile, text);
+        } catch (e) {
+          appendMessage({ role: 'assistant', content: `（发图失败：${e.message}）`, created_at: Date.now() });
+        }
+        return;
+      }
       if (!text || sending || !role.id) return;
       sending = true;
       textarea.value = '';
@@ -2279,24 +2374,24 @@
     document.getElementById('imageBtn').addEventListener('click', () => {
       chatImageInput?.click();
     });
-    chatImageInput?.addEventListener('change', async event => {
+    chatImageInput?.addEventListener('change', event => {
       const input = event.target;
       const file = input?.files?.[0];
       if (!file) return;
+      setPendingImage(file);
+      input.value = '';
+    });
 
-      if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
-        alert('先֧持 PNG、JPG、WEBP ͼƬ');
-        input.value = '';
-        return;
-      }
+    document.getElementById('pendingImageRemove')?.addEventListener('click', clearPendingImage);
 
-      try {
-        await sendImageMessage(file);
-      } catch (error) {
-        appendMessage({ role: 'assistant', content: `（发ͼʧ败：${error.message}）`, created_at: Date.now() });
-      } finally {
-        input.value = '';
-      }
+    document.addEventListener('paste', event => {
+      const items = Array.from(event.clipboardData?.items || []);
+      const imageItem = items.find(item => item.kind === 'file' && item.type.startsWith('image/'));
+      if (!imageItem) return;
+      const file = imageItem.getAsFile();
+      if (!file) return;
+      event.preventDefault();
+      setPendingImage(file);
     });
 
     (function pseudo2dAnim() {
