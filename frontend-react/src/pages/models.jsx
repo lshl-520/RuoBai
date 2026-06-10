@@ -1,5 +1,6 @@
 import React from "react";
-import { Icon } from "../store.jsx";
+import { Icon, PROVIDERS, CHANNEL_TYPES, CAP_LABELS, CHANNELS, ROUTING, VOICE_ENGINES } from "../store.jsx";
+import { Toggle, StatusDot, Row } from "./profile.jsx";
 /* 模型接入 2.0 — 接口渠道 + 用途路由 + 模型获取/切换 + 语音TTS
    概念: 渠道(一个 base/key) 与 用途(聊天/图片/语音) 解耦,各用途各自选渠道+模型,随时切换。 */
 const { useState: useStateMo } = React;
