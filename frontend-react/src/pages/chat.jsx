@@ -1,7 +1,7 @@
 import React from "react";
 import { Icon, Bars, greetByHour } from "../store.jsx";
 import { getRoles, getRolePortraitSrc, clampIntimacy } from "../lib/roles.js";
-import { getMessages, streamAssistantReply, saveMessage } from "../lib/chat.js";
+import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage } from "../lib/chat.js";
 /* 聊天列表 + 聊天室(沉浸: 常驻立绘随情绪变化 / 全屏立绘 / 语音 / 表情包 / 思考过程 / 搜索) */
 const { useState: useStateC, useRef: useRefC, useEffect: useEffectC } = React;
 
@@ -334,7 +334,9 @@ function ChatRoom({ agent, onBack }) {
   const [modelOpen, setModelOpen] = useStateC(false);
   const [routing, setRouting] = useStateC(() => (window.loadRT ? window.loadRT() : { chat: { channelId: "", model: "对话模型" } }));
   const [chatError, setChatError] = useStateC("");
+  const [uploading, setUploading] = useStateC(false);
   const areaRef = useRefC(null);
+  const fileRef = useRefC(null);
 
   /* 加载历史消息 */
   useEffectC(() => {
@@ -376,27 +378,60 @@ function ChatRoom({ agent, onBack }) {
 
   const now = () => { const n = new Date(); return n.getHours() + ":" + String(n.getMinutes()).padStart(2, "0"); };
 
-  const SCENE_IMGS = ["assets/scene-cafe.png", "assets/scene-sunset.png"];
-  const addAttachment = () => {
-    if (atts.length >= 3) return;
-    setAtts((p) => [...p, SCENE_IMGS[p.length % SCENE_IMGS.length]]);
+  /* 真实图片：选图/粘贴 → 上传后端拿到 media_url（先支持单张，对齐旧版 HTML） */
+  const handleImageFile = async (file) => {
+    if (!file) return;
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      setChatError("先支持 PNG、JPG、WEBP 图片");
+      return;
+    }
+    setUploading(true); setChatError("");
+    try {
+      const url = await uploadChatImage(file);
+      setAtts([url]);
+    } catch (e) {
+      setChatError(e instanceof Error ? e.message : "上传图片失败");
+    } finally {
+      setUploading(false);
+    }
   };
+  const openPicker = () => { if (!uploading) fileRef.current?.click(); };
+  const onPickImage = (e) => { handleImageFile(e.target.files?.[0]); e.target.value = ""; };
   const removeAtt = (i) => setAtts((p) => p.filter((_, x) => x !== i));
+
+  /* 粘贴图片（对齐旧版 chat-room.html 的剪贴板逻辑） */
+  useEffectC(() => {
+    const onPaste = (e) => {
+      const items = Array.from(e.clipboardData?.items || []);
+      const imageItem = items.find((it) => it.kind === "file" && it.type.startsWith("image/"));
+      if (!imageItem) return;
+      const file = imageItem.getAsFile();
+      if (file) { e.preventDefault(); handleImageFile(file); }
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, []);
 
   const send = async () => {
     const t = draft.trim();
-    if ((!t && atts.length === 0) || typing) return;
+    const imgUrl = atts[0] || ""; // 单张图的真实 media_url
+    if ((!t && !imgUrl) || typing || uploading) return;
     const tm = now();
-    const imgs = atts.slice();
     setChatError("");
 
-    // 先在 UI 上显示用户消息
-    setMsgs((p) => [...p, { who: "me", type: "text", text: t, images: imgs, time: tm }]);
+    // 先在 UI 上显示用户消息（带图则显示图）
+    setMsgs((p) => [...p, { who: "me", type: imgUrl ? "image" : "text", text: t, images: imgUrl ? [imgUrl] : [], time: tm }]);
     setDraft(""); setAtts([]);
     setTyping(true);
 
     try {
-      // 流式请求 AI 回复（后端会同时保存用户消息和 AI 回复）
+      // 1) 先把用户这条消息存进数据库（落库失败不阻断对话）
+      const userPayload = imgUrl
+        ? { role: "user", content: t, message_type: "image", media_url: imgUrl }
+        : { role: "user", content: t };
+      try { await saveUserMessage(roleId, userPayload); } catch (e) { /* 落库失败仍继续 */ }
+
+      // 2) 流式请求 AI 回复（带图时让她看图识别）
       let fullReply = "";
       const replyId = Date.now(); // 临时ID用于更新流式消息
 
@@ -404,7 +439,11 @@ function ChatRoom({ agent, onBack }) {
       setMsgs((p) => [...p, { who: "her", type: "text", text: "", time: "", _streaming: true, _id: replyId }]);
       setTyping(false);
 
-      await streamAssistantReply(roleId, { content: t, role: "user" }, {
+      const streamPayload = imgUrl
+        ? { content: t, role: "user", message_type: "image", media_url: imgUrl }
+        : { content: t, role: "user" };
+
+      await streamAssistantReply(roleId, streamPayload, {
         onToken: (token) => {
           fullReply += token;
           setMsgs((p) => p.map((m) => m._id === replyId ? { ...m, text: fullReply } : m));
@@ -416,6 +455,11 @@ function ChatRoom({ agent, onBack }) {
 
       // 流式结束，更新时间和去掉 streaming 标记
       setMsgs((p) => p.map((m) => m._id === replyId ? { ...m, time: now(), _streaming: false } : m));
+
+      // 3) 把 AI 回复也存进数据库（保存失败不阻断）
+      if (fullReply.trim()) {
+        try { await saveMessage(roleId, { role: "assistant", content: fullReply }); } catch (e) { /* 保存回复失败仍继续 */ }
+      }
     } catch (err) {
       setChatError(err instanceof Error ? err.message : "发送失败，请检查后端和模型配置。");
     } finally {
@@ -499,7 +543,7 @@ function ChatRoom({ agent, onBack }) {
       {calling && <CallScreen agent={agent} figSrc={figSrc} onClose={() => setCalling(false)} />}
 
       <footer className="input-bar">
-        {atts.length > 0 && (
+        {(atts.length > 0 || uploading) && (
           <div className="att-tray">
             {atts.map((src, i) => (
               <div className="att-thumb" key={i}>
@@ -507,12 +551,13 @@ function ChatRoom({ agent, onBack }) {
                 <button className="att-x" onClick={() => removeAtt(i)}>×</button>
               </div>
             ))}
-            <div className="att-hint">先配图,再打字,一起发给{agent.name}</div>
+            <div className="att-hint">{uploading ? "图片上传中…" : `配好图,再打字,一起发给${agent.name}`}</div>
           </div>
         )}
         <div className="input-row">
           <button className="ib-tool" onClick={() => setCalling(true)}><Icon name="phone" /></button>
-          <button className="ib-tool" onClick={addAttachment} style={atts.length ? { color: "var(--rose)" } : null}><Icon name="image" /></button>
+          <button className="ib-tool" onClick={openPicker} disabled={uploading} style={(atts.length || uploading) ? { color: "var(--rose)" } : null}><Icon name="image" /></button>
+          <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={onPickImage} />
           <button className="ib-tool" onClick={() => setStickerOpen(!stickerOpen)} style={stickerOpen ? { color: "var(--rose)" } : null}><Icon name="star" /></button>
           <div className="ib-field">
             <textarea value={draft} rows={1} onFocus={() => setStickerOpen(false)}
@@ -521,7 +566,7 @@ function ChatRoom({ agent, onBack }) {
               placeholder={typing ? `${agent.name}正在回复…` : `和${agent.name}说点什么…`} />
           </div>
           {(draft.trim() || atts.length > 0)
-            ? <button className={"ib-send on" + (typing ? " busy" : "")} onClick={send} disabled={typing}><Icon name="send" /></button>
+            ? <button className={"ib-send on" + (typing ? " busy" : "")} onClick={send} disabled={typing || uploading}><Icon name="send" /></button>
             : <button className="ib-tool" onClick={() => setListening(true)}><Icon name="mic" /></button>}
         </div>
       </footer>
