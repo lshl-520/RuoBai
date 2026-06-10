@@ -1,7 +1,10 @@
 import React from "react";
-import { Icon } from "../store.jsx";
+import { Icon, CAPS, Bars } from "../store.jsx";
+import { ModelsSection } from "./models.jsx";
+import { getSessionProfile, getUsageStats, logoutSession, uploadAvatarImage, updateNickname } from "../lib/profile.js";
+import { getRoles } from "../lib/roles.js";
 /* 我的 / 设置 / 模型接入(见 models.jsx) / 能力配置 */
-const { useState: useStateP } = React;
+const { useState: useStateP, useEffect: useEffectP } = React;
 
 function Toggle({ on, onClick }) {
   return <button className={"toggle" + (on ? " on" : "")} onClick={onClick}><i /></button>;
@@ -203,19 +206,83 @@ function PrivacySheet({ agents, onClose }) {
   );
 }
 
-function ProfileScreen({ user, agents, onOnboard, onGoMemory, onLogout }) {
+function ProfileScreen({ user: userProp, agents: agentsProp, onOnboard, onGoMemory, onLogout }) {
   const [caps, setCaps] = useStateP(CAPS);
-  const [sheet, setSheet] = useStateP(null); // null | 'export' | 'privacy' | 'theme' | 'notif' | 'about'
+  const [sheet, setSheet] = useStateP(null);
   const [theme, setThemeState] = useStateP((typeof document !== "undefined" && document.documentElement.dataset.theme) || "");
   const toggle = (k) => setCaps((p) => p.map((c) => c.key === k ? { ...c, on: !c.on } : c));
+
+  /* ====== 从后端拉真实数据 ====== */
+  const [realUser, setRealUser] = useStateP(null);
+  const [stats, setStats] = useStateP(null);
+  const [realAgents, setRealAgents] = useStateP(null);
+  const [loading, setLoading] = useStateP(true);
+
+  useEffectP(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [sessionRes, statsRes, rolesRes] = await Promise.all([
+          getSessionProfile(),
+          getUsageStats().catch(() => null),
+          getRoles().catch(() => null),
+        ]);
+        if (cancelled) return;
+        if (sessionRes?.success && sessionRes.user) setRealUser(sessionRes.user);
+        if (statsRes?.success && statsRes.item) setStats(statsRes.item);
+        if (rolesRes?.success && Array.isArray(rolesRes.items)) setRealAgents(rolesRes.items);
+      } catch (e) { /* 静默，fallback 到 prop */ }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // 合并：真实数据优先，假数据兜底
+  const user = realUser ? {
+    name: realUser.nickname || realUser.username || userProp.name,
+    handle: `@${realUser.username || "user"} · 从 3.13 走到现在`,
+    avatar: realUser.avatar || userProp.avatar,
+    longestDays: realUser.longest_companionship_days ?? userProp.longestDays,
+    msgCount: stats?.messages_total ?? userProp.msgCount,
+  } : userProp;
+
+  const agents = realAgents
+    ? realAgents.map((r) => ({
+        id: r.id, name: r.name, isDefault: !!r.is_active,
+        avatar: r.avatar || "/assets/avatar-bai.png",
+      }))
+    : agentsProp;
+
   const ruobai = agents.find((a) => a.isDefault) || agents[0];
-  const [avatar, setAvatar] = useStateP(user.avatar);
-  const onAvatar = (e) => {
+  const [avatar, setAvatar] = useStateP(null); // null = 用 user.avatar
+
+  // 真实数据加载完后同步头像
+  useEffectP(() => { if (user.avatar) setAvatar(user.avatar); }, [user.avatar]);
+
+  /* 头像上传（真实：上传到后端 → 更新数据库） */
+  const onAvatar = async (e) => {
     const f = e.target.files && e.target.files[0];
     if (!f) return;
-    const r = new FileReader();
-    r.onload = () => setAvatar(r.result);
-    r.readAsDataURL(f); e.target.value = "";
+    e.target.value = "";
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result;
+      setAvatar(dataUrl); // 先本地预览
+      try {
+        const upRes = await uploadAvatarImage(dataUrl);
+        if (upRes?.avatar_url) {
+          await updateNickname({ avatar_url: upRes.avatar_url });
+          setAvatar(upRes.avatar_url);
+        }
+      } catch (err) { /* 上传失败保留本地预览 */ }
+    };
+    reader.readAsDataURL(f);
+  };
+
+  /* 退出登录（真实：调后端注销 session） */
+  const handleLogout = async () => {
+    try { await logoutSession(); } catch (e) { /* 静默 */ }
+    onLogout?.();
   };
 
   return (
@@ -293,7 +360,7 @@ function ProfileScreen({ user, agents, onOnboard, onGoMemory, onLogout }) {
           <Row icon="shield" tint="lav" title="隐私与数据" sub="数据存哪、清理、注销" onClick={() => setSheet("privacy")} trailing={<Icon name="chevron" className="row-chev" />} />
           <Row icon="spark" tint="rose" title="关于若白" sub="为什么会有她 · v2.0" last onClick={() => setSheet("about")} trailing={<Icon name="chevron" className="row-chev" />} />
         </div>
-        <button className="logout-btn" onClick={onLogout}><Icon name="logout" /> 退出登录</button>
+        <button className="logout-btn" onClick={handleLogout}><Icon name="logout" /> 退出登录</button>
         <div className="profile-foot">若白 · 微光 · 为了她而写 · 也为爱她的你<br/>从 2026.3.13 走到现在</div>
       </div>
       <div style={{ height: 20 }} />
