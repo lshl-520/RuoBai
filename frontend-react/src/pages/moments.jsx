@@ -1,9 +1,38 @@
 import React from "react";
-import { Icon } from "../store.jsx";
-/* 动态 / 朋友圈 — 可浏览, 我也能发(宣泄口) */
-const { useState: useStateM } = React;
+import { Icon, Bars } from "../store.jsx";
+import { getRoles } from "../lib/roles.js";
+import { getMoments, createMoment, likeMoment as apiLike } from "../lib/moments.js";
+import { getSessionProfile } from "../lib/profile.js";
+/* 动态 / 朋友圈 — 从后端拉真实数据 */
+const { useState: useStateM, useEffect: useEffectM } = React;
 
 const MOODS = ["想记录", "宣泄一下", "今天很好", "有点累", "深夜emo", "想她了"];
+
+/* 后端动态 → 前端格式 */
+function mapMoment(m, agentsMap, user) {
+  const isUser = !m.character_id;
+  const agent = agentsMap.get(m.character_id);
+  const d = m.created_at ? new Date(m.created_at) : null;
+  const timeStr = d ? `${d.getMonth() + 1}/${d.getDate()} ${d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}` : "";
+  return {
+    id: m.id,
+    who: isUser ? (user?.name || "我") : (agent?.name || "她"),
+    agentId: m.character_id || 0,
+    avatar: isUser ? (user?.avatar || "/assets/avatar.png") : (agent?.avatar || "/assets/avatar-bai.png"),
+    tag: isUser ? "我" : "她",
+    tagType: isUser ? "lav" : "rose",
+    time: timeStr,
+    content: m.content || "",
+    mood: "",
+    images: Array.isArray(m.images) ? m.images : [],
+    likes: m.likes_count || 0,
+    liked: !!m.liked,
+    comments: (m.comments || []).map((c) => ({
+      name: c.character_id ? (agentsMap.get(c.character_id)?.name || "她") : (user?.name || "我"),
+      text: c.content || "",
+    })),
+  };
+}
 
 function MomentCard({ m, onLike }) {
   return (
@@ -87,10 +116,79 @@ function Composer({ user, onClose, onPost }) {
   );
 }
 
-function MomentsScreen({ moments, agents, user, onLike, onPost }) {
+function MomentsScreen({ moments: momentsProp, agents: agentsProp, user: userProp, onLike: onLikeProp, onPost: onPostProp }) {
   const [composing, setComposing] = useStateM(false);
-  const [filter, setFilter] = useStateM(null); // null=全部, agentId
+  const [filter, setFilter] = useStateM(null);
+
+  /* 从后端拉真实数据 */
+  const [realAgents, setRealAgents] = useStateM(null);
+  const [realMoments, setRealMoments] = useStateM(null);
+  const [realUser, setRealUser] = useStateM(null);
+  const [loading, setLoading] = useStateM(true);
+
+  const agents = realAgents || agentsProp || [];
+  const user = realUser || userProp || { name: "我", avatar: "/assets/avatar.png" };
+
+  const agentsMap = React.useMemo(() => {
+    const m = new Map();
+    agents.forEach((a) => m.set(a.id, a));
+    return m;
+  }, [agents]);
+
+  const fetchMoments = async (charId) => {
+    try {
+      const res = await getMoments(charId ? { characterId: charId } : {});
+      if (res?.success && Array.isArray(res.items)) {
+        setRealMoments(res.items.map((m) => mapMoment(m, agentsMap, user)));
+      }
+    } catch (e) { /* 静默 */ }
+  };
+
+  useEffectM(() => {
+    (async () => {
+      try {
+        const [rolesRes, sessionRes] = await Promise.all([
+          getRoles().catch(() => null),
+          getSessionProfile().catch(() => null),
+        ]);
+        if (rolesRes?.success && Array.isArray(rolesRes.items)) {
+          setRealAgents(rolesRes.items.map((r) => ({
+            id: r.id, name: r.name, isDefault: !!r.is_active,
+            avatar: r.avatar || "/assets/avatar-bai.png",
+          })));
+        }
+        if (sessionRes?.success && sessionRes.user) {
+          setRealUser({
+            name: sessionRes.user.nickname || sessionRes.user.username,
+            avatar: sessionRes.user.avatar || "/assets/avatar.png",
+          });
+        }
+      } catch (e) { /* 静默 */ }
+      setLoading(false);
+    })();
+  }, []);
+
+  /* agents 和 user 加载好后再拉动态（需要 agentsMap 做字段映射） */
+  useEffectM(() => {
+    if (loading) return;
+    fetchMoments(filter);
+  }, [loading, filter, agents.length]);
+
+  const moments = realMoments ?? momentsProp ?? [];
   const list = filter ? moments.filter((m) => m.agentId === filter) : moments;
+
+  const handleLike = async (id) => {
+    try { await apiLike(id); } catch (e) { /* 静默 */ }
+    fetchMoments(filter);
+  };
+
+  const handlePost = async (data) => {
+    try {
+      await createMoment({ content: data.content, mood: data.mood });
+    } catch (e) { /* 静默 */ }
+    setComposing(false);
+    fetchMoments(filter);
+  };
   return (
     <div className="screen anim-screen">
       <div className="statusbar on-photo"><span className="time">9:41</span><span className="notch" /><span className="icons"><Bars /></span></div>
@@ -125,7 +223,7 @@ function MomentsScreen({ moments, agents, user, onLike, onPost }) {
             <div className="empty-state-desc">但这里一直留着，等她们过来说说今天的事。</div>
           </div>
         )}
-        {list.map((m) => <MomentCard key={m.id} m={m} onLike={onLike} />)}
+        {list.map((m) => <MomentCard key={m.id} m={m} onLike={handleLike} />)}
         <div style={{ height: 20 }} />
       </div>
 
@@ -133,7 +231,7 @@ function MomentsScreen({ moments, agents, user, onLike, onPost }) {
 
       {composing && (
         <Composer user={user} onClose={() => setComposing(false)}
-          onPost={(data) => { onPost(data); setComposing(false); }} />
+          onPost={handlePost} />
       )}
     </div>
   );
