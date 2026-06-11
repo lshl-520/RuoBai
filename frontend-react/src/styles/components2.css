@@ -69,10 +69,10 @@
 .sp-item:active { transform: scale(0.86); background: var(--rose-tint); }
 
 /* 全屏立绘 */
-.bigview { position: absolute; inset: 0; z-index: 70; background: linear-gradient(to bottom, #2a2030, #1a141d); display: flex; align-items: flex-end; justify-content: center; animation: fadeIn 0.3s ease; overflow: hidden; }
+.bigview { position: absolute; inset: 0; z-index: 70; background: linear-gradient(to bottom, #2a2030, #1a141d); display: flex; align-items: center; justify-content: center; animation: fadeIn 0.3s ease; overflow: hidden; }
 .bigview-glow { position: absolute; top: 8%; left: 50%; transform: translateX(-50%); width: 420px; height: 420px; border-radius: 50%; background: radial-gradient(circle, rgba(170,150,210,0.5), transparent 65%); filter: blur(10px); animation: glowPulse 6s ease-in-out infinite; }
-.bigview-fig { position: relative; z-index: 1; width: 92%; max-width: 380px; object-fit: contain; object-position: bottom; filter: drop-shadow(0 20px 50px rgba(0,0,0,0.5)); animation: bigFigIn 0.5s cubic-bezier(0.2,0.8,0.2,1), breatheFig 7s ease-in-out 0.5s infinite; }
-@keyframes bigFigIn { from { opacity: 0; transform: translateX(-50%) translateY(30px) scale(0.96); } to { opacity: 1; } }
+.bigview-fig { position: relative; z-index: 1; width: 92%; max-width: 380px; max-height: 70vh; object-fit: contain; object-position: center; filter: drop-shadow(0 20px 50px rgba(0,0,0,0.5)); animation: bigFigIn 0.5s cubic-bezier(0.2,0.8,0.2,1), breatheFig 7s ease-in-out 0.5s infinite; }
+@keyframes bigFigIn { from { opacity: 0; transform: translateY(30px) scale(0.96); } to { opacity: 1; } }
 .bigview-scrim { position: absolute; left: 0; right: 0; bottom: 0; height: 50%; background: linear-gradient(to bottom, transparent, rgba(20,16,22,0.85)); z-index: 2; }
 .bigview-text { position: absolute; left: 0; right: 0; bottom: 44px; z-index: 3; text-align: center; color: #fff; }
 .bigview-name { font-size: 30px; font-weight: 600; letter-spacing: 1px; }
