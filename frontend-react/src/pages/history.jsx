@@ -146,8 +146,7 @@ function ChatHistoryView({ agent, onBack }) {
   if (loading) {
     return (
       <div className="screen chat-screen anim-screen" style={{ background: "var(--paper)" }}>
-        <div className="statusbar"><span className="time">9:41</span><span className="notch" /><span className="icons"><Bars /></span></div>
-        <header className="chat-top">
+          <header className="chat-top">
           <button className="ct-back" onClick={onBack}><Icon name="back" /></button>
           <div className="ct-info"><div className="ct-name">{agent.name}</div><div className="ct-meta">加载中…</div></div>
         </header>
@@ -160,7 +159,6 @@ function ChatHistoryView({ agent, onBack }) {
 
   return (
     <div className="screen chat-screen anim-screen" style={{ background: "var(--paper)" }}>
-      <div className="statusbar"><span className="time">9:41</span><span className="notch" /><span className="icons"><Bars /></span></div>
       <header className="chat-top">
         <button className="ct-back" onClick={onBack}><Icon name="back" /></button>
         <div className="ct-avatar"><img src={agent.avatar || "/assets/avatar-bai.png"} alt="" /></div>

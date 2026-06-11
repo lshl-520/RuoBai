@@ -191,7 +191,6 @@ function MomentsScreen({ moments: momentsProp, agents: agentsProp, user: userPro
   };
   return (
     <div className="screen anim-screen">
-      <div className="statusbar on-photo"><span className="time">9:41</span><span className="notch" /><span className="icons"><Bars /></span></div>
 
       <div className="moments-cover">
         <img src="assets/scene-sunset.png" alt="" className="mc-bg" />

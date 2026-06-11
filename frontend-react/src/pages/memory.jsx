@@ -168,7 +168,6 @@ function MemoryScreen({ agents: agentsProp }) {
 
   return (
     <div className="screen anim-screen">
-      <div className="statusbar"><span className="time">9:41</span><span className="notch" /><span className="icons"><Bars /></span></div>
       <div className="topbar">
         <div>
           <h1>记忆</h1>
