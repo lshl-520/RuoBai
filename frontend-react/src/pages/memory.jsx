@@ -202,10 +202,13 @@ function MemoryScreen({ agents: agentsProp }) {
         </div>
 
         {sorted.length === 0 ? (
-          <div className="empty-state">
-            <img className="empty-state-img" src="/assets/empty-memory.png" alt="" />
-            <div className="empty-state-title">以后的每一天</div>
-            <div className="empty-state-desc">她都会记住。点右上角「新建」，写下要{agent.name}记住的事。</div>
+          <div className="empty-immersive">
+            <img className="empty-immersive-img" src="/assets/empty-memory.png" alt="" />
+            <div className="empty-immersive-scrim" />
+            <div className="empty-immersive-guide">
+              <div className="empty-state-title">以后的每一天</div>
+              <div className="empty-state-desc">她都会记住。点右上角「新建」，写下要{agent.name}记住的事。</div>
+            </div>
           </div>
         ) : (
           <div className="mem-list">
