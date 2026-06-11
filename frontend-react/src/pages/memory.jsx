@@ -1,7 +1,10 @@
 import React from "react";
-import { Icon } from "../store.jsx";
-/* 记忆页 — 多角色记忆管理 + 完整聊天记录(查看器见 history.jsx) */
-const { useState: useStateMem } = React;
+import { Icon, Bars } from "../store.jsx";
+import { getRoles } from "../lib/roles.js";
+import { getMemories, createMemory, updateMemory as apiUpdateMemory, deleteMemory as apiDeleteMemory } from "../lib/memory.js";
+import { ChatHistoryView } from "./history.jsx";
+/* 记忆页 — 多角色记忆管理 + 完整聊天记录 */
+const { useState: useStateMem, useEffect: useEffectMem } = React;
 
 /* 记忆编辑/新建 */
 function MemoryEditor({ agent, memory, onClose, onSave }) {
@@ -65,13 +68,101 @@ function MemoryCard({ m, onPin, onEdit, onDelete }) {
   );
 }
 
-function MemoryScreen({ agents, memories, onAdd, onUpdate, onDelete, onPin }) {
-  const [activeId, setActiveId] = useStateMem(agents[0]?.id);
+function MemoryScreen({ agents: agentsProp }) {
+  const [realAgents, setRealAgents] = useStateMem(null);
+  const agents = realAgents || agentsProp || [];
+
+  const [activeId, setActiveId] = useStateMem(null);
+  const [list, setList] = useStateMem([]);
+  const [loading, setLoading] = useStateMem(true);
   const [editor, setEditor] = useStateMem(undefined);
   const [history, setHistory] = useStateMem(false);
-  const agent = agents.find((a) => a.id === activeId) || agents[0];
-  const list = memories[activeId] || [];
+
+  /* 拉真实角色列表 */
+  useEffectMem(() => {
+    (async () => {
+      try {
+        const res = await getRoles();
+        if (res?.success && Array.isArray(res.items)) {
+          const mapped = res.items.map((r) => ({
+            id: r.id, name: r.name, isDefault: !!r.is_active,
+            avatar: r.avatar || "/assets/avatar-bai.png",
+          }));
+          setRealAgents(mapped);
+          if (mapped.length && !activeId) setActiveId(mapped[0].id);
+        }
+      } catch (e) { /* 静默用 prop fallback */ }
+    })();
+  }, []);
+
+  /* 初始化：如果没选中角色且 agents 有数据，选第一个 */
+  useEffectMem(() => {
+    if (!activeId && agents.length) setActiveId(agents[0].id);
+  }, [agents]);
+
+  /* 切换角色时拉该角色的记忆 */
+  useEffectMem(() => {
+    if (!activeId) return;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await getMemories(activeId);
+        if (!cancelled && res?.success && Array.isArray(res.data)) {
+          setList(res.data.map((m) => ({
+            id: m.id,
+            content: m.content || "",
+            tag: m.tag || "",
+            category: m.category || "",
+            isImportant: !!m.is_important,
+            dateText: m.created_at ? new Date(m.created_at).toLocaleDateString("zh-CN") : "",
+          })));
+        }
+      } catch (e) { setList([]); }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [activeId]);
+
+  const agent = agents.find((a) => a.id === activeId) || agents[0] || { id: 0, name: "加载中", avatar: "" };
   const sorted = [...list].sort((a, b) => (b.isImportant ? 1 : 0) - (a.isImportant ? 1 : 0));
+
+  /* 操作：调后端 API 后刷新列表 */
+  const refreshList = async () => {
+    if (!activeId) return;
+    try {
+      const res = await getMemories(activeId);
+      if (res?.success && Array.isArray(res.data)) {
+        setList(res.data.map((m) => ({
+          id: m.id, content: m.content || "", tag: m.tag || "",
+          category: m.category || "", isImportant: !!m.is_important,
+          dateText: m.created_at ? new Date(m.created_at).toLocaleDateString("zh-CN") : "",
+        })));
+      }
+    } catch (e) { /* 静默 */ }
+  };
+
+  const handleSave = async (data) => {
+    try {
+      if (data.id) {
+        await apiUpdateMemory(data.id, { content: data.content, tag: data.tag, category: data.category, is_important: data.isImportant });
+      } else {
+        await createMemory(activeId, { content: data.content, tag: data.tag, category: data.category, is_important: data.isImportant });
+      }
+    } catch (e) { /* 静默 */ }
+    setEditor(undefined);
+    refreshList();
+  };
+
+  const handleDelete = async (m) => {
+    try { await apiDeleteMemory(m.id); } catch (e) { /* 静默 */ }
+    refreshList();
+  };
+
+  const handlePin = async (m) => {
+    try { await apiUpdateMemory(m.id, { is_important: !m.isImportant }); } catch (e) { /* 静默 */ }
+    refreshList();
+  };
 
   if (history) return <ChatHistoryView agent={agent} onBack={() => setHistory(false)} />;
 
@@ -121,9 +212,9 @@ function MemoryScreen({ agents, memories, onAdd, onUpdate, onDelete, onPin }) {
           <div className="mem-list">
             {sorted.map((m) => (
               <MemoryCard key={m.id} m={m}
-                onPin={(x) => onPin(activeId, x)}
+                onPin={(x) => handlePin(x)}
                 onEdit={(x) => setEditor(x)}
-                onDelete={(x) => onDelete(activeId, x.id)} />
+                onDelete={(x) => handleDelete(x)} />
             ))}
           </div>
         )}
@@ -133,10 +224,7 @@ function MemoryScreen({ agents, memories, onAdd, onUpdate, onDelete, onPin }) {
       {editor !== undefined && (
         <MemoryEditor agent={agent} memory={editor}
           onClose={() => setEditor(undefined)}
-          onSave={(data) => {
-            if (data.id) onUpdate(activeId, data); else onAdd(activeId, data);
-            setEditor(undefined);
-          }} />
+          onSave={handleSave} />
       )}
     </div>
   );
