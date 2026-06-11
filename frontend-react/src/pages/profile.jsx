@@ -287,7 +287,6 @@ function ProfileScreen({ user: userProp, agents: agentsProp, onOnboard, onGoMemo
 
   return (
     <div className="screen anim-screen">
-      <div className="statusbar"><span className="time">9:41</span><span className="notch" /><span className="icons"><Bars /></span></div>
 
       <div className="topbar">
         <div><h1>我的</h1><div className="sub">这片小天地由你掌管</div></div>
