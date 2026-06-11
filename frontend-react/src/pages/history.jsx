@@ -1,5 +1,7 @@
 import React from "react";
-import { Icon } from "../store.jsx";
+import { Icon, Bars } from "../store.jsx";
+import { Bubble } from "./chat.jsx";
+import { getMessages } from "../lib/chat.js";
 /* 聊天记录查看器 — 微信式:窗口化懒加载 + 日期分隔 + 搜索定位 + 按日期跳转 + 导出
    性能说明:即使上万条,也只渲染「最近一个窗口」(默认 30 条),
    向上滚到顶才追加上一页(每页 24 条),并保持滚动位置不跳。
@@ -39,15 +41,41 @@ function downloadHistory(agent, full) {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-function getFullHistory(agentId) {
-  return (window.LONG_HISTORY && window.LONG_HISTORY[agentId]) ||
-    ((window.HISTORY && window.HISTORY[agentId]) || []).filter((m) => m.type !== "time");
+/* 后端消息 → 前端格式 */
+function mapMessage(m) {
+  const d = m.created_at ? new Date(m.created_at) : null;
+  return {
+    who: m.role === "user" ? "me" : "her",
+    text: m.content || "",
+    type: m.message_type || "text",
+    images: m.media_url ? [m.media_url] : [],
+    time: d ? d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }) : "",
+    day: d ? `${d.getMonth() + 1}/${d.getDate()}` : "",
+  };
 }
 
 function ChatHistoryView({ agent, onBack }) {
-  const full = getFullHistory(agent.id);
-  const total = full.filter((m) => m.type !== "time").length;
-  const days = React.useMemo(() => [...new Set(full.map((m) => m.day).filter(Boolean))], [agent.id]);
+  const [full, setFull] = useStateH([]);
+  const [loading, setLoading] = useStateH(true);
+
+  /* 从后端拉真实聊天记录 */
+  useEffectH(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await getMessages(agent.id, 200);
+        if (!cancelled && res?.success && Array.isArray(res.items)) {
+          setFull(res.items.map(mapMessage));
+        }
+      } catch (e) { /* 静默 */ }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [agent.id]);
+
+  const total = full.length;
+  const days = React.useMemo(() => [...new Set(full.map((m) => m.day).filter(Boolean))], [full]);
 
   const [count, setCount] = useStateH(Math.min(full.length, HIST_INIT));
   const [q, setQ] = useStateH("");
@@ -59,8 +87,11 @@ function ChatHistoryView({ agent, onBack }) {
   const prevH = useRefH(0);
   const loadingMore = useRefH(false);
 
-  /* 初次:滚到底(最新一条) */
-  useEffectH(() => { const el = areaRef.current; if (el) el.scrollTop = el.scrollHeight; }, []);
+  /* 初次/数据加载完:重置窗口并滚到底(最新一条) */
+  useEffectH(() => {
+    setCount(Math.min(full.length, HIST_INIT));
+    setTimeout(() => { const el = areaRef.current; if (el) el.scrollTop = el.scrollHeight; }, 50);
+  }, [full]);
 
   /* 加载更早后:保持滚动位置不跳 */
   useLayoutH(() => {
@@ -95,7 +126,7 @@ function ChatHistoryView({ agent, onBack }) {
   const matches = q.trim() ? full.map((m, i) => ({ m, i })).filter((x) => (x.m.text || "").includes(q.trim())) : [];
 
   /* 渲染窗口 */
-  const startIdx = full.length - count;
+  const startIdx = Math.max(0, full.length - count);
   const slice = full.slice(startIdx);
   let lastDay = null;
   const rows = slice.map((m, i) => {
@@ -112,12 +143,27 @@ function ChatHistoryView({ agent, onBack }) {
     );
   });
 
+  if (loading) {
+    return (
+      <div className="screen chat-screen anim-screen" style={{ background: "var(--paper)" }}>
+        <div className="statusbar"><span className="time">9:41</span><span className="notch" /><span className="icons"><Bars /></span></div>
+        <header className="chat-top">
+          <button className="ct-back" onClick={onBack}><Icon name="back" /></button>
+          <div className="ct-info"><div className="ct-name">{agent.name}</div><div className="ct-meta">加载中…</div></div>
+        </header>
+        <div className="msg-area" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ opacity: 0.5 }}>正在读取聊天记录…</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="screen chat-screen anim-screen" style={{ background: "var(--paper)" }}>
       <div className="statusbar"><span className="time">9:41</span><span className="notch" /><span className="icons"><Bars /></span></div>
       <header className="chat-top">
         <button className="ct-back" onClick={onBack}><Icon name="back" /></button>
-        <div className="ct-avatar"><img src={agent.avatar} alt="" /></div>
+        <div className="ct-avatar"><img src={agent.avatar || "/assets/avatar-bai.png"} alt="" /></div>
         <div className="ct-info">
           <div className="ct-name">{agent.name}</div>
           <div className="ct-meta">完整聊天记录 · 共 {total} 条</div>
@@ -190,4 +236,4 @@ function hl(text, q) {
   return <>{text.slice(0, idx)}<mark className="sr-mark">{q}</mark>{text.slice(idx + q.length)}</>;
 }
 
-export { ChatHistoryView, downloadHistory, getFullHistory, historyToText };
+export { ChatHistoryView, downloadHistory, historyToText };
