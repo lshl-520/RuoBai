@@ -109,10 +109,14 @@ function buildSystemPrompt(character) {
 
   const styleRules = speechStyle === 'roleplay' ? roleplayRules : naturalRules;
 
+  const now = new Date();
+  const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+  const timeInfo = `当前时间：${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 星期${weekdays[now.getDay()]} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
   if (persona) {
-    return `${identityGuard}\n\n${persona}\n\n${styleRules}`;
+    return `${identityGuard}\n\n${timeInfo}\n\n${persona}\n\n${styleRules}`;
   }
-  return `${identityGuard}\n\n${styleRules}`;
+  return `${identityGuard}\n\n${timeInfo}\n\n${styleRules}`;
 }
 
 export function buildMemoryPromptBlock(memories = []) {
