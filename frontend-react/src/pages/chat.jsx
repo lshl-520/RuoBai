@@ -113,6 +113,21 @@ function ChatListScreen({ agents: fallbackAgents, onOpen }) {
 }
 
 /* ---------------- 思考过程 ---------------- */
+function extractThink(text) {
+  if (!text) return { content: text, think: "" };
+  const re = /<think>([\s\S]*?)<\/think>/gi;
+  let think = "";
+  let content = text;
+  const matches = text.match(re);
+  if (matches) {
+    for (const m of matches) {
+      think += m.replace(/<\/?think>/gi, "").trim() + "\n";
+    }
+    content = text.replace(re, "").trim();
+  }
+  return { content, think: think.trim() };
+}
+
 function ThinkCard({ text }) {
   const [open, setOpen] = useStateC(false);
   return (
@@ -228,6 +243,8 @@ function Bubble({ m, agent, tts, myAvatar }) {
     );
   }
 
+  const { content: herText, think: herThink } = !isMe ? extractThink(m.text) : { content: m.text, think: "" };
+
   return (
     <div className="her-block">
       {m.type === "proactive" && <div className="proactive-tag"><Icon name="sparkSm" /> {m.tag}</div>}
@@ -240,11 +257,11 @@ function Bubble({ m, agent, tts, myAvatar }) {
                 {m.images.map((src, i) => <img key={i} src={src} alt="" />)}
               </div>
             )}
-            {m.type === "voice" ? <VoiceBubble dur={m.dur} /> : (m.text && <span className="msg-text">{m.text}</span>)}
+            {m.type === "voice" ? <VoiceBubble dur={m.dur} /> : (herText && <span className="msg-text">{herText}</span>)}
           </div>
           {m.time && <span className="msg-time">{m.time}</span>}
-          {tts && m.type === "text" && m.text && <TTSButton text={m.text} />}
-          {m.think && <ThinkCard text={m.think} />}
+          {tts && m.type === "text" && herText && <TTSButton text={herText} />}
+          {(m.think || herThink) && <ThinkCard text={m.think || herThink} />}
         </div>
       </div>
     </div>
