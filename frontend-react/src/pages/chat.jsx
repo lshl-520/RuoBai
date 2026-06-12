@@ -281,6 +281,12 @@ function BigView({ agent, figSrc, onClose }) {
 function toMsg(m) {
   const d = new Date(m.created_at);
   const time = d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0");
+  const today = new Date();
+  const yesterday = new Date(); yesterday.setDate(today.getDate() - 1);
+  let _date;
+  if (d.toDateString() === today.toDateString()) _date = "今天";
+  else if (d.toDateString() === yesterday.toDateString()) _date = "昨天";
+  else _date = `${d.getMonth() + 1}月${d.getDate()}日`;
   return {
     id: m.id,
     who: m.role === "user" ? "me" : "her",
@@ -288,6 +294,7 @@ function toMsg(m) {
     text: m.content || "",
     images: m.media_url ? [m.media_url] : [],
     time,
+    _date,
   };
 }
 /* 按天插入时间分隔 */
@@ -295,13 +302,9 @@ function withTimeDividers(msgs) {
   const result = [];
   let lastDate = "";
   for (const m of msgs) {
-    if (m.id) {
-      const raw = msgs.find(x => x === m);
-      const dateStr = raw._date || "";
-      if (dateStr && dateStr !== lastDate) {
-        result.push({ type: "time", text: dateStr });
-        lastDate = dateStr;
-      }
+    if (m._date && m._date !== lastDate) {
+      result.push({ type: "time", text: m._date });
+      lastDate = m._date;
     }
     result.push(m);
   }
@@ -348,7 +351,7 @@ function ChatRoom({ agent, onBack }) {
         const items = Array.isArray(data) ? data : (data?.items || []);
         if (items.length > 0) {
           const converted = items.map(toMsg);
-          setMsgs([{ type: "time", text: "历史消息" }, ...converted]);
+          setMsgs(withTimeDividers(converted));
         } else {
           setMsgs([{ type: "time", text: "今天" }, { who: "her", type: "text", time: "刚刚", text: `你好，我是${agent.name}。` }]);
         }
