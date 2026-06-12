@@ -2,6 +2,7 @@ import React from "react";
 import { Icon, Bars, greetByHour } from "../store.jsx";
 import { getRoles, getRolePortraitSrc, clampIntimacy } from "../lib/roles.js";
 import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage } from "../lib/chat.js";
+import { getSessionProfile } from "../lib/profile.js";
 /* 聊天列表 + 聊天室(沉浸: 常驻立绘随情绪变化 / 全屏立绘 / 语音 / 表情包 / 思考过程 / 搜索) */
 const { useState: useStateC, useRef: useRefC, useEffect: useEffectC } = React;
 
@@ -191,7 +192,7 @@ function VoiceInput({ agent, onCancel, onResult }) {
 }
 
 /* ---------------- 单条消息 ---------------- */
-function Bubble({ m, agent, tts }) {
+function Bubble({ m, agent, tts, myAvatar }) {
   if (m.type === "time") return <div className="time-div">{m.text}</div>;
   const isMe = m.who === "me";
 
@@ -203,6 +204,7 @@ function Bubble({ m, agent, tts }) {
           <div className="sticker"><span className="st-emo">{m.sticker}</span>{m.label && <span className="st-label">{m.label}</span>}</div>
           {m.time && <span className="msg-time">{m.time}</span>}
         </div>
+        {isMe && <div className="row-avatar"><img src={myAvatar} alt="" /></div>}
       </div>
     );
   }
@@ -221,6 +223,7 @@ function Bubble({ m, agent, tts }) {
           </div>
           {m.time && <span className="msg-time">{m.time}</span>}
         </div>
+        <div className="row-avatar"><img src={myAvatar} alt="" /></div>
       </div>
     );
   }
@@ -323,6 +326,7 @@ function ChatRoom({ agent, onBack }) {
   const hasEmo = agent.isDefault; // 小白有专属情绪立绘
   const roleId = agent._raw?.id || agent.id;
   const [msgs, setMsgs] = useStateC([]);
+  const [myAvatar, setMyAvatar] = useStateC("/assets/portraits/round/3.png");
   const [draft, setDraft] = useStateC("");
   const [typing, setTyping] = useStateC(false);
   const [showFig, setShowFig] = useStateC(true);
@@ -340,6 +344,13 @@ function ChatRoom({ agent, onBack }) {
   const [uploading, setUploading] = useStateC(false);
   const areaRef = useRefC(null);
   const fileRef = useRefC(null);
+
+  /* 加载用户头像 */
+  useEffectC(() => {
+    getSessionProfile().then(d => {
+      if (d?.avatar) setMyAvatar(d.avatar);
+    }).catch(() => {});
+  }, []);
 
   /* 加载历史消息 */
   useEffectC(() => {
@@ -529,7 +540,7 @@ function ChatRoom({ agent, onBack }) {
 
       <div className="msg-area" ref={areaRef}>
         {q.trim() && <div className="search-note">找到 {shown.filter((m) => m.type !== "time").length} 条包含"{q.trim()}"的记录</div>}
-        {shown.map((m, i) => (m.type === "time" && q.trim()) ? null : <Bubble key={i} m={m} agent={agent} tts={!q.trim()} />)}
+        {shown.map((m, i) => (m.type === "time" && q.trim()) ? null : <Bubble key={i} m={m} agent={agent} tts={!q.trim()} myAvatar={myAvatar} />)}
         {typing && !q.trim() && <Typing agent={agent} />}
         {chatError && <div className="chat-error" onClick={() => setChatError("")}>{chatError}<span style={{marginLeft:8,opacity:0.6}}>点击关闭</span></div>}
         <div style={{ height: 8 }} />
