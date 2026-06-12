@@ -60,13 +60,20 @@
 .sticker { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 14px; border-radius: 18px; background: rgba(255,255,255,0.7); box-shadow: var(--shadow-sm); animation: pop 0.4s ease; }
 .st-emo { font-size: 40px; line-height: 1; }
 .st-label { font-size: 10.5px; color: var(--ink-faint); font-weight: 500; }
-.sticker-panel { position: relative; z-index: 6; background: var(--card-warm); border-top: 1px solid var(--line); padding: 12px 14px 22px; animation: sheetUp 0.3s cubic-bezier(0.2,0.85,0.25,1); }
+.sticker-panel { position: relative; z-index: 6; background: var(--card-warm); border-top: 1px solid var(--line); padding: 12px 14px 22px; animation: sheetUp 0.3s cubic-bezier(0.2,0.85,0.25,1); max-height: 35vh; overflow-y: auto; }
+.sp-tabs { display: flex; gap: 0; margin-bottom: 10px; border-bottom: 1px solid var(--line); }
+.sp-tab { flex: 1; padding: 8px 0; font-size: 12.5px; font-weight: 500; color: var(--ink-soft); background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; }
+.sp-tab.on { color: var(--rose); border-bottom-color: var(--rose); font-weight: 600; }
 .sp-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
 .sp-head > span:first-child { font-size: 13px; font-weight: 600; }
 .sp-hint { font-size: 10.5px; color: var(--ink-ghost); }
 .sp-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
 .sp-item { aspect-ratio: 1; border-radius: 14px; background: var(--paper-2); display: grid; place-items: center; font-size: 26px; transition: transform 0.15s, background 0.2s; }
 .sp-item:active { transform: scale(0.86); background: var(--rose-tint); }
+.sp-item.sp-img { padding: 4px; }
+.sp-item.sp-img img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; }
+.sp-emoji-grid { grid-template-columns: repeat(7, 1fr); }
+.sp-item.sp-emoji { font-size: 24px; background: transparent; }
 
 /* 全屏立绘 */
 .bigview { position: absolute; inset: 0; z-index: 70; background: linear-gradient(to bottom, #2a2030, #1a141d); display: flex; align-items: center; justify-content: center; animation: fadeIn 0.3s ease; overflow: hidden; }

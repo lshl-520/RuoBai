@@ -1,5 +1,5 @@
 import React from "react";
-import { Icon, Bars, greetByHour } from "../store.jsx";
+import { Icon, Bars, greetByHour, STICKERS } from "../store.jsx";
 import { getRoles, getRolePortraitSrc, clampIntimacy } from "../lib/roles.js";
 import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage } from "../lib/chat.js";
 import { getSessionProfile } from "../lib/profile.js";
@@ -338,6 +338,51 @@ const REPLIES = [
 ];
 const STICKER_REPLIES = ["🥰", "🥺", "😘", "🌙", "😋", "🌸"];
 
+const XIAOBAI_EMOTIONS = [
+  { file: "01_默认温柔.png", name: "温柔" },
+  { file: "02_开心明亮.png", name: "开心" },
+  { file: "03_害羞微笑.png", name: "害羞" },
+  { file: "04_认真倾听.png", name: "认真" },
+  { file: "05_关心担忧.png", name: "担忧" },
+  { file: "06_委屈小嘴.png", name: "委屈" },
+  { file: "07_轻微惊讶.png", name: "惊讶" },
+  { file: "08_无奈温柔.png", name: "无奈" },
+  { file: "09_困倦慵懒.png", name: "困了" },
+  { file: "10_生气但不凶.png", name: "生气" },
+  { file: "11_撒娇期待.png", name: "撒娇" },
+  { file: "12_晚安微笑.png", name: "晚安" },
+];
+
+const COMMON_EMOJIS = ["😊","😀","😁","😌","😉","🥹","😳","😘","👍","👏","❤️","🌭","✅","🎀","😻","🥰","🙄","🙏","🫶","🙂","🤗","😫","😴","☀️","🥳","💆","🎰","🍃","☁️","🌫","💐","💏","🫰","🎜","🌛"];
+
+function EmojiPanel({ agent, onSendSticker, onInsertEmoji }) {
+  const [tab, setTab] = useStateC(0);
+  return (
+    <div className="sticker-panel">
+      <div className="sp-tabs">
+        <button className={"sp-tab" + (tab === 0 ? " on" : "")} onClick={() => setTab(0)}>{agent.name}表情</button>
+        <button className={"sp-tab" + (tab === 1 ? " on" : "")} onClick={() => setTab(1)}>通用Emoji</button>
+      </div>
+      {tab === 0 && (
+        <div className="sp-grid">
+          {XIAOBAI_EMOTIONS.map((em, i) => (
+            <button key={i} className="sp-item sp-img" title={em.name} onClick={() => onSendSticker({ e: "", label: em.name, img: `/images/xiaobai-emotions/${em.file}` })}>
+              <img src={`/images/xiaobai-emotions/${em.file}`} alt={em.name} />
+            </button>
+          ))}
+        </div>
+      )}
+      {tab === 1 && (
+        <div className="sp-grid sp-emoji-grid">
+          {COMMON_EMOJIS.map((em, i) => (
+            <button key={i} className="sp-item sp-emoji" onClick={() => onInsertEmoji(em)}><span>{em}</span></button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ---------------- 聊天室 ---------------- */
 function ChatRoom({ agent, onBack }) {
   const hasEmo = agent.isDefault; // 小白有专属情绪立绘
@@ -608,14 +653,7 @@ function ChatRoom({ agent, onBack }) {
       )}
 
       {stickerOpen && (
-        <div className="sticker-panel">
-          <div className="sp-head"><span>{agent.name}的表情包</span><span className="sp-hint">以后由 AI 生成她的专属表情</span></div>
-          <div className="sp-grid">
-            {STICKERS.map((s, i) => (
-              <button key={i} className="sp-item" onClick={() => sendSticker(s)}><span>{s.e}</span></button>
-            ))}
-          </div>
-        </div>
+        <EmojiPanel agent={agent} onSendSticker={sendSticker} onInsertEmoji={(em) => { setDraft((d) => d + em); setStickerOpen(false); }} />
       )}
     </div>
   );
