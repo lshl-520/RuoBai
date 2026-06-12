@@ -135,7 +135,7 @@
 .msg-time { font-size: 10px; color: var(--ink-faint); margin: 4px 4px 0; }
 .bubble { padding: 11px 14px; font-size: 14.5px; line-height: 1.55; border-radius: 18px; animation: bubbleIn 0.3s ease; word-break: break-word; }
 .her-bubble { background: var(--card); color: var(--ink); border-bottom-left-radius: 6px; box-shadow: var(--shadow-sm); }
-.me-bubble { background: var(--rose); color: #fff; border-bottom-right-radius: 6px; box-shadow: var(--shadow-rose); }
+.me-bubble { background: #f3d5e0; color: #4a3040; border-bottom-right-radius: 6px; box-shadow: 0 2px 8px rgba(193,101,121,0.10); }
 
 /* 主动消息 */
 .her-block { display: flex; flex-direction: column; }
