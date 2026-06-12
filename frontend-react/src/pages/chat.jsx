@@ -513,17 +513,17 @@ function ChatRoom({ agent, onBack }) {
         try { await saveUserMessage(roleId, { role: "user", content: t }); } catch {}
       }
 
-      // 2) 流式请求 AI 回复（带图时让她看最后一张图）
+      // 2) 流式请求 AI 回复
+      // 图片已存到数据库，后端 loadRecentMessages 会拉到全部图，不需要再单独传
       let fullReply = "";
       const replyId = Date.now();
 
       setMsgs((p) => [...p, { who: "her", type: "text", text: "", time: "", _streaming: true, _id: replyId }]);
       setTyping(false);
 
-      const lastImg = images.length > 0 ? images[images.length - 1] : "";
-      const streamPayload = lastImg
-        ? { content: t || "看看这张图", role: "user", message_type: "image", media_url: lastImg }
-        : { content: t, role: "user" };
+      const streamPayload = images.length > 0
+        ? { content: t || "看看这些图", role: "user", message_type: "image", media_url: images[images.length - 1], skip_server_persistence: true }
+        : { content: t, role: "user", skip_server_persistence: true };
 
       await streamAssistantReply(roleId, streamPayload, {
         onToken: (token) => {
