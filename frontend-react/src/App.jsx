@@ -26,6 +26,16 @@ function RuobaiApp({ authed, setAuthed }) {
   const [detailAgent, setDetailAgent] = useState(null);
   const [editAgent, setEditAgent] = useState(undefined);
 
+  // 进聊天室时往浏览器历史塞一条记录，让手机系统返回键能正确退回聊天列表，
+  // 而不是把聊天室当透明、直接退到更早的页面（甚至退出 app）。
+  useEffect(() => {
+    if (!chatAgent) return;
+    window.history.pushState({ rbChat: true }, "");
+    const onPop = () => setChatAgent(null);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [chatAgent]);
+
   const saveAgent = (data) => {
     if (data.id) {
       setAgents((p) => p.map((a) => a.id === data.id ? { ...a, ...data } : a));
@@ -67,7 +77,7 @@ function RuobaiApp({ authed, setAuthed }) {
   if (!authed) return <Navigate to="/auth" replace />;
 
   if (chatAgent) {
-    return <div className="rb-app"><div className="viewport"><ChatRoom agent={chatAgent} onBack={() => setChatAgent(null)} /></div></div>;
+    return <div className="rb-app"><div className="viewport"><ChatRoom agent={chatAgent} onBack={() => window.history.back()} /></div></div>;
   }
 
   function openChat(agent) {

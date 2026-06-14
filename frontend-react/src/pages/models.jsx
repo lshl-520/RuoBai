@@ -1,5 +1,6 @@
 import React from "react";
-import { Icon, PROVIDERS, CHANNEL_TYPES, CAP_LABELS, CHANNELS, ROUTING, VOICE_ENGINES } from "../store.jsx";
+import { Icon, PROVIDERS, CHANNEL_TYPES, CAP_LABELS, CHANNELS, ROUTING, VOICE_ENGINES, useLockBody } from "../store.jsx";
+import { getModelConfigs, createModelConfig, updateModelConfig, deleteModelConfig } from "../lib/profile.js";
 import { Toggle, StatusDot, Row } from "./profile.jsx";
 /* 模型接入 2.0 — 接口渠道 + 用途路由 + 模型获取/切换 + 语音TTS
    概念: 渠道(一个 base/key) 与 用途(聊天/图片/语音) 解耦,各用途各自选渠道+模型,随时切换。 */
@@ -22,6 +23,7 @@ function CapDots({ caps }) {
 
 /* ====== 渠道配置 Sheet ====== */
 function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
+  useLockBody();
   const [type, setType] = useStateMo(channel?.type || "openai");
   const preset = CHANNEL_TYPES[type];
   const [name, setName] = useStateMo(channel?.name || "");
@@ -33,6 +35,13 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
   const [models, setModels] = useStateMo(channel?.fetched?.length ? channel.fetched : preset.models);
   const [model, setModel] = useStateMo(channel?.model || preset.models[0] || "");
   const [fetchState, setFetchState] = useStateMo("idle"); // idle|loading|done|fail
+
+  // 弹窗打开时滚动到顶部
+  const { useEffect: _useEffectSheet } = React;
+  _useEffectSheet(() => {
+    const body = document.querySelector('.sheet-body');
+    if (body) body.scrollTop = 0;
+  }, []);
 
   const pickType = (t) => {
     setType(t);
@@ -129,6 +138,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
 
 /* ====== 用途路由 选择器(聊天/图片 选 渠道+模型) ====== */
 function RoutePicker({ cap, channels, current, onClose, onPick }) {
+  useLockBody();
   const list = channels.filter((c) => c.enabled && c.caps.includes(cap));
   return (
     <div className="sheet-mask" onClick={onClose}>
@@ -162,6 +172,7 @@ function RoutePicker({ cap, channels, current, onClose, onPick }) {
 
 /* ====== 语音 TTS 配置 Sheet ====== */
 function VoiceSheet({ voice, channels, onClose, onSave }) {
+  useLockBody();
   const [engine, setEngine] = useStateMo(voice.engine || "browser");
   const [rate, setRate] = useStateMo(voice.rate ?? 0.9);
   const [qwenVoiceId, setQwenVoiceId] = useStateMo(voice.voiceId || "");
@@ -254,16 +265,97 @@ function ModelsSection() {
   const [route, setRoute] = useStateMo(null);          // cap being routed
   const [voiceSheet, setVoiceSheet] = useStateMo(false);
 
+  /* 从后端拉真实 model-configs，转成前端 channel 格式，真实数据优先，失败时静默用本地 */
+  React.useEffect(() => {
+    let cancelled = false;
+    getModelConfigs().then((payload) => {
+      if (cancelled) return;
+      const raw = Array.isArray(payload?.configs) ? payload.configs
+        : Array.isArray(payload?.items) ? payload.items
+        : Array.isArray(payload) ? payload : null;
+      if (!raw || raw.length === 0) return; // 无数据或未登录，保留本地假数据
+      const converted = raw.map((cfg) => ({
+        id: String(cfg.id ?? cfg._id ?? "c_" + Math.random()),
+        type: cfg.provider_type || cfg.providerType || "custom",
+        name: cfg.name || cfg.apiBase || "未命名渠道",
+        base: cfg.api_base || cfg.apiBase || "",
+        apiKey: cfg.api_key || cfg.apiKey || "",
+        model: cfg.model || "",
+        caps: ["chat"],
+        enabled: cfg.is_active ?? cfg.isActive ?? true,
+        fetched: [],
+        _backendId: cfg.id ?? cfg._id, // 保留原始 id 用于增删改
+      }));
+      setChannels(converted);
+    }).catch(() => {}); // 静默失败，保留本地数据
+    return () => { cancelled = true; };
+  }, []);
+
+  const refreshChannels = () => {
+    getModelConfigs().then((payload) => {
+      const raw = Array.isArray(payload?.configs) ? payload.configs
+        : Array.isArray(payload?.items) ? payload.items
+        : Array.isArray(payload) ? payload : null;
+      if (!raw) return;
+      const converted = raw.map((cfg) => ({
+        id: String(cfg.id ?? cfg._id ?? "c_" + Math.random()),
+        type: cfg.provider_type || cfg.providerType || "custom",
+        name: cfg.name || cfg.apiBase || "未命名渠道",
+        base: cfg.api_base || cfg.apiBase || "",
+        apiKey: cfg.api_key || cfg.apiKey || "",
+        model: cfg.model || "",
+        caps: ["chat"],
+        enabled: cfg.is_active ?? cfg.isActive ?? true,
+        fetched: [],
+        _backendId: cfg.id ?? cfg._id,
+      }));
+      setChannels(converted);
+    }).catch(() => {});
+  };
+
   const persistCh = (n) => { setChannels(n); try { localStorage.setItem(LS_CH, JSON.stringify(n)); } catch (e) {} };
   const persistRt = (n) => { setRouting(n); try { localStorage.setItem(LS_RT, JSON.stringify(n)); } catch (e) {} };
 
   const saveChannel = (d) => {
-    let n;
-    if (d.id) n = channels.map((c) => c.id === d.id ? { ...c, ...d } : c);
-    else n = [...channels, { ...d, id: "c_" + Date.now() }];
-    persistCh(n); setChSheet(undefined);
+    const payload = {
+      name: d.name,
+      provider_type: d.type,
+      api_base: d.base,
+      api_key: d.apiKey,
+      model: d.model,
+    };
+    if (d.id && d._backendId) {
+      // 编辑已有渠道
+      updateModelConfig(d._backendId, payload)
+        .then(() => refreshChannels())
+        .catch(() => {
+          // 后端失败，本地更新兜底
+          let n = channels.map((c) => c.id === d.id ? { ...c, ...d } : c);
+          persistCh(n);
+        });
+    } else {
+      // 新增渠道
+      createModelConfig(payload)
+        .then(() => refreshChannels())
+        .catch(() => {
+          // 后端失败，本地兜底
+          let n = [...channels, { ...d, id: "c_" + Date.now() }];
+          persistCh(n);
+        });
+    }
+    setChSheet(undefined);
   };
-  const delChannel = (id) => { persistCh(channels.filter((c) => c.id !== id)); setChSheet(undefined); };
+  const delChannel = (id) => {
+    const ch = channels.find((c) => c.id === id);
+    if (ch?._backendId) {
+      deleteModelConfig(ch._backendId)
+        .then(() => refreshChannels())
+        .catch(() => persistCh(channels.filter((c) => c.id !== id)));
+    } else {
+      persistCh(channels.filter((c) => c.id !== id));
+    }
+    setChSheet(undefined);
+  };
 
   const chName = (id) => channels.find((c) => c.id === id)?.name || "未选择";
   const engineName = (id) => VOICE_ENGINES.find((e) => e.id === id)?.name || id;
