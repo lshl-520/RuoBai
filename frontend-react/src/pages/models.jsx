@@ -1,23 +1,60 @@
 import React from "react";
-import { Icon, PROVIDERS, CHANNEL_TYPES, CAP_LABELS, CHANNELS, ROUTING, VOICE_ENGINES, useLockBody } from "../store.jsx";
-import { getModelConfigs, createModelConfig, updateModelConfig, deleteModelConfig } from "../lib/profile.js";
+import { Icon, CHANNEL_TYPES, VOICE_ENGINES, useLockBody } from "../store.jsx";
+import { getModelConfigs, createModelConfig, updateModelConfig, deleteModelConfig, discoverModelConfigs, getCapabilities, updateCapability } from "../lib/profile.js";
 import { Toggle, StatusDot, Row } from "./profile.jsx";
-/* 模型接入 2.0 — 接口渠道 + 用途路由 + 模型获取/切换 + 语音TTS
-   概念: 渠道(一个 base/key) 与 用途(聊天/图片/语音) 解耦,各用途各自选渠道+模型,随时切换。 */
+
 const { useState: useStateMo } = React;
 
 const LS_CH = "ruobai_channels_v2";
-const LS_RT = "ruobai_routing_v2";
-const loadCH = () => { try { const s = JSON.parse(localStorage.getItem(LS_CH)); if (Array.isArray(s)) return s; } catch (e) {} return CHANNELS; };
-const loadRT = () => { try { const s = JSON.parse(localStorage.getItem(LS_RT)); if (s && s.chat) return s; } catch (e) {} return ROUTING; };
+const loadCH = () => { try { const s = JSON.parse(localStorage.getItem(LS_CH)); if (Array.isArray(s)) return s; } catch (e) {} return []; };
 
-function CapDots({ caps }) {
+const CAP_INFO = {
+  chat: { icon: "chat", name: "文字聊天", tint: "on" },
+  vision: { icon: "image", name: "看懂图片", tint: "lav" },
+  image: { icon: "image", name: "画图发图", tint: "rose" },
+  tts: { icon: "wave", name: "语音(TTS)", tint: "rose" },
+  realtime: { icon: "phone", name: "实时通话", tint: "on" },
+};
+
+/* ====== 能力选择器 Sheet ====== */
+function CapPicker({ cap, options, current, onClose, onPick }) {
+  useLockBody();
+  const grouped = {};
+  (options || []).forEach((o) => {
+    const key = o.credential_name || `供应商#${o.credential_id}`;
+    if (!grouped[key]) grouped[key] = { credId: o.credential_id, name: key, models: [] };
+    grouped[key].models.push(o.model_id);
+  });
+  const groups = Object.values(grouped);
+  const info = CAP_INFO[cap] || { name: cap };
+
   return (
-    <span className="cap-dots">
-      {["chat", "image", "voice", "realtime"].map((c) => (
-        <span key={c} className={"cap-dot" + (caps.includes(c) ? " on" : "")}>{CAP_LABELS[c]}</span>
-      ))}
-    </span>
+    <div className="sheet-mask" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "78%" }}>
+        <div className="sheet-grip" />
+        <div className="sheet-head">
+          <h2 className="serif">{info.name} · 选模型</h2>
+          <button className="icon-btn" onClick={onClose} style={{ width: 34, height: 34 }}>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+        <div className="sheet-body">
+          {groups.length === 0 && <div className="route-empty">没有可用的供应商。先在下方「接口渠道」添加一个支持此能力的供应商。</div>}
+          {groups.map((g) => (
+            <div key={g.credId} className="route-channel">
+              <div className="rc-head"><span className="rc-name">{g.name}</span></div>
+              <div className="model-chips">
+                {g.models.map((m) => (
+                  <button key={m}
+                    className={"model-chip" + (current?.credential_id === g.credId && current?.model_id === m ? " on" : "")}
+                    onClick={() => onPick(g.credId, m)}>{m}</button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -25,39 +62,45 @@ function CapDots({ caps }) {
 function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
   useLockBody();
   const [type, setType] = useStateMo(channel?.type || "openai");
-  const preset = CHANNEL_TYPES[type];
+  const preset = CHANNEL_TYPES[type] || CHANNEL_TYPES.custom;
   const [name, setName] = useStateMo(channel?.name || "");
   const [base, setBase] = useStateMo(channel?.base || preset.base);
   const [apiKey, setApiKey] = useStateMo(channel?.apiKey || "");
-  const [caps, setCaps] = useStateMo(channel?.caps || preset.caps.slice(0, 1));
   const [enabled, setEnabled] = useStateMo(channel?.enabled ?? true);
   const [showKey, setShowKey] = useStateMo(false);
   const [models, setModels] = useStateMo(channel?.fetched?.length ? channel.fetched : preset.models);
   const [model, setModel] = useStateMo(channel?.model || preset.models[0] || "");
-  const [fetchState, setFetchState] = useStateMo("idle"); // idle|loading|done|fail
+  const [fetchState, setFetchState] = useStateMo("idle");
 
-  // 弹窗打开时滚动到顶部
-  const { useEffect: _useEffectSheet } = React;
-  _useEffectSheet(() => {
+  React.useEffect(() => {
     const body = document.querySelector('.sheet-body');
     if (body) body.scrollTop = 0;
   }, []);
 
   const pickType = (t) => {
     setType(t);
-    const p = CHANNEL_TYPES[t];
-    if (!channel) { setBase(p.base); setCaps(p.caps.slice(0, 1)); setModels(p.models); setModel(p.models[0] || ""); }
+    const p = CHANNEL_TYPES[t] || CHANNEL_TYPES.custom;
+    if (!channel) { setBase(p.base); setModels(p.models); setModel(p.models[0] || ""); }
   };
-  const toggleCap = (c) => setCaps((p) => p.includes(c) ? p.filter((x) => x !== c) : [...p, c]);
 
-  const fetchModels = () => {
+  const fetchModels = async () => {
     if (!apiKey.trim() && type !== "custom") { setFetchState("fail"); return; }
     setFetchState("loading");
-    setTimeout(() => {
-      const list = CHANNEL_TYPES[type].models.length ? CHANNEL_TYPES[type].models : ["model-large", "model-medium", "model-small"];
-      setModels(list); setFetchState("done");
-      if (!model && list[0]) setModel(list[0]);
-    }, 1400);
+    try {
+      const result = await discoverModelConfigs({ api_base: base, api_key: apiKey });
+      if (result.success && result.items?.length) {
+        setModels(result.items);
+        setFetchState("done");
+        if (!model && result.suggested_model) setModel(result.suggested_model);
+        else if (!model && result.items[0]) setModel(result.items[0]);
+      } else {
+        setFetchState("fail");
+        setModels(CHANNEL_TYPES[type]?.models?.length ? CHANNEL_TYPES[type].models : []);
+      }
+    } catch (err) {
+      setFetchState("fail");
+      setModels(CHANNEL_TYPES[type]?.models?.length ? CHANNEL_TYPES[type].models : []);
+    }
   };
 
   const canSave = (isNew ? name.trim() : true) && (apiKey.trim() || type === "custom");
@@ -75,7 +118,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
         <div className="sheet-body">
           <label className="field-label">服务商类型</label>
           <div className="type-grid">
-            {Object.entries(CHANNEL_TYPES).map(([k, v]) => (
+            {Object.entries(CHANNEL_TYPES).filter(([k]) => k !== "openai-compatible").map(([k, v]) => (
               <button key={k} className={"type-chip" + (type === k ? " on" : "")} onClick={() => pickType(k)}>{v.name}</button>
             ))}
           </div>
@@ -93,31 +136,23 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
             <button className="key-eye" onClick={() => setShowKey(!showKey)}><Icon name={showKey ? "eyeOff" : "eye"} /></button>
           </div>
 
-          <label className="field-label">这个渠道用来做什么 <span className="lbl-hint">可多选</span></label>
-          <div className="cap-pick">
-            {["chat", "image", "voice", "realtime"].map((c) => (
-              <button key={c} className={"cap-btn" + (caps.includes(c) ? " on" : "")} onClick={() => toggleCap(c)}>
-                <Icon name={c === "chat" ? "chat" : c === "image" ? "image" : c === "voice" ? "wave" : "phone"} /> {CAP_LABELS[c]}
-              </button>
-            ))}
+          <div className="model-head">
+            <label className="field-label" style={{ margin: 0 }}>模型</label>
+            <button className={"fetch-btn " + fetchState} onClick={fetchModels}>
+              {fetchState === "loading" ? <><span className="test-spin" /> 获取中...</>
+                : fetchState === "done" ? <><Icon name="check" /> 已更新 {models.length} 个</>
+                : fetchState === "fail" ? <><Icon name="alert" /> 需先填密钥</>
+                : <><Icon name="refresh" /> 获取模型列表</>}
+            </button>
           </div>
-
-          {caps.includes("chat") || caps.includes("image") ? (<>
-            <div className="model-head">
-              <label className="field-label" style={{ margin: 0 }}>模型</label>
-              <button className={"fetch-btn " + fetchState} onClick={fetchModels}>
-                {fetchState === "loading" ? <><span className="test-spin" /> 获取中…</>
-                  : fetchState === "done" ? <><Icon name="check" /> 已更新 {models.length} 个</>
-                  : fetchState === "fail" ? <><Icon name="alert" /> 需先填密钥</>
-                  : <><Icon name="refresh" /> 获取模型列表</>}
-              </button>
-            </div>
-            <div className="model-chips">
-              {models.map((m) => <button key={m} className={"model-chip" + (model === m ? " on" : "")} onClick={() => setModel(m)}>{m}</button>)}
-              {models.length === 0 && <span className="model-empty">点「获取模型列表」拉取,或手动输入 ↓</span>}
-            </div>
-            <input className="fld" style={{ marginTop: 8 }} value={model} onChange={(e) => setModel(e.target.value)} placeholder="模型名,例如 gpt-5.5" />
-          </>) : null}
+          {models.length === 0 && <div className="model-empty">点「获取模型列表」拉取，或手动输入</div>}
+          {models.length > 0 && (
+            <select className="fld" value={model} onChange={(e) => setModel(e.target.value)} style={{ marginTop: 8 }}>
+              <option value="">选择模型...</option>
+              {models.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          )}
+          <input className="fld" style={{ marginTop: 8 }} value={model} onChange={(e) => setModel(e.target.value)} placeholder="模型名,例如 gpt-5.5" />
 
           <div className="switch-row">
             <div><div className="sr-t">启用此渠道</div><div className="sr-s">停用后所有用途不会再选到它</div></div>
@@ -127,7 +162,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
         <div className="sheet-foot">
           {!isNew && <button className="icon-btn det-del" onClick={() => onDelete(channel.id)}><Icon name="trash" /></button>}
           <button className="pill pill-primary grow" disabled={!canSave} style={!canSave ? { opacity: 0.5 } : null}
-            onClick={() => onSave({ id: channel?.id, type, name, base, apiKey, caps, enabled, model, fetched: models })}>
+            onClick={() => onSave({ id: channel?.id, type, name, base, apiKey, enabled, model, fetched: models })}>
             {isNew ? "添加渠道" : "保存"}
           </button>
         </div>
@@ -136,48 +171,14 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
   );
 }
 
-/* ====== 用途路由 选择器(聊天/图片 选 渠道+模型) ====== */
-function RoutePicker({ cap, channels, current, onClose, onPick }) {
-  useLockBody();
-  const list = channels.filter((c) => c.enabled && c.caps.includes(cap));
-  return (
-    <div className="sheet-mask" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "78%" }}>
-        <div className="sheet-grip" />
-        <div className="sheet-head">
-          <h2 className="serif">{CAP_LABELS[cap]}用哪个</h2>
-          <button className="icon-btn" onClick={onClose} style={{ width: 34, height: 34 }}>
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-          </button>
-        </div>
-        <div className="sheet-body">
-          {list.length === 0 && <div className="route-empty">还没有支持「{CAP_LABELS[cap]}」的渠道。去下面添加一个,并勾选这个用途。</div>}
-          {list.map((c) => (
-            <div key={c.id} className="route-channel">
-              <div className="rc-head"><span className="rc-name">{c.name}</span><span className="micro-tag">{CHANNEL_TYPES[c.type]?.name}</span></div>
-              <div className="model-chips">
-                {(c.fetched?.length ? c.fetched : CHANNEL_TYPES[c.type]?.models || [c.model]).map((m) => (
-                  <button key={m}
-                    className={"model-chip" + (current.channelId === c.id && current.model === m ? " on" : "")}
-                    onClick={() => onPick({ channelId: c.id, model: m })}>{m}</button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ====== 语音 TTS 配置 Sheet ====== */
-function VoiceSheet({ voice, channels, onClose, onSave }) {
+function VoiceSheet({ voice, onClose, onSave }) {
   useLockBody();
-  const [engine, setEngine] = useStateMo(voice.engine || "browser");
-  const [rate, setRate] = useStateMo(voice.rate ?? 0.9);
-  const [qwenVoiceId, setQwenVoiceId] = useStateMo(voice.voiceId || "");
-  const [browserVoiceURI, setBrowserVoiceURI] = useStateMo(voice.browserVoiceURI || "");
-  const [volcVoice, setVolcVoice] = useStateMo(voice.volcVoice || "zh_female_wennuan");
+  const [engine, setEngine] = useStateMo(voice?.engine || "browser");
+  const [rate, setRate] = useStateMo(voice?.rate ?? 0.9);
+  const [qwenVoiceId, setQwenVoiceId] = useStateMo(voice?.voiceId || "");
+  const [browserVoiceURI, setBrowserVoiceURI] = useStateMo(voice?.browserVoiceURI || "");
+  const [volcVoice, setVolcVoice] = useStateMo(voice?.volcVoice || "zh_female_wennuan");
   const [browserVoices, setBrowserVoices] = useStateMo([]);
   const [testing, setTesting] = useStateMo(false);
 
@@ -231,20 +232,20 @@ function VoiceSheet({ voice, channels, onClose, onSave }) {
           {engine === "qwen" && (<>
             <label className="field-label">千问音色 ID</label>
             <input className="fld" value={qwenVoiceId} onChange={(e) => setQwenVoiceId(e.target.value)} placeholder="qwen-tts-vd-bailian-voice-..." />
-            <div className="voice-tip">走「阿里千问」渠道的密钥,请求 /audio/speech。在上面把千问渠道勾上「语音」用途。</div>
+            <div className="voice-tip">走「阿里千问」渠道的密钥,请求 /audio/speech。</div>
           </>)}
 
           {engine === "volcengine" && (<>
             <label className="field-label">火山音色</label>
             <input className="fld" value={volcVoice} onChange={(e) => setVolcVoice(e.target.value)} placeholder="zh_female_wennuan" />
-            <div className="voice-tip">火山语音需要 appId / token / cluster,在火山渠道里填好,这里只选音色。<b>后端还没接,先占个位。</b></div>
+            <div className="voice-tip">火山语音需要 appId / token / cluster。<b>后端还没接,先占个位。</b></div>
           </>)}
 
-          <label className="field-label">语速 <span className="lbl-hint">{Number(rate).toFixed(2)}×</span></label>
+          <label className="field-label">语速 <span className="lbl-hint">{Number(rate).toFixed(2)}x</span></label>
           <input className="range" type="range" min="0.6" max="1.4" step="0.05" value={rate} onChange={(e) => setRate(e.target.value)} />
 
           <button className={"test-btn" + (testing ? " loading" : "")} onClick={test} style={{ marginTop: 16 }}>
-            {testing ? <><span className="test-spin" /> 她正在说…</> : <><Icon name="wave" /> 试听一句</>}
+            {testing ? <><span className="test-spin" /> 她正在说...</> : <><Icon name="wave" /> 试听一句</>}
           </button>
         </div>
         <div className="sheet-foot">
@@ -255,17 +256,47 @@ function VoiceSheet({ voice, channels, onClose, onSave }) {
   );
 }
 
-Object.assign(window, { ChannelSheet, RoutePicker, VoiceSheet, CapDots, loadCH, loadRT, LS_CH, LS_RT });
-
-/* ====== 模型接入整段(用途路由 + 渠道列表) ====== */
+/* ====== 模型接入整段(她的能力 + 渠道列表) ====== */
 function ModelsSection() {
   const [channels, setChannels] = useStateMo(loadCH);
-  const [routing, setRouting] = useStateMo(loadRT);
-  const [chSheet, setChSheet] = useStateMo(undefined); // {channel, isNew}
-  const [route, setRoute] = useStateMo(null);          // cap being routed
+  const [chSheet, setChSheet] = useStateMo(undefined);
   const [voiceSheet, setVoiceSheet] = useStateMo(false);
+  const [voiceConfig, setVoiceConfig] = useStateMo(() => {
+    try { const s = JSON.parse(localStorage.getItem("ruobai_voice_v2")); if (s) return s; } catch (e) {}
+    return { engine: "browser", rate: 0.9, voiceId: "", browserVoiceURI: "", volcVoice: "zh_female_wennuan" };
+  });
 
-  /* 从后端拉真实 model-configs，转成前端 channel 格式，真实数据优先，失败时静默用本地 */
+  // 能力面板（真实数据）
+  const [capabilities, setCaps] = useStateMo([]);
+  const [capLoading, setCapLoading] = useStateMo(true);
+  const [capPicker, setCapPicker] = useStateMo(null);
+
+  React.useEffect(() => {
+    getCapabilities().then((res) => {
+      if (res?.success && Array.isArray(res.items)) setCaps(res.items);
+    }).catch(() => {}).finally(() => setCapLoading(false));
+  }, []);
+
+  const refreshCaps = () => {
+    getCapabilities().then((res) => {
+      if (res?.success && Array.isArray(res.items)) setCaps(res.items);
+    }).catch(() => {});
+  };
+
+  const toggleCap = async (capKey, currentEnabled) => {
+    setCaps((prev) => prev.map((c) => c.capability === capKey ? { ...c, enabled: !currentEnabled } : c));
+    try { await updateCapability(capKey, { enabled: !currentEnabled }); } catch (e) { refreshCaps(); }
+  };
+
+  const pickCapModel = async (capKey, credentialId, modelId) => {
+    try {
+      await updateCapability(capKey, { credential_id: credentialId, model_id: modelId, enabled: true });
+      refreshCaps();
+    } catch (e) {}
+    setCapPicker(null);
+  };
+
+  /* 从后端拉真实 model-configs 作为渠道列表 */
   React.useEffect(() => {
     let cancelled = false;
     getModelConfigs().then((payload) => {
@@ -273,7 +304,7 @@ function ModelsSection() {
       const raw = Array.isArray(payload?.configs) ? payload.configs
         : Array.isArray(payload?.items) ? payload.items
         : Array.isArray(payload) ? payload : null;
-      if (!raw || raw.length === 0) return; // 无数据或未登录，保留本地假数据
+      if (!raw || raw.length === 0) return;
       const converted = raw.map((cfg) => ({
         id: String(cfg.id ?? cfg._id ?? "c_" + Math.random()),
         type: cfg.provider_type || cfg.providerType || "custom",
@@ -281,13 +312,12 @@ function ModelsSection() {
         base: cfg.api_base || cfg.apiBase || "",
         apiKey: cfg.api_key || cfg.apiKey || "",
         model: cfg.model || "",
-        caps: ["chat"],
         enabled: cfg.is_active ?? cfg.isActive ?? true,
         fetched: [],
-        _backendId: cfg.id ?? cfg._id, // 保留原始 id 用于增删改
+        _backendId: cfg.id ?? cfg._id,
       }));
       setChannels(converted);
-    }).catch(() => {}); // 静默失败，保留本地数据
+    }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
@@ -304,7 +334,6 @@ function ModelsSection() {
         base: cfg.api_base || cfg.apiBase || "",
         apiKey: cfg.api_key || cfg.apiKey || "",
         model: cfg.model || "",
-        caps: ["chat"],
         enabled: cfg.is_active ?? cfg.isActive ?? true,
         fetched: [],
         _backendId: cfg.id ?? cfg._id,
@@ -313,81 +342,71 @@ function ModelsSection() {
     }).catch(() => {});
   };
 
-  const persistCh = (n) => { setChannels(n); try { localStorage.setItem(LS_CH, JSON.stringify(n)); } catch (e) {} };
-  const persistRt = (n) => { setRouting(n); try { localStorage.setItem(LS_RT, JSON.stringify(n)); } catch (e) {} };
-
   const saveChannel = (d) => {
-    const payload = {
-      name: d.name,
-      provider_type: d.type,
-      api_base: d.base,
-      api_key: d.apiKey,
-      model: d.model,
-    };
-    if (d.id && d._backendId) {
-      // 编辑已有渠道
-      updateModelConfig(d._backendId, payload)
-        .then(() => refreshChannels())
-        .catch(() => {
-          // 后端失败，本地更新兜底
-          let n = channels.map((c) => c.id === d.id ? { ...c, ...d } : c);
-          persistCh(n);
-        });
+    const payload = { name: d.name, provider_type: d.type, api_base: d.base, api_key: d.apiKey, model: d.model };
+    if (d.id && channels.find((c) => c.id === d.id)?._backendId) {
+      const backendId = channels.find((c) => c.id === d.id)._backendId;
+      updateModelConfig(backendId, payload).then(() => { refreshChannels(); refreshCaps(); }).catch(() => {});
     } else {
-      // 新增渠道
-      createModelConfig(payload)
-        .then(() => refreshChannels())
-        .catch(() => {
-          // 后端失败，本地兜底
-          let n = [...channels, { ...d, id: "c_" + Date.now() }];
-          persistCh(n);
-        });
+      createModelConfig(payload).then(() => { refreshChannels(); refreshCaps(); }).catch(() => {});
     }
     setChSheet(undefined);
   };
+
   const delChannel = (id) => {
     const ch = channels.find((c) => c.id === id);
     if (ch?._backendId) {
-      deleteModelConfig(ch._backendId)
-        .then(() => refreshChannels())
-        .catch(() => persistCh(channels.filter((c) => c.id !== id)));
-    } else {
-      persistCh(channels.filter((c) => c.id !== id));
+      deleteModelConfig(ch._backendId).then(() => { refreshChannels(); refreshCaps(); }).catch(() => {});
     }
     setChSheet(undefined);
   };
 
-  const chName = (id) => channels.find((c) => c.id === id)?.name || "未选择";
+  const saveVoice = (v) => {
+    setVoiceConfig(v);
+    try { localStorage.setItem("ruobai_voice_v2", JSON.stringify(v)); } catch (e) {}
+    setVoiceSheet(false);
+  };
+
   const engineName = (id) => VOICE_ENGINES.find((e) => e.id === id)?.name || id;
 
   return (
     <>
-      {/* 用途路由 */}
-      <div className="section-label pad" style={{ marginTop: 20 }}><span>用途路由 · 各管各的</span><span className="sl-line" /></div>
+      {/* 她的能力 */}
+      <div className="section-label pad" style={{ marginTop: 20 }}><span>她的能力</span><span className="sl-line" /></div>
       <div className="pad">
         <div className="cap-card">
-          <button className="prow" onClick={() => setRoute("chat")}>
-            <span className="prow-ic on"><Icon name="chat" /></span>
-            <span className="prow-main"><span className="prow-t">聊天</span><span className="prow-s">{chName(routing.chat.channelId)}</span></span>
-            <span className="route-val">{routing.chat.model}<Icon name="swap" className="route-swap" /></span>
-          </button>
-          <button className="prow" onClick={() => setRoute("image")}>
-            <span className="prow-ic lav"><Icon name="image" /></span>
-            <span className="prow-main"><span className="prow-t">图片理解 / 生成</span><span className="prow-s">{chName(routing.image.channelId)}</span></span>
-            <span className="route-val">{routing.image.model}<Icon name="swap" className="route-swap" /></span>
-          </button>
-          <button className="prow" onClick={() => setRoute("realtime")}>
-            <span className="prow-ic on"><Icon name="phone" /></span>
-            <span className="prow-main"><span className="prow-t">实时语音通话</span><span className="prow-s">{chName((routing.realtime || {}).channelId)} · 打电话时用</span></span>
-            <span className="route-val">{(routing.realtime || {}).model || "未选择"}<Icon name="swap" className="route-swap" /></span>
-          </button>
-          <button className="prow last" onClick={() => setVoiceSheet(true)}>
-            <span className="prow-ic rose"><Icon name="wave" /></span>
-            <span className="prow-main"><span className="prow-t">语音 (TTS)</span><span className="prow-s">{engineName(routing.voice.engine)}{routing.voice.engine === "browser" ? " · 免费" : ""}</span></span>
-            <Icon name="chevron" className="row-chev" />
-          </button>
+          {capLoading && <div className="prow last"><span className="prow-main"><span className="prow-s">加载中...</span></span></div>}
+          {!capLoading && capabilities.map((cap, i) => {
+            const info = CAP_INFO[cap.capability] || { icon: "cpu", name: cap.capability, tint: "" };
+            const isLast = i === capabilities.length - 1 && cap.capability !== "tts";
+            const isTts = cap.capability === "tts";
+
+            if (isTts) {
+              return (
+                <button key={cap.capability} className="prow" onClick={() => setVoiceSheet(true)}>
+                  <span className={"prow-ic " + info.tint}><Icon name={info.icon} /></span>
+                  <span className="prow-main">
+                    <span className="prow-t">{info.name}</span>
+                    <span className="prow-s">{engineName(voiceConfig.engine)}{voiceConfig.engine === "browser" ? " · 免费" : ""}</span>
+                  </span>
+                  <Toggle on={cap.enabled} onClick={(e) => { e.stopPropagation(); toggleCap(cap.capability, cap.enabled); }} />
+                </button>
+              );
+            }
+
+            return (
+              <button key={cap.capability} className={"prow" + (isLast ? " last" : "")} onClick={() => setCapPicker(cap.capability)}>
+                <span className={"prow-ic " + (cap.enabled ? info.tint : "")}><Icon name={info.icon} /></span>
+                <span className="prow-main">
+                  <span className="prow-t">{info.name}</span>
+                  <span className="prow-s">{cap.current ? `${cap.current.credential_name} · ${cap.current.model_id}` : "未选择"}</span>
+                </span>
+                <Toggle on={cap.enabled} onClick={(e) => { e.stopPropagation(); toggleCap(cap.capability, cap.enabled); }} />
+              </button>
+            );
+          })}
         </div>
-        <div className="route-note">同一个用途随时切渠道、切模型 —— 有钱用贵的(gpt-5.5),想省就切便宜的(deepseek)。聊天页顶部也能一键切。<br/>「实时语音通话」是打电话那个页用的模型(边听边说,如 gpt-4o-realtime),跟上面「语音(TTS)」只负责把文字读出来不一样。</div>
+        {!capLoading && <div className="route-note">点能力行选模型，右边开关控制启用。有钱用贵的，想省就切便宜的。</div>}
       </div>
 
       {/* 接口渠道 */}
@@ -399,14 +418,14 @@ function ModelsSection() {
               <span className={"prow-ic " + (c.enabled ? "on" : "")}><Icon name="cpu" /></span>
               <span className="prow-main">
                 <span className="prow-t">{c.name}</span>
-                <CapDots caps={c.caps} />
+                <span className="prow-s">{CHANNEL_TYPES[c.type]?.name || c.type}</span>
               </span>
               <StatusDot status={c.enabled ? "on" : "off"} detail={c.enabled ? "已启用" : "已停用"} />
             </button>
           ))}
           <button className="prow last" onClick={() => setChSheet({ channel: null, isNew: true })}>
             <span className="prow-ic rose"><Icon name="add" /></span>
-            <span className="prow-main"><span className="prow-t">添加接口渠道</span><span className="prow-s">OpenAI / Claude / Grok / DeepSeek / 千问 / 火山 / 自定义中转</span></span>
+            <span className="prow-main"><span className="prow-t">添加接口渠道</span><span className="prow-s">DeepSeek / 千问 / 火山 / Grok / OpenAI / 自定义中转</span></span>
             <Icon name="chevron" className="row-chev" />
           </button>
         </div>
@@ -416,15 +435,15 @@ function ModelsSection() {
         <ChannelSheet channel={chSheet.channel} isNew={chSheet.isNew}
           onClose={() => setChSheet(undefined)} onSave={saveChannel} onDelete={delChannel} />
       )}
-      {route && (
-        <RoutePicker cap={route} channels={channels} current={routing[route] || {}}
-          onClose={() => setRoute(null)}
-          onPick={(sel) => { persistRt({ ...routing, [route]: sel }); setRoute(null); }} />
-      )}
+      {capPicker && (() => {
+        const capData = capabilities.find((c) => c.capability === capPicker);
+        return capData ? (
+          <CapPicker cap={capPicker} options={capData.options} current={capData.current}
+            onClose={() => setCapPicker(null)} onPick={(credId, modelId) => pickCapModel(capPicker, credId, modelId)} />
+        ) : null;
+      })()}
       {voiceSheet && (
-        <VoiceSheet voice={routing.voice} channels={channels}
-          onClose={() => setVoiceSheet(false)}
-          onSave={(v) => { persistRt({ ...routing, voice: { ...routing.voice, ...v } }); setVoiceSheet(false); }} />
+        <VoiceSheet voice={voiceConfig} onClose={() => setVoiceSheet(false)} onSave={saveVoice} />
       )}
     </>
   );
