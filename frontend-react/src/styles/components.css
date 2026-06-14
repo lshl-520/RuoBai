@@ -2,6 +2,17 @@
    若白 · 微光 2.0 — 组件样式 A (角色 / 聊天列表 / 聊天气泡 / 动态 / 我的)
    ============================================================ */
 
+/* ===== 弹窗遮罩：阻止背景滚动穿透（真机手势） ===== */
+.sheet-mask, .confirm-mask, .vin-mask, .model-pop-mask {
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+/* 弹窗内部可滚动区：滚动到边界不传导给背景 */
+.sheet-body, .detail-body, .ob-body, .auth-body {
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
 /* ============== 角色 — Hero ============== */
 .hero { position: relative; height: 430px; border-radius: var(--r-xl); overflow: hidden; box-shadow: var(--shadow-lg); }
 .hero-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top center; animation: kenburns 18s ease-in-out infinite alternate; }
