@@ -147,3 +147,35 @@ export function discoverModelConfigs(payload) {
     body: JSON.stringify(payload),
   });
 }
+
+export function getCapabilities() {
+  return request("/api/capabilities", { method: "GET" });
+}
+
+export function updateCapability(cap, payload) {
+  return request(`/api/capabilities/${encodeURIComponent(cap)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getCredentials() {
+  return request("/api/credentials", { method: "GET" });
+}
+
+export function getCredentialModels(credId) {
+  return request(`/api/credentials/${encodeURIComponent(credId)}/models`, {
+    method: "GET",
+  });
+}
+
+export function getRoles() {
+  return request("/api/roles", { method: "GET" });
+}
+
+export function updateRole(roleId, payload) {
+  return request(`/api/roles/${encodeURIComponent(roleId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}

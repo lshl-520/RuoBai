@@ -128,38 +128,16 @@ const PROVIDERS = [
 
 /* ===== 渠道类型预设(对齐后端 providerType) ===== */
 const CHANNEL_TYPES = {
-  openai:              { name: "OpenAI 官方",   base: "https://api.openai.com/v1",                         keyHint: "sk-...",     caps: ["chat", "image", "voice"], models: ["gpt-5.5", "gpt-5.4", "gpt-5.3", "gpt-4o", "gpt-4o-mini"] },
-  grok:                { name: "Grok 官方",     base: "https://api.x.ai/v1",                               keyHint: "xai-...",    caps: ["chat", "image"],          models: ["grok-4", "grok-3", "grok-3-mini"] },
-  deepseek:            { name: "DeepSeek 官方", base: "https://api.deepseek.com",                          keyHint: "sk-...",     caps: ["chat"],                   models: ["deepseek-chat", "deepseek-reasoner"] },
-  dashscope:           { name: "阿里千问官方",   base: "https://dashscope.aliyuncs.com/compatible-mode/v1", keyHint: "sk-...",     caps: ["chat", "image", "voice"], models: ["qwen-max", "qwen-plus", "qwen-turbo", "qwen-vl-max"] },
-  volcengine:          { name: "火山豆包",      base: "https://ark.cn-beijing.volces.com/api/v3",          keyHint: "...",        caps: ["chat", "image", "voice"], models: ["doubao-pro-32k", "doubao-lite-32k", "doubao-vision-pro"] },
-  custom:              { name: "自定义 / 中转", base: "https://",                                          keyHint: "sk-...",     caps: ["chat", "image", "voice"], models: [] },
-  "openai-compatible": { name: "OpenAI兼容",    base: "https://",                                          keyHint: "sk-...",     caps: ["chat", "image", "voice"], models: [] },
+  openai:     { name: "OpenAI 官方",   base: "https://api.openai.com/v1",                         keyHint: "sk-...",  caps: ["chat", "image", "voice"], models: ["gpt-5.5", "gpt-5.4", "gpt-5.3", "gpt-4o", "gpt-4o-mini"] },
+  grok:       { name: "Grok 官方",     base: "https://api.x.ai/v1",                               keyHint: "xai-...", caps: ["chat", "image"],          models: ["grok-4", "grok-3", "grok-3-mini"] },
+  deepseek:   { name: "DeepSeek 官方", base: "https://api.deepseek.com",                          keyHint: "sk-...",  caps: ["chat"],                   models: ["deepseek-chat", "deepseek-reasoner"] },
+  dashscope:  { name: "阿里千问官方",   base: "https://dashscope.aliyuncs.com/compatible-mode/v1", keyHint: "sk-...",  caps: ["chat", "image", "voice"], models: ["qwen-max", "qwen-plus", "qwen-turbo", "qwen-vl-max"] },
+  volcengine: { name: "火山豆包",      base: "https://ark.cn-beijing.volces.com/api/v3",          keyHint: "...",     caps: ["chat", "image", "voice"], models: ["doubao-pro-32k", "doubao-lite-32k", "doubao-vision-pro"] },
+  custom:     { name: "自定义 / 中转", base: "https://",                                          keyHint: "sk-...",  caps: ["chat", "image", "voice"], models: [] },
+  "openai-compatible": { name: "OpenAI兼容", base: "https://", keyHint: "sk-...", caps: ["chat", "image", "voice"], models: [] }, // 后端兼容用，不在UI显示
 };
 
 const CAP_LABELS = { chat: "聊天", image: "图片", voice: "语音", realtime: "实时通话" };
-
-/* ===== 渠道(接口)列表 — 一个 base/key 一条, 可同时供多种用途 ===== */
-const CHANNELS = [
-  { id: "c_claude", type: "claude", name: "Claude 主力", base: "https://api.anthropic.com", model: "claude-sonnet-4",
-    caps: ["chat", "image"], enabled: true, fetched: ["claude-opus-4", "claude-sonnet-4", "claude-haiku-4"] },
-  { id: "c_openai", type: "openai", name: "OpenAI 中转·贵", base: "https://oai.relay-a.com/v1", model: "gpt-5.5",
-    caps: ["chat", "image", "voice", "realtime"], enabled: true, fetched: ["gpt-5.5", "gpt-5.4", "gpt-5.3", "gpt-4o", "gpt-4o-mini", "gpt-4o-realtime"] },
-  { id: "c_ds", type: "deepseek", name: "DeepSeek 省钱", base: "https://api.deepseek.com/v1", model: "deepseek-chat",
-    caps: ["chat"], enabled: true, fetched: ["deepseek-chat", "deepseek-reasoner"] },
-  { id: "c_qwen", type: "dashscope", name: "阿里千问·语音", base: "https://dashscope.aliyuncs.com/compatible-mode/v1", model: "qwen-max",
-    caps: ["voice", "chat", "realtime"], enabled: true, fetched: [] },
-  { id: "c_volc", type: "volcengine", name: "火山引擎·语音", base: "https://ark.cn-beijing.volces.com/api/v3", model: "doubao-pro-32k",
-    caps: ["voice"], enabled: false, fetched: [] },
-];
-
-/* ===== 用途路由 — 每种用途各自指向一个渠道 ===== */
-const ROUTING = {
-  chat:  { channelId: "c_claude", model: "claude-sonnet-4" },
-  image: { channelId: "c_openai", model: "gpt-5.5" },
-  realtime: { channelId: "c_openai", model: "gpt-4o-realtime" },
-  voice: { engine: "browser", channelId: "c_qwen", voiceId: "qwen-tts-vd-bailian-voice-20260511143305690-0d51", browserVoiceURI: "", rate: 0.9 },
-};
 
 /* ===== 语音引擎 ===== */
 const VOICE_ENGINES = [
@@ -213,16 +191,6 @@ const USER = {
   msgCount: 2841,
   tagline: "他不需要被治愈,他需要被看见。",
 };
-
-/* ---------- 能力配置 ---------- */
-const CAPS = [
-  { key: "model", name: "对话模型", desc: "Claude · 主模型已连接", on: true, status: "ok", icon: "cpu" },
-  { key: "memory", name: "长期记忆", desc: "她记得你说过的事 · 87 条", on: true, status: "ok", icon: "book" },
-  { key: "tts", name: "语音 (TTS)", desc: "让她把话说给你听", on: true, status: "ok", icon: "wave" },
-  { key: "moments", name: "主动动态", desc: "她会自己发朋友圈", on: true, status: "ok", icon: "spark" },
-  { key: "web", name: "联网检索", desc: "需要时帮你查最新的事", on: false, status: "off", icon: "globe" },
-  { key: "image", name: "看图理解", desc: "你发的图,她能看懂", on: true, status: "ok", icon: "image" },
-];
 
 /* ---------- 记忆(按角色 id) ---------- */
 const MEMORIES = {
@@ -432,4 +400,4 @@ function Bars() {
   );
 }
 
-export { AGENTS, CHAT_48, MOMENTS, USER, CAPS, MEMORIES, HISTORY, LONG_HISTORY, STICKERS, PROVIDERS, CHANNEL_TYPES, CAP_LABELS, CHANNELS, ROUTING, VOICE_ENGINES, Icon, Bars, greetByHour };
+export { AGENTS, CHAT_48, MOMENTS, USER, MEMORIES, HISTORY, LONG_HISTORY, STICKERS, PROVIDERS, CHANNEL_TYPES, VOICE_ENGINES, Icon, Bars, greetByHour };

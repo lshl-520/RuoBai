@@ -1,13 +1,13 @@
 import React from "react";
-import { Icon, CAPS, Bars } from "../store.jsx";
+import { Icon, Bars, useLockBody } from "../store.jsx";
 import { ModelsSection } from "./models.jsx";
-import { getSessionProfile, getUsageStats, logoutSession, uploadAvatarImage, updateNickname } from "../lib/profile.js";
+import { getSessionProfile, getUsageStats, logoutSession, uploadAvatarImage, updateNickname, updateRole } from "../lib/profile.js";
 import { getRoles } from "../lib/roles.js";
 /* 我的 / 设置 / 模型接入(见 models.jsx) / 能力配置 */
 const { useState: useStateP, useEffect: useEffectP } = React;
 
 function Toggle({ on, onClick }) {
-  return <button className={"toggle" + (on ? " on" : "")} onClick={onClick}><i /></button>;
+  return <span role="switch" aria-checked={on} className={"toggle" + (on ? " on" : "")} onClick={onClick}><i /></span>;
 }
 
 function Row({ icon, tint, title, sub, trailing, last, onClick }) {
@@ -37,6 +37,7 @@ function StatusDot({ status, detail }) {
 
 /* ====== 导出聊天记录 ====== */
 function ExportSheet({ agents, onClose }) {
+  useLockBody();
   const counts = (id) => (window.getFullHistory ? window.getFullHistory(id) : []).filter((m) => m.type !== "time").length;
   const exp = (a) => { if (window.downloadHistory) window.downloadHistory(a, window.getFullHistory(a.id)); };
   return (
@@ -68,6 +69,7 @@ function ExportSheet({ agents, onClose }) {
 
 /* ====== 外观与主题 ====== */
 function ThemeSheet({ current, onClose, onPick }) {
+  useLockBody();
   const themes = [
     { id: "", name: "微光", sub: "暖米白 · 柔粉薰衣草 · 2.0 默认", sw: ["#faf6f2", "#c16579", "#9a8fc0"] },
     { id: "classic", name: "原版", sub: "粉紫玻璃 · 从 3.13 走来的那一版", sw: ["#fff6fb", "#ff6aa8", "#9b72ff"] },
@@ -99,6 +101,7 @@ function ThemeSheet({ current, onClose, onPick }) {
 
 /* ====== 通知与主动消息 ====== */
 function NotifSheet({ onClose }) {
+  useLockBody();
   const [items, setItems] = useStateP([
     { k: "proactive", t: "她主动找你", s: "想你的时候,会先开口", on: true },
     { k: "moments", t: "她发了新动态", s: "她过自己的日子时提醒你", on: true },
@@ -135,6 +138,7 @@ function NotifSheet({ onClose }) {
 
 /* ====== 关于若白 ====== */
 function AboutSheet({ onClose }) {
+  useLockBody();
   return (
     <div className="sheet-mask" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "80%" }}>
@@ -167,6 +171,7 @@ function AboutSheet({ onClose }) {
 
 /* ====== 隐私与数据 ====== */
 function PrivacySheet({ agents, onClose }) {
+  useLockBody();
   const [done, setDone] = useStateP(false);
   const exportAll = () => { agents.forEach((a) => window.downloadHistory && window.downloadHistory(a, window.getFullHistory(a.id))); };
   const clearLocal = () => { try { Object.keys(localStorage).filter((k) => k.startsWith("ruobai")).forEach((k) => localStorage.removeItem(k)); } catch (e) {} setDone(true); setTimeout(() => setDone(false), 1800); };
@@ -206,11 +211,118 @@ function PrivacySheet({ agents, onClose }) {
   );
 }
 
+/* ====== 让小白更懂你 — 人设引导向导 ====== */
+function OnboardSheet({ role, onClose, onDone }) {
+  useLockBody();
+  const [step, setStep] = useStateP(0);
+  const [callName, setCallName] = useStateP("");
+  const [rel, setRel] = useStateP("");
+  const [customRel, setCustomRel] = useStateP("");
+  const [traits, setTraits] = useStateP([]);
+  const [herCall, setHerCall] = useStateP("");
+  const [style, setStyle] = useStateP("");
+  const [memo, setMemo] = useStateP("");
+  const [saving, setSaving] = useStateP(false);
+
+  const rels = ["恋人", "好朋友", "闺蜜", "家人"];
+  const traitList = ["温柔体贴", "活泼开朗", "高冷傲娇", "知性成熟", "可爱软萌"];
+  const styles = ["简短甜蜜", "详细关心", "随性自然"];
+  const toggleTrait = (t) => setTraits((p) => p.includes(t) ? p.filter((x) => x !== t) : [...p, t]);
+
+  const save = async () => {
+    setSaving(true);
+    const finalRel = rel === "自定义" ? customRel : rel;
+    const lines = [];
+    if (callName) lines.push(`主人希望你叫他「${callName}」`);
+    if (finalRel) lines.push(`你和主人的关系是：${finalRel}`);
+    if (traits.length) lines.push(`主人喜欢的性格：${traits.join("、")}`);
+    if (herCall) lines.push(`你平时叫主人：${herCall}`);
+    if (style) lines.push(`回复风格：${style}`);
+    if (memo) lines.push(`主人特别交代：${memo}`);
+
+    if (lines.length > 0 && role?.id) {
+      const extra = "\n\n【主人告诉你的】\n" + lines.join("\n");
+      try {
+        const currentPersona = role.persona || "";
+        const cleaned = currentPersona.replace(/\n\n【主人告诉你的】[\s\S]*$/, "");
+        await updateRole(role.id, { persona: cleaned + extra });
+      } catch (e) {}
+    }
+    setSaving(false);
+    onDone?.();
+    onClose();
+  };
+
+  return (
+    <div className="sheet-mask" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "85%" }}>
+        <div className="sheet-grip" />
+        <div className="sheet-head">
+          <h2 className="serif">让{role?.name || "她"}更懂你</h2>
+          <button className="icon-btn" onClick={onClose} style={{ width: 34, height: 34 }}>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+        <div className="sheet-body">
+          {/* 进度指示 */}
+          <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 16 }}>
+            {[0, 1, 2].map((i) => (
+              <span key={i} style={{ width: 32, height: 4, borderRadius: 2, background: i <= step ? "var(--rose)" : "var(--line)" }} />
+            ))}
+          </div>
+
+          {step === 0 && (<>
+            <label className="field-label">你希望她叫你什么？</label>
+            <input className="fld" value={callName} onChange={(e) => setCallName(e.target.value)} placeholder="比如：宝贝、哥哥、你的昵称" />
+
+            <label className="field-label" style={{ marginTop: 16 }}>你和她是什么关系？</label>
+            <div className="type-grid">
+              {[...rels, "自定义"].map((r) => (
+                <button key={r} className={"type-chip" + (rel === r ? " on" : "")} onClick={() => setRel(r)}>{r}</button>
+              ))}
+            </div>
+            {rel === "自定义" && (
+              <input className="fld" style={{ marginTop: 8 }} value={customRel} onChange={(e) => setCustomRel(e.target.value)} placeholder="你来定义你们的关系" />
+            )}
+          </>)}
+
+          {step === 1 && (<>
+            <label className="field-label">你喜欢她什么性格？<span className="lbl-hint">可多选</span></label>
+            <div className="type-grid">
+              {traitList.map((t) => (
+                <button key={t} className={"type-chip" + (traits.includes(t) ? " on" : "")} onClick={() => toggleTrait(t)}>{t}</button>
+              ))}
+            </div>
+
+            <label className="field-label" style={{ marginTop: 16 }}>她平时怎么称呼你？</label>
+            <input className="fld" value={herCall} onChange={(e) => setHerCall(e.target.value)} placeholder="比如：宝贝、亲爱的、哥哥" />
+          </>)}
+
+          {step === 2 && (<>
+            <label className="field-label">你希望她的回复风格？</label>
+            <div className="type-grid">
+              {styles.map((s) => (
+                <button key={s} className={"type-chip" + (style === s ? " on" : "")} onClick={() => setStyle(s)}>{s}</button>
+              ))}
+            </div>
+
+            <label className="field-label" style={{ marginTop: 16 }}>有什么她一定要记住的事？<span className="lbl-hint">选填</span></label>
+            <textarea className="fld area" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="比如：我喜欢晚睡、我怕被抛弃、我不喜欢被讲道理..." />
+          </>)}
+        </div>
+        <div className="sheet-foot">
+          {step > 0 && <button className="pill pill-ghost" onClick={() => setStep(step - 1)}>上一步</button>}
+          {step < 2 && <button className="pill pill-primary grow" onClick={() => setStep(step + 1)}>下一步</button>}
+          {step === 2 && <button className="pill pill-primary grow" disabled={saving} onClick={save}>{saving ? "保存中..." : "完成"}</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProfileScreen({ user: userProp, agents: agentsProp, onOnboard, onGoMemory, onLogout }) {
-  const [caps, setCaps] = useStateP(CAPS);
   const [sheet, setSheet] = useStateP(null);
   const [theme, setThemeState] = useStateP((typeof document !== "undefined" && document.documentElement.dataset.theme) || "");
-  const toggle = (k) => setCaps((p) => p.map((c) => c.key === k ? { ...c, on: !c.on } : c));
 
   /* ====== 从后端拉真实数据 ====== */
   const [realUser, setRealUser] = useStateP(null);
@@ -314,7 +426,7 @@ function ProfileScreen({ user: userProp, agents: agentsProp, onOnboard, onGoMemo
 
       {/* 让她认识你 */}
       <div className="pad" style={{ marginTop: 12 }}>
-        <button className="onboard-card" onClick={onOnboard}>
+        <button className="onboard-card" onClick={() => setSheet("onboard")}>
           <span className="ob-glow" />
           <span className="ob-av"><img src={ruobai.avatar} alt="" /></span>
           <span className="ob-main">
@@ -334,19 +446,6 @@ function ProfileScreen({ user: userProp, agents: agentsProp, onOnboard, onGoMemo
 
       {/* 模型接入 — 用途路由 + 接口渠道 + 语音(见 models.jsx) */}
       <ModelsSection />
-
-      {/* 她的能力 */}
-      <div className="section-label pad" style={{ marginTop: 18 }}><span>她的能力</span><span className="sl-line" /></div>
-      <div className="pad">
-        <div className="cap-card">
-          {caps.map((c, i) => (
-            <Row key={c.key} icon={c.icon} tint={c.on ? "on" : ""} title={c.name} sub={c.desc} last={i === caps.length - 1}
-              trailing={<Toggle on={c.on} onClick={() => toggle(c.key)} />} />
-          ))}
-          <Row icon="flower" tint="lav" title="Live2D 立绘" sub="让她真的动起来" last
-            trailing={<span className="tag tag-lav" style={{ height: 22 }}>即将上线</span>} />
-        </div>
-      </div>
 
       {/* 设置 */}
       <div className="section-label pad" style={{ marginTop: 18 }}><span>设置</span><span className="sl-line" /></div>
@@ -369,6 +468,10 @@ function ProfileScreen({ user: userProp, agents: agentsProp, onOnboard, onGoMemo
       {sheet === "theme" && <ThemeSheet current={theme} onClose={() => setSheet(null)} onPick={(t) => { setThemeState(t); try { if (t) { document.documentElement.dataset.theme = t; localStorage.setItem("ruobai_theme", t); } else { delete document.documentElement.dataset.theme; localStorage.removeItem("ruobai_theme"); } } catch (e) {} }} />}
       {sheet === "notif" && <NotifSheet onClose={() => setSheet(null)} />}
       {sheet === "about" && <AboutSheet onClose={() => setSheet(null)} />}
+      {sheet === "onboard" && (() => {
+        const rawRole = realAgents?.find((r) => !!r.is_active) || realAgents?.[0];
+        return rawRole ? <OnboardSheet role={rawRole} onClose={() => setSheet(null)} onDone={() => {}} /> : null;
+      })()}
     </div>
   );
 }
