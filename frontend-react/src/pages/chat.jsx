@@ -410,7 +410,7 @@ function ChatRoom({ agent, onBack }) {
   /* 加载用户头像 */
   useEffectC(() => {
     getSessionProfile().then(d => {
-      if (d?.avatar) setMyAvatar(d.avatar);
+      if (d?.user?.avatar) setMyAvatar(d.user.avatar);
     }).catch(() => {});
   }, []);
 
@@ -593,7 +593,7 @@ function ChatRoom({ agent, onBack }) {
                 <span>{m}</span>{routing.chat.model === m && <Icon name="check" />}
               </button>
             ))}
-            <div className="mp-foot">有钱用贵的,没钱切便宜的 · 在「我的 → 用途路由」改渠道</div>
+            <div className="mp-foot">有钱用贵的,没钱切便宜的 · 在「我的」页面改</div>
           </div>
         </div>
       )}
