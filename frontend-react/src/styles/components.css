@@ -14,10 +14,10 @@
 }
 
 /* ============== 角色 — Hero ============== */
-.hero { position: relative; height: 430px; border-radius: var(--r-xl); overflow: hidden; box-shadow: var(--shadow-lg); }
+.hero { position: relative; height: 420px; border-radius: var(--r-xl); overflow: hidden; box-shadow: var(--shadow-lg); }
 .hero-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top center; animation: kenburns 18s ease-in-out infinite alternate; }
 @keyframes kenburns { from { transform: scale(1) translateY(0); } to { transform: scale(1.08) translateY(-10px); } }
-.hero-scrim { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(40,28,32,0) 30%, rgba(40,28,32,0.18) 52%, rgba(38,26,30,0.86) 100%); }
+.hero-scrim { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(40,28,32,0) 40%, rgba(40,28,32,0.25) 60%, rgba(38,26,30,0.88) 100%); pointer-events: none; }
 .hero-top { position: absolute; top: 16px; left: 16px; right: 16px; z-index: 2; display: flex; align-items: center; justify-content: space-between; }
 .hero-edit { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.22); backdrop-filter: blur(8px); color: #fff; display: grid; place-items: center; }
 .hero-edit svg { width: 17px; height: 17px; }

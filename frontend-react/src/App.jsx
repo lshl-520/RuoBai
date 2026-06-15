@@ -7,7 +7,7 @@ import { ChatListScreen, ChatRoom } from "./pages/chat.jsx";
 import { AgentsScreen, AgentEditor, CharacterDetail } from "./pages/agents.jsx";
 import { MomentsScreen } from "./pages/moments.jsx";
 import { MemoryScreen } from "./pages/memory.jsx";
-import { ProfileScreen } from "./pages/profile.jsx";
+import { ProfileScreen, OnboardSheet } from "./pages/profile.jsx";
 
 const TABS = [
   { key: "chat",    path: "/chat",       label: "聊天", icon: "chat" },
@@ -25,6 +25,7 @@ function RuobaiApp({ authed, setAuthed }) {
   const [chatAgent, setChatAgent] = useState(null);
   const [detailAgent, setDetailAgent] = useState(null);
   const [editAgent, setEditAgent] = useState(undefined);
+  const [onboardRole, setOnboardRole] = useState(null);
 
   // 进聊天室时往浏览器历史塞一条记录，让手机系统返回键能正确退回聊天列表，
   // 而不是把聊天室当透明、直接退到更早的页面（甚至退出 app）。
@@ -58,6 +59,8 @@ function RuobaiApp({ authed, setAuthed }) {
       const { switchRole } = await import("./lib/roles.js");
       await switchRole(id);
       setAgents((p) => p.map((a) => ({ ...a, isDefault: a.id === id })));
+      setDetailAgent((d) => d ? { ...d, isDefault: d.id === id } : d);
+      setTimeout(() => window.dispatchEvent(new Event("focus")), 100);
     } catch (err) {
       console.error("切换主陪伴失败", err);
     }
@@ -100,7 +103,8 @@ function RuobaiApp({ authed, setAuthed }) {
         {detailAgent && (
           <CharacterDetail agent={detailAgent} memCount={(memories[detailAgent.id] || []).length}
             onClose={() => setDetailAgent(null)} onChat={openChat}
-            onEdit={setEditAgent} onDelete={deleteAgent} onSetMain={setMainCompanion} />
+            onEdit={setEditAgent} onDelete={deleteAgent} onSetMain={setMainCompanion}
+            onOnboard={(a) => setOnboardRole(a._raw || a)} />
         )}
       </div>
 
@@ -115,6 +119,7 @@ function RuobaiApp({ authed, setAuthed }) {
       </nav>
 
       {editAgent !== undefined && <AgentEditor agent={editAgent} onClose={() => setEditAgent(undefined)} onSave={saveAgent} />}
+      {onboardRole && <OnboardSheet role={onboardRole} onClose={() => setOnboardRole(null)} onDone={() => setOnboardRole(null)} />}
     </div>
   );
 }

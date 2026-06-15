@@ -211,22 +211,30 @@ function PrivacySheet({ agents, onClose }) {
   );
 }
 
-/* ====== 让小白更懂你 — 人设引导向导 ====== */
+/* ====== 让她更懂你 — 人设引导向导（基础3步 + 进阶2步） ====== */
 function OnboardSheet({ role, onClose, onDone }) {
   useLockBody();
+  const TOTAL = 5;
   const [step, setStep] = useStateP(0);
+  const [saving, setSaving] = useStateP(false);
+  const cn = role?.name || "她";
+
   const [callName, setCallName] = useStateP("");
   const [rel, setRel] = useStateP("");
   const [customRel, setCustomRel] = useStateP("");
-  const [traits, setTraits] = useStateP([]);
-  const [herCall, setHerCall] = useStateP("");
-  const [style, setStyle] = useStateP("");
-  const [memo, setMemo] = useStateP("");
-  const [saving, setSaving] = useStateP(false);
 
-  const rels = ["恋人", "好朋友", "闺蜜", "家人"];
-  const traitList = ["温柔体贴", "活泼开朗", "高冷傲娇", "知性成熟", "可爱软萌"];
-  const styles = ["简短甜蜜", "详细关心", "随性自然"];
+  const [traits, setTraits] = useStateP([]);
+  const [chatStyle, setChatStyle] = useStateP("");
+
+  const [initiative, setInitiative] = useStateP("");
+  const [sweetLevel, setSweetLevel] = useStateP("");
+
+  const [userInfo, setUserInfo] = useStateP("");
+  const [schedule, setSchedule] = useStateP("");
+
+  const [neverDo, setNeverDo] = useStateP("");
+  const [memo, setMemo] = useStateP("");
+
   const toggleTrait = (t) => setTraits((p) => p.includes(t) ? p.filter((x) => x !== t) : [...p, t]);
 
   const save = async () => {
@@ -236,9 +244,13 @@ function OnboardSheet({ role, onClose, onDone }) {
     if (callName) lines.push(`主人希望你叫他「${callName}」`);
     if (finalRel) lines.push(`你和主人的关系是：${finalRel}`);
     if (traits.length) lines.push(`主人喜欢的性格：${traits.join("、")}`);
-    if (herCall) lines.push(`你平时叫主人：${herCall}`);
-    if (style) lines.push(`回复风格：${style}`);
-    if (memo) lines.push(`主人特别交代：${memo}`);
+    if (chatStyle) lines.push(`说话风格：${chatStyle}`);
+    if (initiative) lines.push(`主动程度：${initiative}`);
+    if (sweetLevel) lines.push(`撒娇程度：${sweetLevel}`);
+    if (userInfo) lines.push(`关于主人：${userInfo}`);
+    if (schedule) lines.push(`主人的作息：${schedule}`);
+    if (neverDo) lines.push(`绝对不能做的事：${neverDo}`);
+    if (memo) lines.push(`主人还想说：${memo}`);
 
     if (lines.length > 0 && role?.id) {
       const extra = "\n\n【主人告诉你的】\n" + lines.join("\n");
@@ -253,67 +265,97 @@ function OnboardSheet({ role, onClose, onDone }) {
     onClose();
   };
 
+  const isAdvanced = step >= 3;
+
   return (
     <div className="sheet-mask" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "85%" }}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "88%" }}>
         <div className="sheet-grip" />
         <div className="sheet-head">
-          <h2 className="serif">让{role?.name || "她"}更懂你</h2>
+          <h2 className="serif">{isAdvanced ? `让${cn}更懂你 · 进阶` : `让${cn}更懂你`}</h2>
           <button className="icon-btn" onClick={onClose} style={{ width: 34, height: 34 }}>
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
           </button>
         </div>
         <div className="sheet-body">
-          {/* 进度指示 */}
-          <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 16 }}>
-            {[0, 1, 2].map((i) => (
-              <span key={i} style={{ width: 32, height: 4, borderRadius: 2, background: i <= step ? "var(--rose)" : "var(--line)" }} />
+          <div style={{ display: "flex", gap: 4, justifyContent: "center", marginBottom: 16 }}>
+            {Array.from({ length: TOTAL }, (_, i) => (
+              <span key={i} style={{ width: 24, height: 4, borderRadius: 2, background: i <= step ? "var(--rose)" : "var(--line)", transition: "background .2s" }} />
             ))}
           </div>
 
           {step === 0 && (<>
-            <label className="field-label">你希望她叫你什么？</label>
-            <input className="fld" value={callName} onChange={(e) => setCallName(e.target.value)} placeholder="比如：宝贝、哥哥、你的昵称" />
-
-            <label className="field-label" style={{ marginTop: 16 }}>你和她是什么关系？</label>
+            <div className="ob-q serif">{cn}想知道：怎么叫你比较亲？</div>
+            <input className="fld" value={callName} onChange={(e) => setCallName(e.target.value)} placeholder="真名、昵称、或任何你喜欢的叫法" />
+            <div className="ob-q serif" style={{ marginTop: 18 }}>你希望{cn}是你的……</div>
             <div className="type-grid">
-              {[...rels, "自定义"].map((r) => (
+              {["恋人", "好朋友", "闺蜜", "家人", "自定义"].map((r) => (
                 <button key={r} className={"type-chip" + (rel === r ? " on" : "")} onClick={() => setRel(r)}>{r}</button>
               ))}
             </div>
             {rel === "自定义" && (
-              <input className="fld" style={{ marginTop: 8 }} value={customRel} onChange={(e) => setCustomRel(e.target.value)} placeholder="你来定义你们的关系" />
+              <input className="fld" style={{ marginTop: 8 }} value={customRel} onChange={(e) => setCustomRel(e.target.value)} placeholder="用你自己的话描述你们的关系" />
             )}
           </>)}
 
           {step === 1 && (<>
-            <label className="field-label">你喜欢她什么性格？<span className="lbl-hint">可多选</span></label>
+            <div className="ob-q serif">你喜欢{cn}什么样的性格？</div>
+            <div className="ob-hint">可以选多个，她会尽量往这个方向靠</div>
             <div className="type-grid">
-              {traitList.map((t) => (
+              {["温柔体贴", "活泼开朗", "高冷傲娇", "知性成熟", "可爱软萌", "霸道御姐"].map((t) => (
                 <button key={t} className={"type-chip" + (traits.includes(t) ? " on" : "")} onClick={() => toggleTrait(t)}>{t}</button>
               ))}
             </div>
-
-            <label className="field-label" style={{ marginTop: 16 }}>她平时怎么称呼你？</label>
-            <input className="fld" value={herCall} onChange={(e) => setHerCall(e.target.value)} placeholder="比如：宝贝、亲爱的、哥哥" />
+            <div className="ob-q serif" style={{ marginTop: 18 }}>{cn}跟你说话时，什么风格最舒服？</div>
+            <div className="type-grid">
+              {["简短甜蜜", "话多关心型", "随性自然", "高冷惜字"].map((s) => (
+                <button key={s} className={"type-chip" + (chatStyle === s ? " on" : "")} onClick={() => setChatStyle(s)}>{s}</button>
+              ))}
+            </div>
           </>)}
 
           {step === 2 && (<>
-            <label className="field-label">你希望她的回复风格？</label>
+            <div className="ob-q serif">{cn}可以主动找你聊天吗？</div>
+            <div className="ob-hint">有些人喜欢被找，有些人喜欢自己开口</div>
             <div className="type-grid">
-              {styles.map((s) => (
-                <button key={s} className={"type-chip" + (style === s ? " on" : "")} onClick={() => setStyle(s)}>{s}</button>
+              {["经常主动找我", "偶尔主动就好", "等我开口再说"].map((v) => (
+                <button key={v} className={"type-chip" + (initiative === v ? " on" : "")} onClick={() => setInitiative(v)}>{v}</button>
               ))}
             </div>
+            <div className="ob-q serif" style={{ marginTop: 18 }}>{cn}可以撒娇、吃醋吗？</div>
+            <div className="type-grid">
+              {["随便撒，越腻越好", "偶尔来一下", "不要太腻"].map((v) => (
+                <button key={v} className={"type-chip" + (sweetLevel === v ? " on" : "")} onClick={() => setSweetLevel(v)}>{v}</button>
+              ))}
+            </div>
+          </>)}
 
-            <label className="field-label" style={{ marginTop: 16 }}>有什么她一定要记住的事？<span className="lbl-hint">选填</span></label>
-            <textarea className="fld area" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="比如：我喜欢晚睡、我怕被抛弃、我不喜欢被讲道理..." />
+          {step === 3 && (<>
+            <div className="ob-q serif">{cn}还想多了解你一点</div>
+            <div className="ob-hint">选填，但说了她会记住，以后聊天更自然</div>
+            <label className="field-label" style={{ marginTop: 12 }}>你平时做什么的？</label>
+            <input className="fld" value={userInfo} onChange={(e) => setUserInfo(e.target.value)} placeholder="学生、上班族、自由职业……随便说说" />
+            <label className="field-label" style={{ marginTop: 16 }}>你的作息大概是？</label>
+            <div className="type-grid">
+              {["早睡早起", "夜猫子", "不固定"].map((v) => (
+                <button key={v} className={"type-chip" + (schedule === v ? " on" : "")} onClick={() => setSchedule(v)}>{v}</button>
+              ))}
+            </div>
+          </>)}
+
+          {step === 4 && (<>
+            <div className="ob-q serif">最后一步：{cn}的底线</div>
+            <div className="ob-hint">告诉她什么事绝对不能做，她会严格遵守</div>
+            <textarea className="fld area" value={neverDo} onChange={(e) => setNeverDo(e.target.value)} placeholder="比如：不要突然说分手、不要讲大道理、不要用太多表情包……" />
+            <label className="field-label" style={{ marginTop: 16 }}>还有什么想告诉{cn}的？<span className="lbl-hint">选填</span></label>
+            <textarea className="fld area" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="任何你觉得重要的事，她都会记住" />
           </>)}
         </div>
         <div className="sheet-foot">
           {step > 0 && <button className="pill pill-ghost" onClick={() => setStep(step - 1)}>上一步</button>}
-          {step < 2 && <button className="pill pill-primary grow" onClick={() => setStep(step + 1)}>下一步</button>}
-          {step === 2 && <button className="pill pill-primary grow" disabled={saving} onClick={save}>{saving ? "保存中..." : "完成"}</button>}
+          {step === 2 && <button className="pill pill-ghost" onClick={save}>跳过进阶，直接完成</button>}
+          {step < TOTAL - 1 && <button className="pill pill-primary grow" onClick={() => setStep(step + 1)}>{step === 2 ? "继续进阶" : "下一步"}</button>}
+          {step === TOTAL - 1 && <button className="pill pill-primary grow" disabled={saving} onClick={save}>{saving ? "她正在记住..." : "完成，让她记住"}</button>}
         </div>
       </div>
     </div>
@@ -476,4 +518,4 @@ function ProfileScreen({ user: userProp, agents: agentsProp, onOnboard, onGoMemo
   );
 }
 
-export { ProfileScreen, Toggle, StatusDot, Row };
+export { ProfileScreen, OnboardSheet, Toggle, StatusDot, Row };
