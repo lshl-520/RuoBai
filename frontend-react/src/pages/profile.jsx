@@ -211,6 +211,90 @@ function PrivacySheet({ agents, onClose }) {
   );
 }
 
+/* ====== 编辑我的资料 — 改头像 + 改昵称 ====== */
+function EditProfileSheet({ name, avatar, onClose, onSave }) {
+  useLockBody();
+  const [nick, setNick] = useStateP(name || "");
+  const [pic, setPic] = useStateP(avatar || null);     // 预览用的图（可能是本地 dataURL）
+  const [picUrl, setPicUrl] = useStateP(null);          // 上传成功后的服务器地址
+  const [saving, setSaving] = useStateP(false);
+  const [err, setErr] = useStateP("");
+
+  /* 选了新头像：先本地预览，再上传换回服务器地址 */
+  const onPick = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    e.target.value = "";
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result;
+      setPic(dataUrl);
+      try {
+        const upRes = await uploadAvatarImage(dataUrl);
+        if (upRes?.avatar_url) { setPicUrl(upRes.avatar_url); setPic(upRes.avatar_url); }
+      } catch (e2) { /* 上传失败保留本地预览，保存时再提示 */ }
+    };
+    reader.readAsDataURL(f);
+  };
+
+  const save = async () => {
+    const trimmed = nick.trim();
+    if (trimmed.length > 20) { setErr("名字最多 20 个字"); return; }
+    setSaving(true);
+    setErr("");
+    const payload = {};
+    if (trimmed && trimmed !== name) payload.nickname = trimmed;
+    if (picUrl) payload.avatar_url = picUrl;
+    if (!payload.nickname && !payload.avatar_url) { onClose(); return; }
+    try {
+      const res = await updateNickname(payload);
+      if (res?.success && res.user) {
+        onSave?.({ name: res.user.nickname, avatar: res.user.avatar });
+        onClose();
+      } else {
+        setErr(res?.error || "保存失败，再试一次");
+        setSaving(false);
+      }
+    } catch (e3) {
+      setErr("保存失败，检查网络后再试");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="sheet-mask" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "72%" }}>
+        <div className="sheet-grip" />
+        <div className="sheet-head">
+          <h2 className="serif">编辑我的资料</h2>
+          <button className="icon-btn" onClick={onClose} style={{ width: 34, height: 34 }}>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+        <div className="sheet-body">
+          <div className="date-hint">换张头像、改个名字 —— 她看到的就是这个你。</div>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "8px 0 18px" }}>
+            <label className="me-avatar" style={{ cursor: "pointer" }}>
+              <img src={pic} alt="" />
+              <span className="me-avatar-edit"><Icon name="edit" /></span>
+              <input type="file" accept="image/*" onChange={onPick} hidden />
+            </label>
+            <span className="ob-hint" style={{ marginTop: -6 }}>点头像换一张</span>
+          </div>
+          <label className="field-label">你的名字</label>
+          <input className="fld" value={nick} maxLength={20} onChange={(e) => setNick(e.target.value)} placeholder="你想让她怎么叫你" />
+          <div className="ob-hint" style={{ textAlign: "right", marginTop: 4 }}>{nick.trim().length}/20</div>
+          {err && <div className="ob-hint" style={{ color: "var(--rose-deep)", marginTop: 6 }}>{err}</div>}
+        </div>
+        <div className="sheet-foot">
+          <button className="pill pill-ghost" onClick={onClose}>取消</button>
+          <button className="pill pill-primary grow" disabled={saving} onClick={save}>{saving ? "保存中..." : "保存"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ====== 让她更懂你 — 人设引导向导（基础3步 + 进阶2步） ====== */
 function OnboardSheet({ role, onClose, onDone }) {
   useLockBody();
@@ -409,29 +493,11 @@ function ProfileScreen({ user: userProp, agents: agentsProp, onOnboard, onGoMemo
 
   const ruobai = agents.find((a) => a.isDefault) || agents[0];
   const [avatar, setAvatar] = useStateP(null); // null = 用 user.avatar
+  const [nameOverride, setNameOverride] = useStateP(null); // 保存昵称后立刻更新显示
+  const displayName = nameOverride ?? user.name;
 
   // 真实数据加载完后同步头像
   useEffectP(() => { if (user.avatar) setAvatar(user.avatar); }, [user.avatar]);
-
-  /* 头像上传（真实：上传到后端 → 更新数据库） */
-  const onAvatar = async (e) => {
-    const f = e.target.files && e.target.files[0];
-    if (!f) return;
-    e.target.value = "";
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result;
-      setAvatar(dataUrl); // 先本地预览
-      try {
-        const upRes = await uploadAvatarImage(dataUrl);
-        if (upRes?.avatar_url) {
-          await updateNickname({ avatar_url: upRes.avatar_url });
-          setAvatar(upRes.avatar_url);
-        }
-      } catch (err) { /* 上传失败保留本地预览 */ }
-    };
-    reader.readAsDataURL(f);
-  };
 
   /* 退出登录（真实：调后端注销 session） */
   const handleLogout = async () => {
@@ -447,22 +513,22 @@ function ProfileScreen({ user: userProp, agents: agentsProp, onOnboard, onGoMemo
         <button className="icon-btn"><Icon name="settings" /></button>
       </div>
 
-      {/* 用户卡 */}
+      {/* 用户卡 —— 点一下改头像和昵称 */}
       <div className="pad">
-        <div className="me-hero">
-          <label className="me-avatar">
+        <div className="me-hero" onClick={() => setSheet("editme")} role="button" style={{ cursor: "pointer" }}>
+          <span className="me-avatar">
             <img src={avatar} alt="" />
             <span className="me-avatar-edit"><Icon name="edit" /></span>
-            <input type="file" accept="image/*" onChange={onAvatar} hidden />
-          </label>
+          </span>
           <div className="me-info">
-            <div className="me-name serif">{user.name}</div>
+            <div className="me-name serif">{displayName}</div>
             <div className="me-handle">{user.handle}</div>
             <div className="me-pills">
               <span className="me-pill"><Icon name="key" /> 自带密钥</span>
               <span className="me-pill lav"><Icon name="shield" /> 数据私有</span>
             </div>
           </div>
+          <Icon name="chevron" className="row-chev" />
         </div>
       </div>
 
@@ -505,6 +571,7 @@ function ProfileScreen({ user: userProp, agents: agentsProp, onOnboard, onGoMemo
       </div>
       <div style={{ height: 20 }} />
 
+      {sheet === "editme" && <EditProfileSheet name={displayName} avatar={avatar} onClose={() => setSheet(null)} onSave={({ name, avatar: av }) => { if (name) setNameOverride(name); if (av) setAvatar(av); }} />}
       {sheet === "export" && <ExportSheet agents={agents} onClose={() => setSheet(null)} />}
       {sheet === "privacy" && <PrivacySheet agents={agents} onClose={() => setSheet(null)} />}
       {sheet === "theme" && <ThemeSheet current={theme} onClose={() => setSheet(null)} onPick={(t) => { setThemeState(t); try { if (t) { document.documentElement.dataset.theme = t; localStorage.setItem("ruobai_theme", t); } else { delete document.documentElement.dataset.theme; localStorage.removeItem("ruobai_theme"); } } catch (e) {} }} />}
