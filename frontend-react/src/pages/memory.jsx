@@ -1,6 +1,6 @@
 import React from "react";
 import { Icon, Bars } from "../store.jsx";
-import { getRoles } from "../lib/roles.js";
+import { getRoles, getRolePortraitSrc } from "../lib/roles.js";
 import { getMemories, createMemory, updateMemory as apiUpdateMemory, deleteMemory as apiDeleteMemory } from "../lib/memory.js";
 import { ChatHistoryView } from "./history.jsx";
 /* 记忆页 — 多角色记忆管理 + 完整聊天记录 */
@@ -86,7 +86,7 @@ function MemoryScreen({ agents: agentsProp }) {
         if (res?.success && Array.isArray(res.items)) {
           const mapped = res.items.map((r) => ({
             id: r.id, name: r.name, isDefault: !!r.is_active,
-            avatar: r.avatar || "/assets/avatar-bai.png",
+            avatar: getRolePortraitSrc(r) || "/assets/portraits/round/0.png",
           }));
           setRealAgents(mapped);
           if (mapped.length && !activeId) setActiveId(mapped[0].id);
