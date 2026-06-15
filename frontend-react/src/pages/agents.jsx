@@ -5,12 +5,20 @@ import { getRoles, getRolePortraitSrc, clampIntimacy, createRole, updateRole, sw
 const { useState: useStateA, useEffect: useEffectA, useRef: useRefA } = React;
 
 /* 后端角色 → 2.0 agent 格式 */
+function getFullPortrait(role) {
+  const portraitId = Number(role?.portrait_id ?? role?.portraitId);
+  const customUrl = String(role?.portrait_custom_url ?? role?.portraitCustomUrl ?? "").trim();
+  if (portraitId === 999 && customUrl) return customUrl;
+  if (Number.isInteger(portraitId) && portraitId >= 0 && portraitId <= 17) return `/assets/portraits/full/${portraitId}.png`;
+  return `/assets/portraits/full/0.png`;
+}
+
 function toAgent(role) {
   return {
     id: role.id,
     name: role.name || "未命名",
     avatar: getRolePortraitSrc(role) || "/assets/portraits/round/0.png",
-    cover: getRolePortraitSrc(role) || "/assets/portraits/full/0.png",
+    cover: getFullPortrait(role),
     tag: role.tag || "",
     tagline: role.persona ? role.persona.slice(0, 30) + "…" : "",
     persona: role.persona || "",

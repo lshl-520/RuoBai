@@ -94,7 +94,7 @@
 .detail-photo { position: relative; height: 360px; flex-shrink: 0; }
 .detail-photo img { width: 100%; height: 100%; object-fit: cover; object-position: top center; }
 .detail-scrim { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(30,20,24,0.2) 0%, transparent 30%, rgba(30,20,24,0.1) 55%, var(--paper) 100%); }
-.detail-back { position: absolute; top: 52px; left: 16px; z-index: 3; width: 38px; height: 38px; border-radius: 50%; background: rgba(255,255,255,0.22); backdrop-filter: blur(8px); color: #fff; display: grid; place-items: center; }
+.detail-back { position: absolute; top: 52px; left: 16px; z-index: 3; width: 38px; height: 38px; border-radius: 50%; background: rgba(40,30,35,0.45); backdrop-filter: blur(10px); color: #fff; display: grid; place-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
 .detail-back svg { width: 22px; height: 22px; }
 .detail-badge { position: absolute; top: 56px; right: 16px; z-index: 3; display: inline-flex; align-items: center; gap: 4px; padding: 5px 11px; border-radius: 999px; background: rgba(255,255,255,0.85); color: var(--rose-deep); font-size: 11px; font-weight: 600; }
 .detail-photo-text { position: absolute; left: 20px; bottom: 8px; z-index: 3; }
