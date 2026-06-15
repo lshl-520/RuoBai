@@ -1,6 +1,6 @@
 import React from "react";
 import { Icon, Bars } from "../store.jsx";
-import { getRoles, getRolePortraitSrc } from "../lib/roles.js";
+import { getRoles, getRolePortraitSrc, getRoleAvatarRound } from "../lib/roles.js";
 import { getMoments, createMoment, likeMoment as apiLike } from "../lib/moments.js";
 import { getSessionProfile } from "../lib/profile.js";
 /* 动态 / 朋友圈 — 从后端拉真实数据 */
@@ -154,7 +154,7 @@ function MomentsScreen({ moments: momentsProp, agents: agentsProp, user: userPro
         if (rolesRes?.success && Array.isArray(rolesRes.items)) {
           setRealAgents(rolesRes.items.map((r) => ({
             id: r.id, name: r.name, isDefault: !!r.is_active,
-            avatar: getRolePortraitSrc(r) || "/assets/portraits/round/0.png",
+            avatar: getRoleAvatarRound(r) || "/assets/portraits/round/0.png",
           })));
         }
         if (sessionRes?.success && sessionRes.user) {
