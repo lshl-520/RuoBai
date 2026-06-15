@@ -2,7 +2,7 @@ import React from "react";
 import { Icon, Bars, useLockBody } from "../store.jsx";
 import { ModelsSection } from "./models.jsx";
 import { getSessionProfile, getUsageStats, logoutSession, uploadAvatarImage, updateNickname, updateRole } from "../lib/profile.js";
-import { getRoles } from "../lib/roles.js";
+import { getRoles, getRoleAvatarRound } from "../lib/roles.js";
 /* 我的 / 设置 / 模型接入(见 models.jsx) / 能力配置 */
 const { useState: useStateP, useEffect: useEffectP } = React;
 
@@ -403,7 +403,7 @@ function ProfileScreen({ user: userProp, agents: agentsProp, onOnboard, onGoMemo
   const agents = realAgents
     ? realAgents.map((r) => ({
         id: r.id, name: r.name, isDefault: !!r.is_active,
-        avatar: r.avatar || "/assets/avatar-bai.png",
+        avatar: getRoleAvatarRound(r) || "/assets/portraits/round/0.png",
       }))
     : agentsProp;
 
