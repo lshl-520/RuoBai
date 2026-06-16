@@ -214,17 +214,21 @@ function MomentsScreen({ moments: momentsProp, agents: agentsProp, user: userPro
         ))}
       </div>
 
-      <div className="moments-list pad">
-        {list.length === 0 && (
-          <div className="empty-state">
-            <img className="empty-state-img" src="/assets/empty-moments.png" alt="" />
+      {list.length === 0 ? (
+        <div className="empty-immersive moments-empty-full">
+          <img className="empty-immersive-img" src="/assets/empty-moments.png" alt="" />
+          <div className="empty-immersive-scrim" />
+          <div className="empty-immersive-guide">
             <div className="empty-state-title">她们还没来</div>
-            <div className="empty-state-desc">但这里一直留着，等她们过来说说今天的事。</div>
+            <div className="empty-state-desc">但这里一直留着，<br/>等她们过来说说今天的事。</div>
           </div>
-        )}
-        {list.map((m) => <MomentCard key={m.id} m={m} onLike={handleLike} />)}
-        <div style={{ height: 20 }} />
-      </div>
+        </div>
+      ) : (
+        <div className="moments-list pad">
+          {list.map((m) => <MomentCard key={m.id} m={m} onLike={handleLike} />)}
+          <div style={{ height: 20 }} />
+        </div>
+      )}
 
       <button className="fab" onClick={() => setComposing(true)}><Icon name="edit" /></button>
 
