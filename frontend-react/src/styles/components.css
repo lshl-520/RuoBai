@@ -97,12 +97,31 @@
 .sheet-foot { display: flex; gap: 10px; padding: 14px 20px 26px; flex-shrink: 0; border-top: 1px solid var(--line); background: var(--paper); }
 
 /* ============== 聊天列表 ============== */
-.chat-list { display: flex; flex-direction: column; gap: 6px; }
 
-/* 卡片基础 */
+/* 等比布局：topbar + 8个卡片刚好填满一屏（减去底部tabbar） */
+.cl-screen {
+  display: flex; flex-direction: column;
+  height: calc(100vh - 58px); /* 58px = tabbar高度 */
+  overflow: hidden;
+}
+.cl-topbar {
+  flex-shrink: 0;
+  padding: 8px 18px 6px;
+}
+.chat-list {
+  flex: 1;
+  display: flex; flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+/* 每张卡片的最小高度 = 可用空间/8，让8张刚好填满不滚动 */
 .cl-card {
   display: flex; align-items: center; gap: 12px;
-  padding: 10px 14px; border-radius: 16px;
+  padding: 0 14px;
+  min-height: calc((100vh - 58px - 56px - 48px) / 8);
+  /* 58=tabbar, 56=topbar, 48=gap余量(7个gap×6+padding) */
+  border-radius: 16px;
   background: rgba(255,255,255,0.72);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255,255,255,0.6);
@@ -112,6 +131,7 @@
   animation: cardSlideIn 0.4s cubic-bezier(0.2,0.8,0.2,1) both;
   position: relative;
   overflow: hidden;
+  flex-shrink: 0;
 }
 .cl-card:active { transform: scale(0.97); box-shadow: 0 1px 6px rgba(193,101,121,0.1); }
 
@@ -128,7 +148,7 @@
 }
 
 /* 头像 */
-.cl-avatar { position: relative; width: 54px; height: 54px; flex-shrink: 0; }
+.cl-avatar { position: relative; width: 50px; height: 50px; flex-shrink: 0; }
 .cl-avatar img { width: 100%; height: 100%; border-radius: 16px; object-fit: cover; object-position: top; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
 .cl-online { position: absolute; bottom: 1px; right: 1px; width: 11px; height: 11px; border-radius: 50%; background: var(--sage); border: 2.5px solid #fff; z-index: 2; }
 
@@ -154,7 +174,7 @@
   background: var(--rose-tint); color: var(--rose-deep);
 }
 .cl-time { font-size: 10.5px; color: var(--ink-faint); margin-left: auto; flex-shrink: 0; }
-.cl-bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; }
+.cl-bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 3px; }
 .cl-msg { font-size: 12.5px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.4; }
 .cl-badge { flex-shrink: 0; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--rose); color: #fff; font-size: 11px; font-weight: 600; display: grid; place-items: center; }
 
@@ -517,25 +537,19 @@
 
 /* ============================================================
    方案C · 真机视觉适配 — 聊天列表页
-   在 ≤430px 手机屏上按设计图内容密度微调，让角色列表更紧凑
+   ≤430px 手机屏微调
    ============================================================ */
 @media (max-width: 430px) {
-  /* 聊天列表 */
+  .cl-topbar { padding: 8px 16px 8px; }
+  .cl-topbar h1 { font-size: 21px; }
+  .cl-topbar .sub { font-size: 11px; }
+  .cl-topbar .icon-btn { width: 34px; height: 34px; }
+  .cl-topbar .icon-btn svg { width: 17px; height: 17px; }
   .chat-list { gap: 5px; }
-  .cl-card { gap: 10px; padding: 9px 12px; border-radius: 14px; }
-  .cl-avatar { width: 48px; height: 48px; }
+  .cl-card { gap: 10px; border-radius: 14px; }
+  .cl-avatar { width: 46px; height: 46px; }
   .cl-avatar img { border-radius: 14px; }
-  .cl-online { width: 10px; height: 10px; border-width: 2px; }
   .cl-name { font-size: 14px; }
-  .cl-time { font-size: 10px; }
-  .cl-bottom { margin-top: 2px; }
   .cl-msg { font-size: 12px; }
-  .cl-badge { min-width: 16px; height: 16px; font-size: 10px; }
   .cl-arrow svg { width: 14px; height: 14px; }
-  /* topbar 收紧 */
-  .topbar { padding: 4px 16px 8px; }
-  .topbar h1 { font-size: 21px; }
-  .topbar .sub { font-size: 11px; }
-  .icon-btn { width: 34px; height: 34px; }
-  .icon-btn svg { width: 17px; height: 17px; }
 }

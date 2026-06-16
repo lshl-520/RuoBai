@@ -161,18 +161,31 @@ function ChatListScreen({ agents: fallbackAgents, onOpen }) {
 
   const list = agents ?? fallbackAgents;
 
+  // ===== 临时假数据（全部页面UI改完后删掉）=====
+  const FAKE_ROLES = [
+    { id: 9001, name: "糖糖", avatar: "/assets/portraits/round/1.png", tag: "闺蜜", lastMsg: "今天出去逛街啦，好开心～", lastTime: "14:22", unread: 2, online: true, isDefault: false, intimacy: 68 },
+    { id: 9002, name: "宝", avatar: "/assets/portraits/round/3.png", tag: "恋人", lastMsg: "晚安，梦里见。", lastTime: "昨天", unread: 0, online: false, isDefault: false, intimacy: 92 },
+    { id: 9003, name: "ISFP", avatar: "/assets/portraits/round/0.png", tag: "分析师", lastMsg: "你的MBTI结果偏向内倾感知型…", lastTime: "周一", unread: 0, online: false, isDefault: false, intimacy: 30 },
+    { id: 9004, name: "塔罗", avatar: "/assets/portraits/round/1.png", tag: "占卜", lastMsg: "今日运势：月亮逆位，注意休息", lastTime: "6/12", unread: 0, online: true, isDefault: false, intimacy: 45 },
+    { id: 9005, name: "林夏", avatar: "/assets/portraits/round/3.png", tag: "恋人", lastMsg: "你今天有没有好好吃饭？", lastTime: "3小时前", unread: 1, online: true, isDefault: false, intimacy: 85 },
+    { id: 9006, name: "凌音", avatar: "/assets/portraits/round/0.png", tag: "助手", lastMsg: "代码跑通了，要我解释一下吗？", lastTime: "刚刚", unread: 3, online: true, isDefault: false, intimacy: 55 },
+    { id: 9007, name: "官方小白", avatar: "/assets/portraits/round/1.png", tag: "默认", lastMsg: "我是默认角色，来试试聊天吧～", lastTime: "5/28", unread: 0, online: false, isDefault: false, intimacy: 20 },
+  ];
+  const displayList = [...list, ...FAKE_ROLES];
+  // ===== 临时假数据结束 =====
+
   return (
-    <div className="screen anim-screen">
-      <div className="topbar">
+    <div className="screen anim-screen cl-screen">
+      <div className="topbar cl-topbar">
         <div>
           <h1>{greetByHour()}</h1>
           <div className="sub">{agents === null ? "加载中…" : `${list.length} 位在线 · 随时可以说话`}</div>
         </div>
         <button className="icon-btn"><Icon name="search" /></button>
       </div>
-      <div className={list.length === 0 && agents !== null ? "chat-list" : "chat-list pad"}>
-        {list.map((a, i) => (
-          <button key={a.id} className={"cl-card" + (a.isDefault ? " cl-primary" : "")} onClick={() => onOpen(a)} style={{ animationDelay: `${i * 60}ms` }}>
+      <div className="chat-list pad">
+        {displayList.map((a, i) => (
+          <button key={a.id} className={"cl-card" + (a.isDefault ? " cl-primary" : "")} onClick={() => onOpen(a)} style={{ animationDelay: `${i * 50}ms` }}>
             <div className="cl-avatar">
               <img src={a.avatar} alt={a.name} />
               {a.online && <span className="cl-online" />}
