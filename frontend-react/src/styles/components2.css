@@ -91,7 +91,7 @@
 
 /* ============== 角色详情 ============== */
 .detail-screen { position: absolute; inset: 0; z-index: 50; background: var(--paper); display: flex; flex-direction: column; overflow: hidden; }
-.detail-photo { position: relative; height: 360px; flex-shrink: 0; }
+.detail-photo { position: relative; height: min(360px, 48vh); flex-shrink: 0; }
 .detail-photo img { width: 100%; height: 100%; object-fit: cover; object-position: top center; }
 .detail-scrim { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(30,20,24,0.2) 0%, transparent 30%, rgba(30,20,24,0.1) 55%, var(--paper) 100%); }
 .detail-back { position: absolute; top: 52px; left: 16px; z-index: 3; width: 38px; height: 38px; border-radius: 50%; background: rgba(40,30,35,0.45); backdrop-filter: blur(10px); color: #fff; display: grid; place-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
@@ -126,7 +126,7 @@
 .cf-del { background: var(--rose-tint); color: var(--rose-deep); }
 
 /* ============== 记忆 ============== */
-.mem-roles { display: flex; gap: 10px; padding: 4px 18px 6px; overflow-x: auto; scroll-snap-type: x proximity; -webkit-mask: linear-gradient(90deg, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%); }
+.mem-roles { display: flex; gap: 10px; padding: 4px 18px 6px; overflow-x: auto; scroll-snap-type: x proximity; }
 .mem-roles::-webkit-scrollbar { height: 0; }
 .mem-role { scroll-snap-align: start; }
 .mem-role { display: flex; flex-direction: column; align-items: center; gap: 5px; flex-shrink: 0; opacity: 0.6; transition: opacity 0.2s, transform 0.2s; }
