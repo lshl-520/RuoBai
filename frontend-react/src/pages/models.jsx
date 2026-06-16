@@ -168,7 +168,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
           <div className="type-grid">
             {PURPOSE_OPTS.map((p) => (
               <button key={p.key} className={"type-chip" + (purposes.includes(p.key) ? " on" : "")} onClick={() => togglePurpose(p.key)}>
-                <Icon name={p.icon} /> {p.label}
+                {p.label}
               </button>
             ))}
           </div>
