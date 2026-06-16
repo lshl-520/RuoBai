@@ -43,13 +43,21 @@ function CapPicker({ cap, options, current, onClose, onPick }) {
           {groups.map((g) => (
             <div key={g.credId} className="route-channel">
               <div className="rc-head"><span className="rc-name">{g.name}</span></div>
-              <div className="model-chips">
-                {g.models.map((m) => (
-                  <button key={m}
-                    className={"model-chip" + (current?.credential_id === g.credId && current?.model_id === m ? " on" : "")}
-                    onClick={() => onPick(g.credId, m)}>{m}</button>
-                ))}
-              </div>
+              {g.models.length <= 10 ? (
+                <div className="model-chips">
+                  {g.models.map((m) => (
+                    <button key={m}
+                      className={"model-chip" + (current?.credential_id === g.credId && current?.model_id === m ? " on" : "")}
+                      onClick={() => onPick(g.credId, m)}>{m}</button>
+                  ))}
+                </div>
+              ) : (
+                <select className="fld" value={current?.credential_id === g.credId ? (current?.model_id || "") : ""}
+                  onChange={(e) => { if (e.target.value) onPick(g.credId, e.target.value); }}>
+                  <option value="">选择模型...</option>
+                  {g.models.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              )}
             </div>
           ))}
         </div>
@@ -68,9 +76,12 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
   const [apiKey, setApiKey] = useStateMo(channel?.apiKey || "");
   const [enabled, setEnabled] = useStateMo(channel?.enabled ?? true);
   const [showKey, setShowKey] = useStateMo(false);
-  const [models, setModels] = useStateMo(channel?.fetched?.length ? channel.fetched : preset.models);
-  const [model, setModel] = useStateMo(channel?.model || preset.models[0] || "");
+  const [models, setModels] = useStateMo([]);
+  const [model, setModel] = useStateMo(channel?.model || "");
   const [fetchState, setFetchState] = useStateMo("idle");
+  const [purposes, setPurposes] = useStateMo(channel?.purposes?.length ? channel.purposes : ["chat"]);
+
+  const togglePurpose = (p) => setPurposes((prev) => prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]);
 
   React.useEffect(() => {
     const body = document.querySelector('.sheet-body');
@@ -80,7 +91,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
   const pickType = (t) => {
     setType(t);
     const p = CHANNEL_TYPES[t] || CHANNEL_TYPES.custom;
-    if (!channel) { setBase(p.base); setModels(p.models); setModel(p.models[0] || ""); }
+    if (!channel) { setBase(p.base); setModels([]); setModel(""); }
   };
 
   const fetchModels = async () => {
@@ -92,7 +103,6 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
           const ids = result.items.map((m) => m.model_id);
           setModels(ids);
           setFetchState("done");
-          if (!model && ids[0]) setModel(ids[0]);
         } else {
           setFetchState("done");
           setModels([]);
@@ -103,20 +113,25 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
         if (result.success && result.items?.length) {
           setModels(result.items);
           setFetchState("done");
-          if (!model && result.suggested_model) setModel(result.suggested_model);
-          else if (!model && result.items[0]) setModel(result.items[0]);
         } else {
           setFetchState("fail");
-          setModels(CHANNEL_TYPES[type]?.models?.length ? CHANNEL_TYPES[type].models : []);
+          setModels([]);
         }
       }
     } catch (err) {
       setFetchState("fail");
-      setModels(CHANNEL_TYPES[type]?.models?.length ? CHANNEL_TYPES[type].models : []);
+      setModels([]);
     }
   };
 
-  const canSave = (isNew ? name.trim() : true) && (apiKey.trim() || type === "custom");
+  const canSave = (isNew ? name.trim() : true) && (apiKey.trim() || type === "custom" || !!channel?._backendId);
+
+  const PURPOSE_OPTS = [
+    { key: "chat", icon: "chat", label: "聊天" },
+    { key: "vision", icon: "image", label: "图片" },
+    { key: "tts", icon: "wave", label: "语音" },
+    { key: "realtime", icon: "phone", label: "实时通话" },
+  ];
 
   return (
     <div className="sheet-mask" onClick={onClose}>
@@ -149,6 +164,15 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
             <button className="key-eye" onClick={() => setShowKey(!showKey)}><Icon name={showKey ? "eyeOff" : "eye"} /></button>
           </div>
 
+          <label className="field-label">这个渠道用来做什么 <span className="lbl-hint">可多选</span></label>
+          <div className="type-grid">
+            {PURPOSE_OPTS.map((p) => (
+              <button key={p.key} className={"type-chip" + (purposes.includes(p.key) ? " on" : "")} onClick={() => togglePurpose(p.key)}>
+                <Icon name={p.icon} /> {p.label}
+              </button>
+            ))}
+          </div>
+
           <div className="model-head">
             <label className="field-label" style={{ margin: 0 }}>模型</label>
             <button className={"fetch-btn " + fetchState} onClick={fetchModels}>
@@ -159,7 +183,14 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
             </button>
           </div>
           {models.length === 0 && <div className="model-empty">点「获取模型列表」拉取，或手动输入</div>}
-          {models.length > 0 && (
+          {models.length > 0 && models.length <= 10 && (
+            <div className="model-chips" style={{ marginTop: 8 }}>
+              {models.map((m) => (
+                <button key={m} className={"model-chip" + (model === m ? " on" : "")} onClick={() => setModel(m)}>{m}</button>
+              ))}
+            </div>
+          )}
+          {models.length > 10 && (
             <select className="fld" value={model} onChange={(e) => setModel(e.target.value)} style={{ marginTop: 8 }}>
               <option value="">选择模型...</option>
               {models.map((m) => <option key={m} value={m}>{m}</option>)}
@@ -175,7 +206,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
         <div className="sheet-foot">
           {!isNew && <button className="icon-btn det-del" onClick={() => onDelete(channel.id)}><Icon name="trash" /></button>}
           <button className="pill pill-primary grow" disabled={!canSave} style={!canSave ? { opacity: 0.5 } : null}
-            onClick={() => onSave({ id: channel?.id, type, name, base, apiKey, enabled, model, fetched: models })}>
+            onClick={() => onSave({ id: channel?.id, type, name, base, apiKey, enabled, model, fetched: models, purposes })}>
             {isNew ? "添加渠道" : "保存"}
           </button>
         </div>
