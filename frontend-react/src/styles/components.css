@@ -217,7 +217,7 @@
 .row { display: flex; gap: 9px; margin-bottom: 12px; align-items: flex-end; }
 .row.me { justify-content: flex-end; }
 .row-avatar { width: 34px; height: 34px; flex-shrink: 0; }
-.row-avatar img { width: 100%; height: 100%; border-radius: 11px; object-fit: cover; object-position: top; }
+.row-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; object-position: top; }
 .her-stack { max-width: 76%; display: flex; flex-direction: column; align-items: flex-start; }
 .me-stack { max-width: 76%; display: flex; flex-direction: column; align-items: flex-end; }
 .msg-time { font-size: 10px; color: var(--ink-faint); margin: 4px 4px 0; }
@@ -329,7 +329,7 @@
 .moment { display: flex; gap: 11px; padding: 14px 6px; border-bottom: 1px solid var(--line); }
 .moment:last-child { border-bottom: none; }
 .m-avatar { width: 42px; height: 42px; flex-shrink: 0; }
-.m-avatar img { width: 100%; height: 100%; border-radius: 13px; object-fit: cover; object-position: top; }
+.m-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; object-position: top; }
 .m-main { flex: 1; min-width: 0; }
 .m-head { display: flex; align-items: center; gap: 7px; }
 .m-name { font-size: 14px; font-weight: 600; }
@@ -588,7 +588,7 @@
   .moments-list { gap: 2px; margin-top: 4px; }
   .moment { gap: 10px; padding: 11px 6px; }
   .m-avatar { width: 38px; height: 38px; }
-  .m-avatar img { border-radius: 12px; }
+  .m-avatar img { border-radius: 50%; }
   .m-name { font-size: 13px; }
   .m-body { font-size: 13px; margin-top: 4px; }
   .m-foot { margin-top: 8px; }
