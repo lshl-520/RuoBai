@@ -581,7 +581,8 @@
   .mc-sub { font-size: 11px; bottom: 28px; left: 16px; }
   .mc-user { right: 16px; bottom: 16px; width: 50px; height: 50px; }
   .mc-user img { border-radius: 15px; }
-  .mem-roles { gap: 12px; padding: 6px 18px 8px; }
+  .mem-roles { gap: 12px; padding: 8px 18px 10px; }
+  .mem-role { flex: 0 0 calc((100vw - 36px - 5 * 12px) / 6); }
   .mem-role-av { width: 42px; height: 42px; border-radius: 14px; }
   .mem-role-name { font-size: 10px; }
   .moments-list { gap: 2px; margin-top: 4px; }

@@ -203,8 +203,8 @@ function MomentsScreen({ moments: momentsProp, agents: agentsProp, user: userPro
       {/* 头像筛选栏 */}
       <div className="mem-roles" style={{ marginTop: 2 }}>
         <button className={"mem-role" + (filter === null ? " on" : "")} onClick={() => setFilter(null)}>
-          <span className="mem-role-av" style={{ display: "grid", placeItems: "center", background: "var(--rose-tint)", color: "var(--rose)" }}><Icon name="moments" style={{ width: 22, height: 22 }} /></span>
-          <span className="mem-role-name">全部</span>
+          <span className="mem-role-av"><img src={user?.avatar || "/assets/portraits/round/0.png"} alt={user?.username || "我"} /></span>
+          <span className="mem-role-name">{user?.username || "我"}</span>
         </button>
         {agents.map((a) => (
           <button key={a.id} className={"mem-role" + (filter === a.id ? " on" : "")} onClick={() => setFilter(a.id)}>
