@@ -84,9 +84,8 @@ function AgentCard({ agent, onDetail }) {
         </div>
       </div>
       <div className="ac-meta">
-        <div className="ac-persona">{agent.persona}</div>
         <div className="ac-tags">
-          {agent.tags.slice(0, 2).map((t) => <span key={t} className="micro-tag">{t}</span>)}
+          {(agent.tags && agent.tags.length ? agent.tags : [agent.name]).slice(0, 2).map((t) => <span key={t} className="micro-tag">{t}</span>)}
         </div>
       </div>
     </div>
@@ -338,7 +337,7 @@ function AgentEditor({ agent, onClose, onSave }) {
             <div className="portrait-pick">
               {PORTRAIT_OPTIONS.map((p) => (
                 <button key={p} className={"pp" + (p === portrait ? " on" : "")} onClick={() => setPortrait(p)}>
-                  <img src={p} alt="" />
+                  <img src={p} alt="" loading="lazy" />
                 </button>
               ))}
             </div>
