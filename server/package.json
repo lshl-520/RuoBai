@@ -6,9 +6,14 @@
   "scripts": {
     "start": "node server.js",
     "init-db": "node init-db.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "vector:qdrant": "docker run --rm -p 6333:6333 -v ruobai_qdrant:/qdrant/storage qdrant/qdrant",
+    "vector:import": "node vector-memory/import-json.js",
+    "vector:search": "node vector-memory/search-preview.js",
+    "vector:test": "node --test vector-memory/*.test.js"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",

@@ -101,3 +101,8 @@ docs/体检/*-019*.md
 frontend-react/dist/
 public-vue/
 public-vue/*
+
+# 向量记忆本地实验数据与模型缓存
+qdrant_storage/
+.cache/transformers/
+server/vector-memory/.local/
