@@ -528,7 +528,23 @@ export function createChatRouter({
       const capabilityModelConfig = isImageMessage
         ? await getCapabilityModelConfig(req.userId, 'vision')
         : null;
-      const modelConfig = capabilityModelConfig || await getActiveModelConfig(req.userId);
+
+      // 前端可传 credential_id + model_id 覆盖默认模型选择
+      const overrideCredId = req.body?.credential_id ? Number(req.body.credential_id) : null;
+      const overrideModelId = req.body?.model_id ? String(req.body.model_id).trim() : null;
+      let modelConfig = capabilityModelConfig;
+      if (!modelConfig && overrideCredId && overrideModelId) {
+        const [credRows] = await pool.query(
+          'SELECT id, api_base, api_key FROM credentials WHERE id = ? AND user_id = ? LIMIT 1',
+          [overrideCredId, req.userId]
+        );
+        if (credRows[0]) {
+          modelConfig = { api_base: credRows[0].api_base, api_key: credRows[0].api_key, model: overrideModelId };
+        }
+      }
+      if (!modelConfig) {
+        modelConfig = await getActiveModelConfig(req.userId);
+      }
       if (!modelConfig) {
         if (wantsEventStream(req)) {
           sendSyntheticStream(res, NO_MODEL_MESSAGE);
@@ -575,6 +591,12 @@ export function createChatRouter({
       }));
 
       const shouldStream = wantsEventStream(req);
+
+      // 推理深度（前端传 thinking_level: low/mid/high/ultra）
+      const thinkLevel = String(req.body?.thinking_level || '').trim();
+      const thinkBudgets = { low: 1024, mid: 4096, high: 16384, ultra: 65536 };
+      const thinkingParam = thinkBudgets[thinkLevel] ? { thinking: { type: "enabled", budget_tokens: thinkBudgets[thinkLevel] } } : {};
+
       const upstream = await fetchImpl(buildChatCompletionsUrl(modelConfig.api_base), {
         method: 'POST',
         headers: {
@@ -584,7 +606,8 @@ export function createChatRouter({
         body: JSON.stringify({
           model: modelConfig.model,
           stream: shouldStream,
-          messages
+          messages,
+          ...thinkingParam
         })
       });
 
