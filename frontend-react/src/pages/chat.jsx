@@ -2,9 +2,103 @@ import React from "react";
 import { Icon, Bars, greetByHour, STICKERS } from "../store.jsx";
 import { getRoles, getRolePortraitSrc, clampIntimacy } from "../lib/roles.js";
 import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage } from "../lib/chat.js";
-import { getSessionProfile } from "../lib/profile.js";
+import { getSessionProfile, getCapabilities } from "../lib/profile.js";
 /* 聊天列表 + 聊天室(沉浸: 常驻立绘随情绪变化 / 全屏立绘 / 语音 / 表情包 / 思考过程 / 搜索) */
 const { useState: useStateC, useRef: useRefC, useEffect: useEffectC } = React;
+
+/* ====== 模型 + 推理深度面板 ====== */
+const THINK_LEVELS = [
+  { key: "off", label: "关闭" },
+  { key: "low", label: "低" },
+  { key: "mid", label: "中" },
+  { key: "high", label: "高" },
+  { key: "ultra", label: "超高" },
+];
+
+function ModelPanel({ roleId, current, onPick, onClose }) {
+  const [caps, setCaps] = useStateC(null);
+  const [thinkLevel, setThinkLevel] = useStateC(current?.thinkLevel || "off");
+
+  useEffectC(() => {
+    getCapabilities().then((res) => {
+      if (res?.success && Array.isArray(res.items)) setCaps(res.items);
+    }).catch(() => {});
+  }, []);
+
+  const chatCap = caps?.find((c) => c.capability === "chat");
+  const groups = {};
+  (chatCap?.options || []).forEach((o) => {
+    const key = o.credential_name || `供应商#${o.credential_id}`;
+    if (!groups[key]) groups[key] = { credId: o.credential_id, name: key, models: [] };
+    groups[key].models.push(o.model_id);
+  });
+  const allGroups = Object.values(groups);
+
+  const pick = (credId, modelId) => {
+    onPick({ credentialId: credId, modelId, thinkLevel });
+    onClose();
+  };
+
+  const pickThink = (level) => {
+    setThinkLevel(level);
+    if (current?.credentialId && current?.modelId) {
+      onPick({ ...current, thinkLevel: level });
+    }
+  };
+
+  return (
+    <div className="model-panel-mask" onClick={onClose}>
+      <div className="model-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-grip" />
+        <div className="mp-cols">
+          <div className="mp-left">
+            <div className="mp-title">切换聊天模型</div>
+            {!caps && <div className="mp-loading">加载中...</div>}
+            {caps && allGroups.length === 0 && <div className="mp-empty">先去「我的」页配置一个供应商</div>}
+            {allGroups.map((g) => (
+              <div key={g.credId} className="mp-group">
+                <div className="mp-group-name">{g.name}</div>
+                {g.models.length <= 5 ? (
+                  <div className="model-chips">
+                    {g.models.map((m) => (
+                      <button key={m} className={"model-chip" + (current?.credentialId === g.credId && current?.modelId === m ? " on" : "")}
+                        onClick={() => pick(g.credId, m)}>{m}</button>
+                    ))}
+                  </div>
+                ) : (
+                  <>
+                    <div className="model-chips">
+                      {g.models.slice(0, 3).map((m) => (
+                        <button key={m} className={"model-chip" + (current?.credentialId === g.credId && current?.modelId === m ? " on" : "")}
+                          onClick={() => pick(g.credId, m)}>{m}</button>
+                      ))}
+                    </div>
+                    <select className="fld mp-select" value={current?.credentialId === g.credId ? (current?.modelId || "") : ""}
+                      onChange={(e) => { if (e.target.value) pick(g.credId, e.target.value); }}>
+                      <option value="">更多 ({g.models.length - 3} 个)...</option>
+                      {g.models.slice(3).map((m) => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </>
+                )}
+              </div>
+            ))}
+            <div className="mp-hint">有钱用贵的,没钱切便宜的</div>
+          </div>
+          <div className="mp-divider" />
+          <div className="mp-right">
+            <div className="mp-title">推理深度</div>
+            {THINK_LEVELS.map((t) => (
+              <button key={t.key} className={"mp-think" + (thinkLevel === t.key ? " on" : "")} onClick={() => pickThink(t.key)}>
+                <span className="mp-radio" />{t.label}
+              </button>
+            ))}
+            <div className="mp-hint">陪聊用关闭/低,写代码/复杂任务用高/超高</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* 小白拥有的情绪立绘 */
 const EMO_SET = {
@@ -401,7 +495,15 @@ function ChatRoom({ agent, onBack }) {
   const [atts, setAtts] = useStateC([]);
   const [listening, setListening] = useStateC(false);
   const [modelOpen, setModelOpen] = useStateC(false);
-  const [routing, setRouting] = useStateC(() => (window.loadRT ? window.loadRT() : { chat: { channelId: "", model: "对话模型" } }));
+  const [modelChoice, setModelChoice] = useStateC(() => {
+    try { const s = JSON.parse(localStorage.getItem(`ruobai_model_${roleId}`)); if (s) return s; } catch (e) {}
+    return { credentialId: null, modelId: null, thinkLevel: "off" };
+  });
+  const saveModelChoice = (choice) => {
+    setModelChoice(choice);
+    try { localStorage.setItem(`ruobai_model_${roleId}`, JSON.stringify(choice)); } catch (e) {}
+  };
+  const modelLabel = modelChoice.modelId || "对话模型";
   const [chatError, setChatError] = useStateC("");
   const [uploading, setUploading] = useStateC(false);
   const areaRef = useRefC(null);
@@ -437,15 +539,6 @@ function ChatRoom({ agent, onBack }) {
     load();
     return () => { cancelled = true; };
   }, [roleId]);
-
-  const channels = window.loadCH ? window.loadCH() : [];
-  const chatChannel = channels.find((c) => c.id === routing.chat.channelId);
-  const chatModels = chatChannel ? (chatChannel.fetched?.length ? chatChannel.fetched : (window.CHANNEL_TYPES?.[chatChannel.type]?.models || [routing.chat.model])) : [routing.chat.model];
-  const switchModel = (model) => {
-    const next = { ...routing, chat: { ...routing.chat, model } };
-    setRouting(next); setModelOpen(false);
-    try { localStorage.setItem(window.LS_RT, JSON.stringify(next)); } catch (e) {}
-  };
 
   const figSrc = hasEmo ? (EMO_SET[emo] || agent.cover) : agent.cover;
 
@@ -521,9 +614,14 @@ function ChatRoom({ agent, onBack }) {
       setMsgs((p) => [...p, { who: "her", type: "text", text: "", time: "", _streaming: true, _id: replyId }]);
       setTyping(false);
 
-      const streamPayload = images.length > 0
+      const basePayload = images.length > 0
         ? { content: t || "看看这些图", role: "user", message_type: "image", media_url: images[images.length - 1], skip_server_persistence: true }
         : { content: t, role: "user", skip_server_persistence: true };
+      const streamPayload = {
+        ...basePayload,
+        ...(modelChoice.credentialId && modelChoice.modelId ? { credential_id: modelChoice.credentialId, model_id: modelChoice.modelId } : {}),
+        ...(modelChoice.thinkLevel && modelChoice.thinkLevel !== "off" ? { thinking_level: modelChoice.thinkLevel } : {}),
+      };
 
       await streamAssistantReply(roleId, streamPayload, {
         onToken: (token) => {
@@ -577,7 +675,7 @@ function ChatRoom({ agent, onBack }) {
         <div className="ct-info">
           <div className="ct-name">{agent.name}<TempDot temp={agent.temp} /></div>
           <button className="ct-model" onClick={() => setModelOpen(!modelOpen)}>
-            <Icon name="cpu" /> {routing.chat.model}<Icon name="chevronD" className={"cm-chev" + (modelOpen ? " open" : "")} />
+            <Icon name="cpu" /> {modelLabel}<Icon name="chevronD" className={"cm-chev" + (modelOpen ? " open" : "")} />
           </button>
         </div>
         <button className="ct-ic" onClick={() => setSearching(!searching)} style={searching ? { color: "var(--rose)" } : null}><Icon name="search" /></button>
@@ -585,17 +683,7 @@ function ChatRoom({ agent, onBack }) {
       </header>
 
       {modelOpen && (
-        <div className="model-pop-mask" onClick={() => setModelOpen(false)}>
-          <div className="model-pop" onClick={(e) => e.stopPropagation()}>
-            <div className="mp-head">切换聊天模型 {chatChannel ? `· ${chatChannel.name}` : ""}</div>
-            {chatModels.map((m) => (
-              <button key={m} className={"mp-item" + (routing.chat.model === m ? " on" : "")} onClick={() => switchModel(m)}>
-                <span>{m}</span>{routing.chat.model === m && <Icon name="check" />}
-              </button>
-            ))}
-            <div className="mp-foot">有钱用贵的,没钱切便宜的 · 在「我的」页面改</div>
-          </div>
-        </div>
+        <ModelPanel roleId={roleId} current={modelChoice} onPick={saveModelChoice} onClose={() => setModelOpen(false)} />
       )}
 
       {searching && (
