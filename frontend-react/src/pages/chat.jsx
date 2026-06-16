@@ -2,7 +2,7 @@ import React from "react";
 import { Icon, Bars, greetByHour, STICKERS } from "../store.jsx";
 import { getRoles, getRolePortraitSrc, clampIntimacy } from "../lib/roles.js";
 import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage } from "../lib/chat.js";
-import { getSessionProfile, getCapabilities } from "../lib/profile.js";
+import { getSessionProfile, getCapabilities, updateCapability } from "../lib/profile.js";
 /* 聊天列表 + 聊天室(沉浸: 常驻立绘随情绪变化 / 全屏立绘 / 语音 / 表情包 / 思考过程 / 搜索) */
 const { useState: useStateC, useRef: useRefC, useEffect: useEffectC } = React;
 
@@ -36,6 +36,7 @@ function ModelPanel({ roleId, current, onPick, onClose }) {
 
   const pick = (credId, modelId) => {
     onPick({ credentialId: credId, modelId, thinkLevel });
+    updateCapability("chat", { credential_id: credId, model_id: modelId, enabled: true }).catch(() => {});
     onClose();
   };
 
