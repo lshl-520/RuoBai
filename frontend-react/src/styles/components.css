@@ -576,11 +576,11 @@
   .an-s { font-size: 10px; }
 
   /* --- 动态页 --- */
-  .moments-cover { height: 160px; margin-top: -40px; }
-  .mc-title { font-size: 24px; bottom: 44px; left: 16px; }
-  .mc-sub { font-size: 11px; bottom: 28px; left: 16px; }
-  .mc-user { right: 16px; bottom: 16px; width: 50px; height: 50px; }
-  .mc-user img { border-radius: 15px; }
+  .moments-cover { height: 200px; margin-top: -40px; }
+  .mc-title { font-size: 24px; bottom: 50px; left: 16px; }
+  .mc-sub { font-size: 11px; bottom: 32px; left: 16px; }
+  .mc-user { right: 16px; bottom: 18px; width: 52px; height: 52px; }
+  .mc-user img { border-radius: 16px; }
   .mem-roles { gap: 12px; padding: 8px 18px 10px; }
   .mem-role { flex: 0 0 calc((100vw - 36px - 5 * 12px) / 6); }
   .mem-role-av { width: 42px; height: 42px; border-radius: 14px; }
