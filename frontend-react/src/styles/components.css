@@ -498,7 +498,28 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 0 28px 28px;
+  padding: 0 28px 12px;
+  gap: 4px;
+}
+
+/* 动态页沉浸式空状态：铺满头像栏下方到底部tab */
+.moments-empty-full {
+  min-height: calc(100vh - 340px);
+  margin: 0;
+  border-radius: 0;
+}
+.moments-empty-full .empty-immersive-img {
+  object-position: center center;
+}
+
+/* 记忆页沉浸式空状态：铺满聊天记录入口下方到底部tab */
+.memory-empty-full {
+  min-height: calc(100vh - 420px);
+  margin: 0 -18px;
+  border-radius: 0;
+}
+.memory-empty-full .empty-immersive-img {
+  object-position: center center;
 }
 
 /* 聊天室错误提示 */
