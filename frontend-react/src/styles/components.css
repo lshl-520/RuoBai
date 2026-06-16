@@ -97,12 +97,12 @@
 .sheet-foot { display: flex; gap: 10px; padding: 14px 20px 26px; flex-shrink: 0; border-top: 1px solid var(--line); background: var(--paper); }
 
 /* ============== 聊天列表 ============== */
-.chat-list { display: flex; flex-direction: column; gap: 10px; }
+.chat-list { display: flex; flex-direction: column; gap: 6px; }
 
 /* 卡片基础 */
 .cl-card {
-  display: flex; align-items: center; gap: 14px;
-  padding: 14px 16px; border-radius: 18px;
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; border-radius: 16px;
   background: rgba(255,255,255,0.72);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255,255,255,0.6);
@@ -122,13 +122,13 @@
   box-shadow: 0 4px 20px rgba(193,101,121,0.12), 0 1px 4px rgba(0,0,0,0.04);
 }
 .cl-primary::before {
-  content: ""; position: absolute; inset: 0; border-radius: 18px;
+  content: ""; position: absolute; inset: 0; border-radius: 16px;
   background: linear-gradient(135deg, rgba(193,101,121,0.05) 0%, transparent 60%);
   pointer-events: none;
 }
 
 /* 头像 */
-.cl-avatar { position: relative; width: 50px; height: 50px; flex-shrink: 0; }
+.cl-avatar { position: relative; width: 54px; height: 54px; flex-shrink: 0; }
 .cl-avatar img { width: 100%; height: 100%; border-radius: 16px; object-fit: cover; object-position: top; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
 .cl-online { position: absolute; bottom: 1px; right: 1px; width: 11px; height: 11px; border-radius: 50%; background: var(--sage); border: 2.5px solid #fff; z-index: 2; }
 
@@ -521,21 +521,21 @@
    ============================================================ */
 @media (max-width: 430px) {
   /* 聊天列表 */
-  .chat-list { gap: 8px; }
-  .cl-card { gap: 12px; padding: 12px 14px; border-radius: 16px; }
-  .cl-avatar { width: 44px; height: 44px; }
+  .chat-list { gap: 5px; }
+  .cl-card { gap: 10px; padding: 9px 12px; border-radius: 14px; }
+  .cl-avatar { width: 48px; height: 48px; }
   .cl-avatar img { border-radius: 14px; }
   .cl-online { width: 10px; height: 10px; border-width: 2px; }
   .cl-name { font-size: 14px; }
   .cl-time { font-size: 10px; }
-  .cl-bottom { margin-top: 3px; }
+  .cl-bottom { margin-top: 2px; }
   .cl-msg { font-size: 12px; }
   .cl-badge { min-width: 16px; height: 16px; font-size: 10px; }
   .cl-arrow svg { width: 14px; height: 14px; }
   /* topbar 收紧 */
-  .topbar { padding: 4px 16px 10px; }
-  .topbar h1 { font-size: 22px; }
+  .topbar { padding: 4px 16px 8px; }
+  .topbar h1 { font-size: 21px; }
   .topbar .sub { font-size: 11px; }
-  .icon-btn { width: 36px; height: 36px; }
-  .icon-btn svg { width: 18px; height: 18px; }
+  .icon-btn { width: 34px; height: 34px; }
+  .icon-btn svg { width: 17px; height: 17px; }
 }
