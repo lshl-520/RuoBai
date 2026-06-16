@@ -130,7 +130,7 @@ function toAgent(role) {
 
 /* ---------------- 聊天列表 ---------------- */
 function ChatListScreen({ agents: fallbackAgents, onOpen }) {
-  const [agents, setAgents] = useStateC(null); // null = 加载中
+  const [agents, setAgents] = useStateC(null);
   const seqRef = useRefC(0);
 
   useEffectC(() => {
@@ -145,9 +145,7 @@ function ChatListScreen({ agents: fallbackAgents, onOpen }) {
         } else if (data?.success !== false && Array.isArray(data?.items)) {
           setAgents(data.items.map(toAgent));
         }
-      } catch {
-        // 后端没开或未登录，保持 null 走兜底
-      }
+      } catch {}
     }
     load();
     const onFocus = () => load();
@@ -168,20 +166,22 @@ function ChatListScreen({ agents: fallbackAgents, onOpen }) {
       <div className="topbar">
         <div>
           <h1>{greetByHour()}</h1>
-          <div className="sub">{agents === null ? "加载中…" : "她们都在,随时可以说话"}</div>
+          <div className="sub">{agents === null ? "加载中…" : `${list.length} 位在线 · 随时可以说话`}</div>
         </div>
         <button className="icon-btn"><Icon name="search" /></button>
       </div>
       <div className={list.length === 0 && agents !== null ? "chat-list" : "chat-list pad"}>
-        {list.map((a) => (
-          <button key={a.id} className="cl-item" onClick={() => onOpen(a)}>
+        {list.map((a, i) => (
+          <button key={a.id} className={"cl-card" + (a.isDefault ? " cl-primary" : "")} onClick={() => onOpen(a)} style={{ animationDelay: `${i * 60}ms` }}>
             <div className="cl-avatar">
               <img src={a.avatar} alt={a.name} />
               {a.online && <span className="cl-online" />}
+              {a.isDefault && <span className="cl-glow" />}
             </div>
             <div className="cl-main">
               <div className="cl-top">
                 <span className="cl-name">{a.name}</span>
+                {a.isDefault && <span className="cl-star">主陪伴</span>}
                 <span className="cl-time">{a.lastTime}</span>
               </div>
               <div className="cl-bottom">
@@ -189,6 +189,7 @@ function ChatListScreen({ agents: fallbackAgents, onOpen }) {
                 {a.unread > 0 && <span className="cl-badge">{a.unread}</span>}
               </div>
             </div>
+            <div className="cl-arrow"><Icon name="chevron" /></div>
           </button>
         ))}
         {list.length === 0 && agents !== null && (
