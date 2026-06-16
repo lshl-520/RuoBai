@@ -500,6 +500,22 @@ function ChatRoom({ agent, onBack }) {
     try { const s = JSON.parse(localStorage.getItem(`ruobai_model_${roleId}`)); if (s) return s; } catch (e) {}
     return { credentialId: null, modelId: null, thinkLevel: "off" };
   });
+
+  // 进入聊天室时从后端同步最新的能力配置（"我的"页可能改过）
+  useEffectC(() => {
+    getCapabilities().then((res) => {
+      if (!res?.success || !Array.isArray(res.items)) return;
+      const chatCap = res.items.find((c) => c.capability === "chat");
+      if (chatCap?.current?.credential_id && chatCap?.current?.model_id) {
+        setModelChoice((prev) => {
+          const updated = { ...prev, credentialId: chatCap.current.credential_id, modelId: chatCap.current.model_id };
+          try { localStorage.setItem(`ruobai_model_${roleId}`, JSON.stringify(updated)); } catch (e) {}
+          return updated;
+        });
+      }
+    }).catch(() => {});
+  }, [roleId]);
+
   const saveModelChoice = (choice) => {
     setModelChoice(choice);
     try { localStorage.setItem(`ruobai_model_${roleId}`, JSON.stringify(choice)); } catch (e) {}
