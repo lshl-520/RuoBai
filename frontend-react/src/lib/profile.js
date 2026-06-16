@@ -169,6 +169,38 @@ export function getCredentialModels(credId) {
   });
 }
 
+export function createCredential(payload) {
+  return request("/api/credentials", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateCredential(credId, payload) {
+  return request(`/api/credentials/${encodeURIComponent(credId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteCredential(credId) {
+  return request(`/api/credentials/${encodeURIComponent(credId)}`, {
+    method: "DELETE",
+  });
+}
+
+export function refreshCredentialModels(credId) {
+  return request(`/api/credentials/${encodeURIComponent(credId)}/refresh-models`, {
+    method: "POST",
+  });
+}
+
+export function testCredential(credId) {
+  return request(`/api/credentials/${encodeURIComponent(credId)}/test`, {
+    method: "POST",
+  });
+}
+
 export function getRoles() {
   return request("/api/roles", { method: "GET" });
 }
