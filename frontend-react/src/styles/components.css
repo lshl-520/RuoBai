@@ -574,4 +574,23 @@
   .an-plus svg { width: 20px; height: 20px; }
   .an-t { font-size: 13px; }
   .an-s { font-size: 10px; }
+
+  /* --- 动态页 --- */
+  .moments-cover { height: 160px; margin-top: -40px; }
+  .mc-title { font-size: 24px; bottom: 44px; left: 16px; }
+  .mc-sub { font-size: 11px; bottom: 28px; left: 16px; }
+  .mc-user { right: 16px; bottom: 16px; width: 50px; height: 50px; }
+  .mc-user img { border-radius: 15px; }
+  .mem-roles { gap: 8px; padding: 3px 16px 5px; }
+  .mem-role-av { width: 42px; height: 42px; border-radius: 14px; }
+  .mem-role-name { font-size: 10px; }
+  .moments-list { gap: 2px; margin-top: 4px; }
+  .moment { gap: 10px; padding: 11px 6px; }
+  .m-avatar { width: 38px; height: 38px; }
+  .m-avatar img { border-radius: 12px; }
+  .m-name { font-size: 13px; }
+  .m-body { font-size: 13px; margin-top: 4px; }
+  .m-foot { margin-top: 8px; }
+  .fab { width: 46px; height: 46px; right: 14px; bottom: 14px; }
+  .fab svg { width: 20px; height: 20px; }
 }
