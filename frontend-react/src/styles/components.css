@@ -97,19 +97,77 @@
 .sheet-foot { display: flex; gap: 10px; padding: 14px 20px 26px; flex-shrink: 0; border-top: 1px solid var(--line); background: var(--paper); }
 
 /* ============== 聊天列表 ============== */
-.chat-list { display: flex; flex-direction: column; gap: 4px; }
-.cl-item { display: flex; align-items: center; gap: 13px; padding: 12px; border-radius: var(--r); text-align: left; transition: background 0.18s; }
-.cl-item:active { background: var(--card); }
-.cl-avatar { position: relative; width: 54px; height: 54px; flex-shrink: 0; }
-.cl-avatar img { width: 100%; height: 100%; border-radius: 18px; object-fit: cover; object-position: top; box-shadow: var(--shadow-sm); }
-.cl-online { position: absolute; bottom: 1px; right: 1px; width: 12px; height: 12px; border-radius: 50%; background: var(--sage); border: 2.5px solid var(--paper); }
+.chat-list { display: flex; flex-direction: column; gap: 10px; }
+
+/* 卡片基础 */
+.cl-card {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 16px; border-radius: 18px;
+  background: rgba(255,255,255,0.72);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.6);
+  box-shadow: 0 2px 12px rgba(193,101,121,0.06), 0 1px 3px rgba(0,0,0,0.04);
+  text-align: left;
+  transition: transform 0.2s cubic-bezier(0.2,0.8,0.2,1), box-shadow 0.2s, background 0.2s;
+  animation: cardSlideIn 0.4s cubic-bezier(0.2,0.8,0.2,1) both;
+  position: relative;
+  overflow: hidden;
+}
+.cl-card:active { transform: scale(0.97); box-shadow: 0 1px 6px rgba(193,101,121,0.1); }
+
+/* 主陪伴特殊样式 */
+.cl-primary {
+  background: linear-gradient(135deg, rgba(255,240,243,0.85) 0%, rgba(255,255,255,0.8) 100%);
+  border-color: rgba(193,101,121,0.2);
+  box-shadow: 0 4px 20px rgba(193,101,121,0.12), 0 1px 4px rgba(0,0,0,0.04);
+}
+.cl-primary::before {
+  content: ""; position: absolute; inset: 0; border-radius: 18px;
+  background: linear-gradient(135deg, rgba(193,101,121,0.05) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+/* 头像 */
+.cl-avatar { position: relative; width: 50px; height: 50px; flex-shrink: 0; }
+.cl-avatar img { width: 100%; height: 100%; border-radius: 16px; object-fit: cover; object-position: top; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+.cl-online { position: absolute; bottom: 1px; right: 1px; width: 11px; height: 11px; border-radius: 50%; background: var(--sage); border: 2.5px solid #fff; z-index: 2; }
+
+/* 主陪伴头像呼吸光晕 */
+.cl-glow {
+  position: absolute; inset: -3px; border-radius: 19px;
+  background: radial-gradient(circle, rgba(193,101,121,0.25) 0%, transparent 70%);
+  animation: glowPulse 2.5s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes glowPulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+
+/* 内容区 */
 .cl-main { flex: 1; min-width: 0; }
-.cl-top { display: flex; align-items: baseline; justify-content: space-between; }
-.cl-name { font-size: 15.5px; font-weight: 600; }
-.cl-time { font-size: 11px; color: var(--ink-faint); flex-shrink: 0; }
-.cl-bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 3px; }
-.cl-msg { font-size: 13px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cl-top { display: flex; align-items: center; gap: 8px; }
+.cl-name { font-size: 15px; font-weight: 600; color: var(--ink); }
+.cl-star {
+  font-size: 9.5px; font-weight: 600;
+  padding: 2px 7px; border-radius: 999px;
+  background: var(--rose-tint); color: var(--rose-deep);
+}
+.cl-time { font-size: 10.5px; color: var(--ink-faint); margin-left: auto; flex-shrink: 0; }
+.cl-bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; }
+.cl-msg { font-size: 12.5px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.4; }
 .cl-badge { flex-shrink: 0; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--rose); color: #fff; font-size: 11px; font-weight: 600; display: grid; place-items: center; }
+
+/* 右侧箭头 */
+.cl-arrow { flex-shrink: 0; color: var(--ink-ghost); transition: transform 0.2s; }
+.cl-arrow svg { width: 16px; height: 16px; }
+.cl-card:active .cl-arrow { transform: translateX(3px); }
+
+/* 入场动画 */
+@keyframes cardSlideIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 /* ============== 聊天气泡 ============== */
 .chat-screen { display: flex; flex-direction: column; background: var(--paper); }
@@ -463,16 +521,17 @@
    ============================================================ */
 @media (max-width: 430px) {
   /* 聊天列表 */
-  .chat-list { gap: 2px; }
-  .cl-item { gap: 11px; padding: 10px 14px; }
-  .cl-avatar { width: 46px; height: 46px; }
-  .cl-avatar img { border-radius: 15px; }
+  .chat-list { gap: 8px; }
+  .cl-card { gap: 12px; padding: 12px 14px; border-radius: 16px; }
+  .cl-avatar { width: 44px; height: 44px; }
+  .cl-avatar img { border-radius: 14px; }
   .cl-online { width: 10px; height: 10px; border-width: 2px; }
   .cl-name { font-size: 14px; }
-  .cl-time { font-size: 10.5px; }
-  .cl-bottom { margin-top: 2px; }
+  .cl-time { font-size: 10px; }
+  .cl-bottom { margin-top: 3px; }
   .cl-msg { font-size: 12px; }
   .cl-badge { min-width: 16px; height: 16px; font-size: 10px; }
+  .cl-arrow svg { width: 14px; height: 14px; }
   /* topbar 收紧 */
   .topbar { padding: 4px 16px 10px; }
   .topbar h1 { font-size: 22px; }
