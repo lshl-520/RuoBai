@@ -61,6 +61,8 @@ html, body {
   height: 100%;
   font-family: var(--sans);
   color: var(--ink);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   background:
     radial-gradient(1200px 700px at 18% -8%, #f7ece9 0%, transparent 55%),
     radial-gradient(1000px 820px at 112% 8%, #f1ecf6 0%, transparent 52%),
