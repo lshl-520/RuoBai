@@ -1,6 +1,6 @@
 import React from "react";
 import { Icon, CHANNEL_TYPES, VOICE_ENGINES, useLockBody } from "../store.jsx";
-import { getModelConfigs, createModelConfig, updateModelConfig, deleteModelConfig, discoverModelConfigs, getCapabilities, updateCapability } from "../lib/profile.js";
+import { getCredentials, createCredential, updateCredential, deleteCredential, refreshCredentialModels, discoverModelConfigs, getCapabilities, updateCapability } from "../lib/profile.js";
 import { Toggle, StatusDot, Row } from "./profile.jsx";
 
 const { useState: useStateMo } = React;
@@ -84,18 +84,31 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
   };
 
   const fetchModels = async () => {
-    if (!apiKey.trim() && type !== "custom") { setFetchState("fail"); return; }
     setFetchState("loading");
     try {
-      const result = await discoverModelConfigs({ api_base: base, api_key: apiKey });
-      if (result.success && result.items?.length) {
-        setModels(result.items);
-        setFetchState("done");
-        if (!model && result.suggested_model) setModel(result.suggested_model);
-        else if (!model && result.items[0]) setModel(result.items[0]);
+      if (channel?._backendId) {
+        const result = await refreshCredentialModels(channel._backendId);
+        if (result.success && result.items?.length) {
+          const ids = result.items.map((m) => m.model_id);
+          setModels(ids);
+          setFetchState("done");
+          if (!model && ids[0]) setModel(ids[0]);
+        } else {
+          setFetchState("done");
+          setModels([]);
+        }
       } else {
-        setFetchState("fail");
-        setModels(CHANNEL_TYPES[type]?.models?.length ? CHANNEL_TYPES[type].models : []);
+        if (!apiKey.trim() && type !== "custom") { setFetchState("fail"); return; }
+        const result = await discoverModelConfigs({ api_base: base, api_key: apiKey });
+        if (result.success && result.items?.length) {
+          setModels(result.items);
+          setFetchState("done");
+          if (!model && result.suggested_model) setModel(result.suggested_model);
+          else if (!model && result.items[0]) setModel(result.items[0]);
+        } else {
+          setFetchState("fail");
+          setModels(CHANNEL_TYPES[type]?.models?.length ? CHANNEL_TYPES[type].models : []);
+        }
       }
     } catch (err) {
       setFetchState("fail");
@@ -296,25 +309,25 @@ function ModelsSection() {
     setCapPicker(null);
   };
 
-  /* 从后端拉真实 model-configs 作为渠道列表 */
+  /* 从后端拉真实 credentials 作为渠道列表 */
   React.useEffect(() => {
     let cancelled = false;
-    getModelConfigs().then((payload) => {
+    getCredentials().then((payload) => {
       if (cancelled) return;
-      const raw = Array.isArray(payload?.configs) ? payload.configs
-        : Array.isArray(payload?.items) ? payload.items
-        : Array.isArray(payload) ? payload : null;
-      if (!raw || raw.length === 0) return;
+      const raw = Array.isArray(payload?.items) ? payload.items : [];
+      if (raw.length === 0) return;
       const converted = raw.map((cfg) => ({
-        id: String(cfg.id ?? cfg._id ?? "c_" + Math.random()),
-        type: cfg.provider_type || cfg.providerType || "custom",
-        name: cfg.name || cfg.apiBase || "未命名渠道",
-        base: cfg.api_base || cfg.apiBase || "",
-        apiKey: cfg.api_key || cfg.apiKey || "",
-        model: cfg.model || "",
-        enabled: cfg.is_active ?? cfg.isActive ?? true,
+        id: String(cfg.id),
+        type: cfg.provider_type || "custom",
+        name: cfg.name || "未命名渠道",
+        base: cfg.api_base || "",
+        apiKey: "",
+        apiKeyMasked: cfg.api_key_masked || "",
+        model: "",
+        modelsCount: cfg.models_count || 0,
+        enabled: true,
         fetched: [],
-        _backendId: cfg.id ?? cfg._id,
+        _backendId: cfg.id,
       }));
       setChannels(converted);
     }).catch(() => {});
@@ -322,42 +335,51 @@ function ModelsSection() {
   }, []);
 
   const refreshChannels = () => {
-    getModelConfigs().then((payload) => {
-      const raw = Array.isArray(payload?.configs) ? payload.configs
-        : Array.isArray(payload?.items) ? payload.items
-        : Array.isArray(payload) ? payload : null;
-      if (!raw) return;
+    getCredentials().then((payload) => {
+      const raw = Array.isArray(payload?.items) ? payload.items : [];
       const converted = raw.map((cfg) => ({
-        id: String(cfg.id ?? cfg._id ?? "c_" + Math.random()),
-        type: cfg.provider_type || cfg.providerType || "custom",
-        name: cfg.name || cfg.apiBase || "未命名渠道",
-        base: cfg.api_base || cfg.apiBase || "",
-        apiKey: cfg.api_key || cfg.apiKey || "",
-        model: cfg.model || "",
-        enabled: cfg.is_active ?? cfg.isActive ?? true,
+        id: String(cfg.id),
+        type: cfg.provider_type || "custom",
+        name: cfg.name || "未命名渠道",
+        base: cfg.api_base || "",
+        apiKey: "",
+        apiKeyMasked: cfg.api_key_masked || "",
+        model: "",
+        modelsCount: cfg.models_count || 0,
+        enabled: true,
         fetched: [],
-        _backendId: cfg.id ?? cfg._id,
+        _backendId: cfg.id,
       }));
       setChannels(converted);
     }).catch(() => {});
   };
 
-  const saveChannel = (d) => {
-    const payload = { name: d.name, provider_type: d.type, api_base: d.base, api_key: d.apiKey, model: d.model };
-    if (d.id && channels.find((c) => c.id === d.id)?._backendId) {
-      const backendId = channels.find((c) => c.id === d.id)._backendId;
-      updateModelConfig(backendId, payload).then(() => { refreshChannels(); refreshCaps(); }).catch(() => {});
-    } else {
-      createModelConfig(payload).then(() => { refreshChannels(); refreshCaps(); }).catch(() => {});
-    }
+  const saveChannel = async (d) => {
+    const payload = { name: d.name, provider_type: d.type, api_base: d.base, api_key: d.apiKey };
+    try {
+      if (d.id && channels.find((c) => c.id === d.id)?._backendId) {
+        const backendId = channels.find((c) => c.id === d.id)._backendId;
+        await updateCredential(backendId, payload);
+        await refreshCredentialModels(backendId).catch(() => {});
+      } else {
+        const res = await createCredential(payload);
+        if (res?.success && res.item?.id) {
+          await refreshCredentialModels(res.item.id).catch(() => {});
+        }
+      }
+    } catch (e) {}
+    refreshChannels();
+    refreshCaps();
     setChSheet(undefined);
   };
 
-  const delChannel = (id) => {
+  const delChannel = async (id) => {
     const ch = channels.find((c) => c.id === id);
     if (ch?._backendId) {
-      deleteModelConfig(ch._backendId).then(() => { refreshChannels(); refreshCaps(); }).catch(() => {});
+      await deleteCredential(ch._backendId).catch(() => {});
     }
+    refreshChannels();
+    refreshCaps();
     setChSheet(undefined);
   };
 
@@ -415,12 +437,12 @@ function ModelsSection() {
         <div className="cap-card">
           {channels.map((c) => (
             <button key={c.id} className="prow" onClick={() => setChSheet({ channel: c, isNew: false })}>
-              <span className={"prow-ic " + (c.enabled ? "on" : "")}><Icon name="cpu" /></span>
+              <span className={"prow-ic on"}><Icon name="cpu" /></span>
               <span className="prow-main">
                 <span className="prow-t">{c.name}</span>
-                <span className="prow-s">{CHANNEL_TYPES[c.type]?.name || c.type}</span>
+                <span className="prow-s">{c.base}{c.modelsCount > 0 ? ` · 已发现 ${c.modelsCount} 个模型` : ""}</span>
               </span>
-              <StatusDot status={c.enabled ? "on" : "off"} detail={c.enabled ? "已启用" : "已停用"} />
+              <Icon name="chevron" className="row-chev" />
             </button>
           ))}
           <button className="prow last" onClick={() => setChSheet({ channel: null, isNew: true })}>
