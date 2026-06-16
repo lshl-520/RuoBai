@@ -536,10 +536,11 @@
 }
 
 /* ============================================================
-   方案C · 真机视觉适配 — 聊天列表页
+   方案C · 真机视觉适配
    ≤430px 手机屏微调
    ============================================================ */
 @media (max-width: 430px) {
+  /* --- 聊天列表 --- */
   .cl-topbar { padding: 8px 16px 8px; }
   .cl-topbar h1 { font-size: 21px; }
   .cl-topbar .sub { font-size: 11px; }
@@ -552,4 +553,25 @@
   .cl-name { font-size: 14px; }
   .cl-msg { font-size: 12px; }
   .cl-arrow svg { width: 14px; height: 14px; }
+
+  /* --- 角色页 --- */
+  .hero { height: min(280px, 38vh); }
+  .hero-name { font-size: 26px; }
+  .hero-quote { font-size: 12px; }
+  .hero-stats { gap: 10px; margin: 10px 0 6px; }
+  .hs b { font-size: 17px; }
+  .hs span { font-size: 9px; }
+  .hero-body { padding: 14px; }
+  .hero-cta-row { gap: 8px; }
+  .hero-cta { padding: 9px 16px; font-size: 13px; }
+  .section-label { margin: 14px 0 8px; }
+  .agent-grid { gap: 10px; }
+  .ac-photo { aspect-ratio: 3 / 2.8; }
+  .ac-name { font-size: 16px; }
+  .ac-meta { padding: 8px 10px 10px; }
+  .agent-new { min-height: 180px; }
+  .an-plus { width: 38px; height: 38px; }
+  .an-plus svg { width: 20px; height: 20px; }
+  .an-t { font-size: 13px; }
+  .an-s { font-size: 10px; }
 }
