@@ -456,3 +456,27 @@
   grid-template-columns: repeat(5, 1fr);
   gap: 5px;
 }
+
+/* ============================================================
+   方案C · 真机视觉适配 — 聊天列表页
+   在 ≤430px 手机屏上按设计图内容密度微调，让角色列表更紧凑
+   ============================================================ */
+@media (max-width: 430px) {
+  /* 聊天列表 */
+  .chat-list { gap: 2px; }
+  .cl-item { gap: 11px; padding: 10px 14px; }
+  .cl-avatar { width: 46px; height: 46px; }
+  .cl-avatar img { border-radius: 15px; }
+  .cl-online { width: 10px; height: 10px; border-width: 2px; }
+  .cl-name { font-size: 14px; }
+  .cl-time { font-size: 10.5px; }
+  .cl-bottom { margin-top: 2px; }
+  .cl-msg { font-size: 12px; }
+  .cl-badge { min-width: 16px; height: 16px; font-size: 10px; }
+  /* topbar 收紧 */
+  .topbar { padding: 4px 16px 10px; }
+  .topbar h1 { font-size: 22px; }
+  .topbar .sub { font-size: 11px; }
+  .icon-btn { width: 36px; height: 36px; }
+  .icon-btn svg { width: 18px; height: 18px; }
+}
