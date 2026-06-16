@@ -301,7 +301,7 @@
   to { opacity: 1; transform: none; }
 }
 .empty-state-img {
-  width: min(240px, 56vw);
+  width: min(320px, 80vw);
   height: auto;
   border-radius: var(--r-xl, 24px);
   object-fit: cover;
