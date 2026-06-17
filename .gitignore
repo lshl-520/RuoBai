@@ -3,11 +3,7 @@
 Thumbs.db
 
 # 本地启动脚本（写死本地路径，不进开源仓库）
-*一键启动.bat
-*一键关闭.bat
-React一键启动.bat
-React一键关闭.bat
-install-vue.bat
+*.bat
 
 # 内部开发文档（含本地路径和隐私信息）
 docs/superpowers/
