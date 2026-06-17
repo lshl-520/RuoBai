@@ -104,6 +104,7 @@ export function createOpenAICompatibleEmbedder({
   model,
   batchSize = DEFAULT_BATCH_SIZE,
   vectorSize,
+  maxChars = 1500,
   fetchImpl = globalThis.fetch
 }) {
   if (!model) {
@@ -141,7 +142,8 @@ export function createOpenAICompatibleEmbedder({
     async embedTexts(texts) {
       const cleanTexts = (Array.isArray(texts) ? texts : [texts])
         .map(text => String(text || '').trim())
-        .filter(Boolean);
+        .filter(Boolean)
+        .map(text => text.length > maxChars ? text.slice(0, maxChars) : text);
       const vectors = [];
 
       for (let index = 0; index < cleanTexts.length; index += batchSize) {
