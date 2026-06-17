@@ -22,6 +22,7 @@ function serializeMoment(row, comments = [], liked = false) {
     character_id: row.character_id,
     content: row.content,
     images: normalizeImages(row.images),
+    mood: row.mood || null,
     likes_count: Number(row.likes_count || 0),
     comments_count: comments.length,
     liked,
@@ -196,14 +197,14 @@ export function createMomentsRouter({
 
     const momentSql = characterId
       ? `
-          SELECT id, user_id, character_id, content, images, likes_count, created_at, is_deleted
+          SELECT id, user_id, character_id, content, images, mood, likes_count, created_at, is_deleted
           FROM moments
           WHERE user_id = ? AND is_deleted = 0 AND character_id = ?
           ORDER BY created_at DESC, id DESC
           LIMIT ? OFFSET ?
         `
       : `
-          SELECT id, user_id, character_id, content, images, likes_count, created_at, is_deleted
+          SELECT id, user_id, character_id, content, images, mood, likes_count, created_at, is_deleted
           FROM moments
           WHERE user_id = ? AND is_deleted = 0
           ORDER BY created_at DESC, id DESC
@@ -272,7 +273,7 @@ export function createMomentsRouter({
 
     const [momentRows] = await db.query(
       `
-        SELECT id, user_id, character_id, content, images, likes_count, created_at, is_deleted
+        SELECT id, user_id, character_id, content, images, mood, likes_count, created_at, is_deleted
         FROM moments
         WHERE id = ? AND user_id = ? AND is_deleted = 0
         LIMIT 1
@@ -378,19 +379,20 @@ export function createMomentsRouter({
       }
 
       const images = JSON.stringify(normalizeImages(req.body?.images));
+      const mood = String(req.body?.mood || '').trim() || null;
 
       const [result] = await db.query(
         `
           INSERT INTO moments
-            (user_id, character_id, content, images, likes_count, created_at, is_deleted)
-          VALUES (?, ?, ?, ?, 0, NOW(), 0)
+            (user_id, character_id, content, images, mood, likes_count, created_at, is_deleted)
+          VALUES (?, ?, ?, ?, ?, 0, NOW(), 0)
         `,
-        [req.userId, characterId, content, images]
+        [req.userId, characterId, content, images, mood]
       );
 
       const [rows] = await db.query(
         `
-          SELECT id, user_id, character_id, content, images, likes_count, created_at, is_deleted
+          SELECT id, user_id, character_id, content, images, mood, likes_count, created_at, is_deleted
           FROM moments
           WHERE id = ? AND user_id = ?
           LIMIT 1
@@ -523,6 +525,51 @@ export function createMomentsRouter({
         success: true,
         item
       });
+    } catch (error) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+  }));
+
+  router.delete('/:id', asyncHandler(async (req, res) => {
+    const momentId = parseInteger(req.params.id);
+    if (!momentId) {
+      return res.status(400).json({ success: false, error: '动态 ID 非法' });
+    }
+
+    try {
+      const result = await transaction(async connection => {
+        const [momentRows] = await connection.query(
+          'SELECT id, character_id FROM moments WHERE id = ? AND user_id = ? LIMIT 1',
+          [momentId, req.userId]
+        );
+        if (momentRows.length === 0) {
+          throw new Error('动态不存在或无权删除');
+        }
+
+        const moment = momentRows[0];
+
+        // 如果是角色发的动态，验证该角色属于当前用户
+        if (moment.character_id !== null) {
+          const [charRows] = await connection.query(
+            'SELECT id FROM characters WHERE id = ? AND user_id = ? LIMIT 1',
+            [moment.character_id, req.userId]
+          );
+          if (charRows.length === 0) {
+            throw new Error('无权删除此角色的动态');
+          }
+        }
+
+        // 删除相关的点赞和评论
+        await connection.query('DELETE FROM moment_likes WHERE moment_id = ?', [momentId]);
+        await connection.query('DELETE FROM moment_comments WHERE moment_id = ?', [momentId]);
+
+        // 删除动态
+        await connection.query('DELETE FROM moments WHERE id = ? AND user_id = ?', [momentId, req.userId]);
+
+        return { id: momentId };
+      });
+
+      return res.json({ success: true, data: result });
     } catch (error) {
       return res.status(400).json({ success: false, error: error.message });
     }

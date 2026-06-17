@@ -1,12 +1,10 @@
 import React from "react";
 import { Icon, Bars } from "../store.jsx";
 import { getRoles, getRolePortraitSrc, getRoleAvatarRound } from "../lib/roles.js";
-import { getMoments, createMoment, likeMoment as apiLike } from "../lib/moments.js";
+import { getMoments, createMoment, likeMoment as apiLike, deleteMoment as apiDelete } from "../lib/moments.js";
 import { getSessionProfile } from "../lib/profile.js";
 /* 动态 / 朋友圈 — 从后端拉真实数据 */
 const { useState: useStateM, useEffect: useEffectM } = React;
-
-const MOODS = ["想记录", "宣泄一下", "今天很好", "有点累", "深夜emo", "想她了"];
 
 /* 后端动态 → 前端格式 */
 function mapMoment(m, agentsMap, user) {
@@ -23,10 +21,11 @@ function mapMoment(m, agentsMap, user) {
     tagType: isUser ? "lav" : "rose",
     time: timeStr,
     content: m.content || "",
-    mood: "",
+    mood: m.mood || "",
     images: Array.isArray(m.images) ? m.images : [],
     likes: m.likes_count || 0,
     liked: !!m.liked,
+    isUser,
     comments: (m.comments || []).map((c) => ({
       name: c.character_id ? (agentsMap.get(c.character_id)?.name || "她") : (user?.name || "我"),
       text: c.content || "",
@@ -34,16 +33,71 @@ function mapMoment(m, agentsMap, user) {
   };
 }
 
-function MomentCard({ m, onLike }) {
+function MomentCard({ m, onLike, onDelete, currentUserId }) {
+  const [isLiking, setIsLiking] = React.useState(false);
+  const moodTags = m.mood ? m.mood.trim().split(/\s+/).filter(Boolean) : [];
+
+  const handleLike = async () => {
+    if (isLiking) return;
+    setIsLiking(true);
+    await onLike(m.id);
+    setTimeout(() => setIsLiking(false), 300);
+  };
+
   return (
-    <div className="moment">
+    <div
+      className="moment"
+      style={{
+        transition: 'all 0.3s ease',
+        cursor: 'default'
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'translateY(-2px)';
+        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.boxShadow = 'none';
+      }}
+    >
       <div className="m-avatar"><img src={m.avatar} alt={m.who} /></div>
       <div className="m-main">
-        <div className="m-head">
+        <div className="m-head" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
           <span className="m-name">{m.who}</span>
           <span className={"tag tag-" + (m.tagType)}>{m.tag === "我" ? "我" : "她"}</span>
-          {m.mood && <span className="tag tag-line">{m.mood}</span>}
+          {moodTags.map((tag, idx) => (
+            <span key={idx} className="tag tag-line">{tag}</span>
+          ))}
           {m.auto && <span className="tag tag-line">自动</span>}
+          <button
+            className="m-delete-btn"
+            onClick={() => {
+              if (window.confirm('确定删除这条动态吗？')) {
+                onDelete(m.id);
+              }
+            }}
+            style={{
+              marginLeft: 'auto',
+              padding: '2px 8px',
+              fontSize: '12px',
+              color: '#999',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              opacity: 0.6
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.color = '#ff4444';
+              e.target.style.opacity = '1';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.color = '#999';
+              e.target.style.opacity = '0.6';
+            }}
+          >
+            删除
+          </button>
         </div>
         <div className="m-body">{m.content}</div>
         {m.images.length > 0 && (
@@ -54,7 +108,14 @@ function MomentCard({ m, onLike }) {
         <div className="m-foot">
           <span className="m-time">{m.time}</span>
           <div className="m-actions">
-            <button className={"m-act" + (m.liked ? " liked" : "")} onClick={() => onLike(m.id)}>
+            <button
+              className={"m-act" + (m.liked ? " liked" : "")}
+              onClick={handleLike}
+              style={{
+                transition: 'all 0.2s ease',
+                transform: isLiking ? 'scale(1.2)' : 'scale(1)'
+              }}
+            >
               <Icon name={m.liked ? "heartFill" : "heart"} /> {m.likes}
             </button>
             <button className="m-act"><Icon name="comment" /> {m.comments.length}</button>
@@ -75,14 +136,90 @@ function MomentCard({ m, onLike }) {
 /* 发动态 */
 function Composer({ user, onClose, onPost }) {
   const [text, setText] = useStateM("");
-  const [mood, setMood] = useStateM("");
+  const [moodInput, setMoodInput] = useStateM("");
+  const [images, setImages] = useStateM([]);
+  const [isClosing, setIsClosing] = useStateM(false);
+  const fileInputRef = React.useRef(null);
+
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+    }, 200);
+  };
+
+  const handleImageSelect = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const remainingSlots = 9 - images.length;
+    const filesToAdd = files.slice(0, remainingSlots);
+
+    filesToAdd.forEach(file => {
+      if (!file.type.startsWith('image/')) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setImages(prev => [...prev, {
+          dataUrl: event.target.result,
+          file
+        }]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const removeImage = (index) => {
+    setImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const parsedTags = moodInput.trim().split(/\s+/).filter(Boolean);
+
   return (
-    <div className="sheet-mask" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
-        <div className="sheet-grip" />
+    <>
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes fadeOut {
+          from { opacity: 1; }
+          to { opacity: 0; }
+        }
+        @keyframes slideUp {
+          from { transform: translateY(30px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes slideDown {
+          from { transform: translateY(0); opacity: 1; }
+          to { transform: translateY(30px); opacity: 0; }
+        }
+      `}</style>
+      <div
+        className="sheet-mask"
+        onClick={handleClose}
+        style={{
+          animation: isClosing ? 'fadeOut 0.2s ease-out' : 'fadeIn 0.2s ease-out',
+          backdropFilter: 'blur(8px)',
+          backgroundColor: 'rgba(0, 0, 0, 0.4)'
+        }}
+      >
+        <div
+          className="sheet"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            animation: isClosing ? 'slideDown 0.2s ease-out' : 'slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.15)'
+          }}
+        >
+          <div className="sheet-grip" />
         <div className="sheet-head">
           <h2 className="serif">写点什么</h2>
-          <button className="icon-btn" onClick={onClose} style={{ width: 34, height: 34 }}>
+          <button className="icon-btn" onClick={handleClose} style={{ width: 34, height: 34 }}>
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
           </button>
         </div>
@@ -94,25 +231,111 @@ function Composer({ user, onClose, onPost }) {
           <textarea className="fld area" style={{ minHeight: 130 }} autoFocus value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="发泄一下也好,记录一下也好。这里没有别人,只有听你说话的她们。" />
+
+          {images.length > 0 && (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '8px',
+              marginTop: '12px'
+            }}>
+              {images.map((img, idx) => (
+                <div key={idx} style={{ position: 'relative', paddingTop: '100%' }}>
+                  <img
+                    src={img.dataUrl}
+                    alt=""
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      borderRadius: '8px'
+                    }}
+                  />
+                  <button
+                    onClick={() => removeImage(idx)}
+                    style={{
+                      position: 'absolute',
+                      top: '4px',
+                      right: '4px',
+                      width: '20px',
+                      height: '20px',
+                      borderRadius: '50%',
+                      background: 'rgba(0,0,0,0.6)',
+                      color: 'white',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="compose-tools">
-            <button className="ct-tool"><Icon name="image" /> 配图</button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleImageSelect}
+              style={{ display: 'none' }}
+            />
+            <button
+              className="ct-tool"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={images.length >= 9}
+            >
+              <Icon name="image" /> 配图 {images.length > 0 && `(${images.length}/9)`}
+            </button>
           </div>
-          <label className="field-label">此刻心情</label>
-          <div className="mood-row">
-            {MOODS.map((mo) => (
-              <button key={mo} className={"mood-chip" + (mood === mo ? " on" : "")} onClick={() => setMood(mood === mo ? "" : mo)}>{mo}</button>
-            ))}
-          </div>
+          <label className="field-label">心情标签</label>
+          <input
+            type="text"
+            className="fld"
+            value={moodInput}
+            onChange={(e) => setMoodInput(e.target.value)}
+            placeholder="空格分隔多个标签，如：开心 放松 想你了"
+            style={{ marginBottom: '8px' }}
+          />
+          {parsedTags.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+              {parsedTags.map((tag, idx) => (
+                <span
+                  key={idx}
+                  className="tag tag-line"
+                  style={{
+                    padding: '4px 12px',
+                    fontSize: '13px',
+                    background: '#f0f0f0',
+                    borderRadius: '12px',
+                    color: '#666'
+                  }}
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
           <div className="compose-note">发出后,在意你的角色可能会来评论。</div>
         </div>
         <div className="sheet-foot">
           <button className="pill pill-primary grow" disabled={!text.trim()} style={!text.trim() ? { opacity: 0.5 } : null}
-            onClick={() => text.trim() && onPost({ content: text.trim(), mood })}>
+            onClick={() => text.trim() && onPost({ content: text.trim(), mood: moodInput.trim(), images: images.map(img => img.dataUrl) })}>
             发布
           </button>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -182,9 +405,22 @@ function MomentsScreen({ moments: momentsProp, agents: agentsProp, user: userPro
     fetchMoments(filter);
   };
 
+  const handleDelete = async (id) => {
+    try {
+      await apiDelete(id);
+      fetchMoments(filter);
+    } catch (e) {
+      alert('删除失败：' + (e.message || '未知错误'));
+    }
+  };
+
   const handlePost = async (data) => {
     try {
-      await createMoment({ content: data.content, mood: data.mood });
+      await createMoment({
+        content: data.content,
+        mood: data.mood,
+        images: data.images || []
+      });
     } catch (e) { /* 静默 */ }
     setComposing(false);
     fetchMoments(filter);
@@ -225,7 +461,7 @@ function MomentsScreen({ moments: momentsProp, agents: agentsProp, user: userPro
         </div>
       ) : (
         <div className="moments-list pad">
-          {list.map((m) => <MomentCard key={m.id} m={m} onLike={handleLike} />)}
+          {list.map((m) => <MomentCard key={m.id} m={m} onLike={handleLike} onDelete={handleDelete} currentUserId={user?.id} />)}
           <div style={{ height: 20 }} />
         </div>
       )}
