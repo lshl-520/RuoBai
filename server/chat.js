@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getVectorMemoryBlock } from './vector-memory/retriever.js';
 import { pool as defaultPool } from './db.js';
 import { getRequestCharacterId } from './middleware.js';
 import {
@@ -560,16 +561,22 @@ export function createChatRouter({
         });
       }
 
-      const [recent, activeMemories] = await Promise.all([
+      const [recent, activeMemories, vectorMemoryBlock] = await Promise.all([
         loadRecentMessages(req.userId, characterId, 20),
-        loadActiveMemories(req.userId, characterId)
+        loadActiveMemories(req.userId, characterId),
+        getVectorMemoryBlock({
+          userId: req.userId,
+          characterId,
+          recentMessages: [],   // 先用空的，下面拿到recent后不需要再查一次
+          currentContent: content
+        }).catch(() => '')
       ]);
       const messages = [];
       const downgradeHint = isImageMessage && !capabilityModelConfig
         ? '\n\n用户给你看了一张图，但你现在没有看图能力。请自然地告诉她你暂时看不到图，并温柔地请她描述一下图里是什么。'
         : '';
 
-      messages.push({ role: 'system', content: buildSystemPrompt(character) + buildMemoryPromptBlock(activeMemories) + downgradeHint });
+      messages.push({ role: 'system', content: buildSystemPrompt(character) + buildMemoryPromptBlock(activeMemories) + vectorMemoryBlock + downgradeHint });
 
       messages.push(
         ...recent
