@@ -67,9 +67,19 @@ OPEN_SOURCE_SINGLE_USER=false
 node init-db.js
 ```
 
+编译 React 前端（在项目根目录）：
+
+```bash
+cd frontend-react
+npm install
+npm run build
+cd ..
+```
+
 本地或服务器直接启动：
 
 ```bash
+cd server
 npm start
 ```
 
@@ -86,32 +96,25 @@ RuoBai 采用 BYOK 模式，也就是“用户自己带密钥”。每个用户�
 
 公开仓库不会保存任何真实密钥。请不要把 `server/.env`、数据库备份、聊天图片、头像、语音缓存提交到公开仓库。
 
-## 当前前端状态
+## 前端说明
 
-- `public/` 对应当前线上旧版前端，也是原版主题的视觉参考来源。
-- `src-vue/` 是已冻结的过渡版，不再继续作为主线开发。
-- `frontend-react/` 会成为后续唯一正式新主线，默认微光主题，后续内置原版第二主题。
-
-如果你是接手前端迁移的人，先读：
-
-- `docs/superpowers/specs/2026-06-01-react-mainline-theme-design.md`
-- `docs/superpowers/specs/frontend-ownership-map.md`（如果已存在）
-- `docs/superpowers/plans/2026-06-01-react-mainline-phase1.md`
+- `frontend-react/`：当前正式主线，React + Vite，微光主题。部署时需要编译。
+- `public/`：原版 HTML 前端，作为备用第二主题保留。
+- `src-vue/`：已冻结的过渡版，不再开发。
 
 ## 重要目录
 
-- `public/`：前端页面。
+- `frontend-react/`：React 前端主线（部署前需编译）。
+- `public/`：原版 HTML 前端（备用第二主题）。
 - `server/`：后端服务和数据库初始化脚本。
-- `docs/`：项目说明、体检报告、需求记录和接手文档。
+- `server/vector-memory/`：可选的向量记忆模块（让角色记住长期对话）。
+- `docs/`：部署指南和开源说明。
 - `user_assets/`：运行时用户上传内容，本地保留，公开仓库不保存。
-- `_manual_backups/`：手动备份，本地保留，公开仓库不保存。
 
 ## 更多文档
 
 - `docs/部署指南.md`
 - `docs/开源与隐私说明.md`
-
-本地开发过程中产生的体检报告、旧工单、接手提示词和私人项目手记不放进公开仓库。
 
 ## 赞助鸣谢
 
