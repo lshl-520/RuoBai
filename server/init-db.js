@@ -128,6 +128,7 @@ const statements = [
       character_id INT DEFAULT NULL,
       content TEXT NOT NULL,
       images JSON,
+      mood VARCHAR(50) DEFAULT NULL,
       likes_count INT DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       is_deleted TINYINT(1) DEFAULT 0,

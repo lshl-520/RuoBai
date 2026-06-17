@@ -66,3 +66,9 @@ export function commentMoment(momentId, payload) {
     body: JSON.stringify(payload),
   });
 }
+
+export function deleteMoment(momentId) {
+  return request(`/api/moments/${encodeURIComponent(momentId)}`, {
+    method: "DELETE",
+  });
+}
