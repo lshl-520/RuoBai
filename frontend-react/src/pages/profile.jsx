@@ -6,6 +6,21 @@ import { getRoles, getRoleAvatarRound } from "../lib/roles.js";
 /* 我的 / 设置 / 模型接入(见 models.jsx) / 能力配置 */
 const { useState: useStateP, useEffect: useEffectP } = React;
 
+const FALLBACK_USER = {
+  name: "你",
+  handle: "@user · 从 3.13 走到现在",
+  avatar: "/assets/portraits/round/3.png",
+  longestDays: 0,
+  msgCount: 0,
+};
+
+const FALLBACK_ROLE = {
+  id: "ruobai-fallback",
+  name: "小白",
+  isDefault: true,
+  avatar: "/assets/portraits/round/0.png",
+};
+
 function Toggle({ on, onClick }) {
   return <span role="switch" aria-checked={on} className={"toggle" + (on ? " on" : "")} onClick={onClick}><i /></span>;
 }
@@ -475,29 +490,31 @@ function ProfileScreen({ user: userProp, agents: agentsProp, onOnboard, onGoMemo
     return () => { cancelled = true; };
   }, []);
 
-  // 合并：真实数据优先，假数据兜底
+  // 合并：真实数据优先，假数据兜底；真实角色列表为空时也不能白屏。
+  const fallbackUser = userProp || FALLBACK_USER;
   const user = realUser ? {
-    name: realUser.nickname || realUser.username || userProp.name,
+    name: realUser.nickname || realUser.username || fallbackUser.name,
     handle: `@${realUser.username || "user"} · 从 3.13 走到现在`,
-    avatar: realUser.avatar || userProp.avatar,
-    longestDays: realUser.longest_companionship_days ?? userProp.longestDays,
-    msgCount: stats?.messages_total ?? userProp.msgCount,
-  } : userProp;
+    avatar: realUser.avatar || fallbackUser.avatar,
+    longestDays: realUser.longest_companionship_days ?? fallbackUser.longestDays,
+    msgCount: stats?.messages_total ?? fallbackUser.msgCount,
+  } : fallbackUser;
 
-  const agents = realAgents
+  const hasRealAgents = Array.isArray(realAgents) && realAgents.length > 0;
+  const agents = hasRealAgents
     ? realAgents.map((r) => ({
         id: r.id, name: r.name, isDefault: !!r.is_active,
         avatar: getRoleAvatarRound(r) || "/assets/portraits/round/0.png",
       }))
-    : agentsProp;
+    : (Array.isArray(agentsProp) && agentsProp.length > 0 ? agentsProp : [FALLBACK_ROLE]);
 
-  const ruobai = agents.find((a) => a.isDefault) || agents[0];
-  const [avatar, setAvatar] = useStateP(null); // null = 用 user.avatar
+  const ruobai = agents.find((a) => a.isDefault) || agents[0] || FALLBACK_ROLE;
+  const [avatar, setAvatar] = useStateP(user.avatar || FALLBACK_USER.avatar);
   const [nameOverride, setNameOverride] = useStateP(null); // 保存昵称后立刻更新显示
   const displayName = nameOverride ?? user.name;
 
   // 真实数据加载完后同步头像
-  useEffectP(() => { if (user.avatar) setAvatar(user.avatar); }, [user.avatar]);
+  useEffectP(() => { setAvatar(user.avatar || FALLBACK_USER.avatar); }, [user.avatar]);
 
   /* 退出登录（真实：调后端注销 session） */
   const handleLogout = async () => {

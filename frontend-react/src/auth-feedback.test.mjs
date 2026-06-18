@@ -34,3 +34,12 @@ test('admin shortcut route sends new users to the real admin gate instead of Rea
     'admin shortcut must be registered before the React catch-all route',
   );
 });
+
+test('profile keeps rendering when the backend returns an empty role list', async () => {
+  const profile = await readProjectFile('frontend-react', 'src', 'pages', 'profile.jsx');
+
+  assert.match(profile, /const FALLBACK_ROLE = /);
+  assert.match(profile, /const hasRealAgents = Array\.isArray\(realAgents\) && realAgents\.length > 0;/);
+  assert.match(profile, /const ruobai = agents\.find\(\(a\) => a\.isDefault\) \|\| agents\[0\] \|\| FALLBACK_ROLE;/);
+  assert.doesNotMatch(profile, /const agents = realAgents\s*\?\s*realAgents\.map/);
+});
