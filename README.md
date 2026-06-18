@@ -33,6 +33,17 @@ RuoBai 是一个私人 AI 伴侣项目，重点不是做一个万能聊天框，
 
 ## 第一次部署
 
+最省事的方式是 Docker 一条命令部署。先在服务器装好 Docker，然后把域名换成你自己的：
+
+```bash
+DOMAIN=ruobai.example.com bash -c "$(curl -fsSL https://raw.githubusercontent.com/lshl-520/RuoBai/main/scripts/install-docker.sh)"
+```
+
+脚本会自动拉代码、生成配置、启动数据库和网站容器，并打印后台地址和默认管理员账号。
+Docker 模式以后更新代码，也重新运行这条命令。
+
+如果不用 Docker，也可以按下面的手动流程部署。
+
 先进入后端目录安装依赖：
 
 ```bash

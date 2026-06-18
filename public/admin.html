@@ -870,6 +870,10 @@
       badge.className = 'badge badge-gray';
       badge.textContent = '未检测';
       applyBtn.disabled = true;
+    } else if (info.disabled && info.deploy_mode === 'docker') {
+      badge.className = 'badge badge-gray';
+      badge.textContent = 'Docker部署';
+      applyBtn.disabled = true;
     } else {
       badge.className = `badge ${info.is_behind ? 'badge-yellow' : 'badge-green'}`;
       badge.textContent = info.is_behind ? '有新版本' : '已是最新';
@@ -999,7 +1003,7 @@
       const res = await api('/api/admin/update-check', { method: 'POST' });
       state.updateInfo = res?.data || null;
       renderUpdateCard();
-      message.textContent = state.updateInfo?.is_behind ? '检测到新版本，可以备份并更新。' : '当前已经是最新版本。';
+      message.textContent = state.updateInfo?.message || (state.updateInfo?.is_behind ? '检测到新版本，可以备份并更新。' : '当前已经是最新版本。');
       toast('检测完成');
     } catch (e) {
       message.textContent = e.message || '检测失败，请稍后再试。';

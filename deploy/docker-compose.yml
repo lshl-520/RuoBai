@@ -1,0 +1,62 @@
+services:
+  db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      MARIADB_DATABASE: ${DB_NAME:-ruobai}
+    volumes:
+      - ruobai_db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h localhost -uroot -p$${MARIADB_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DEPLOY_MODE: docker
+      PORT: 3000
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      DB_NAME: ${DB_NAME:-ruobai}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://127.0.0.1:3000}
+      BETA_REGISTRATION_ENABLED: ${BETA_REGISTRATION_ENABLED:-true}
+      OPEN_SOURCE_SINGLE_USER: ${OPEN_SOURCE_SINGLE_USER:-false}
+      VECTOR_QDRANT_URL: ${VECTOR_QDRANT_URL:-http://qdrant:6333}
+      VECTOR_EMBEDDING_URL: ${VECTOR_EMBEDDING_URL:-http://embedding:80}
+      VECTOR_EMBEDDING_MODEL: ${VECTOR_EMBEDDING_MODEL:-BAAI/bge-small-zh-v1.5}
+      VECTOR_COLLECTION: ${VECTOR_COLLECTION:-ruobai_memories}
+    ports:
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-3000}:3000"
+    volumes:
+      - ruobai_assets:/app/user_assets
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    profiles: ["vector"]
+    restart: unless-stopped
+    volumes:
+      - ruobai_qdrant:/qdrant/storage
+
+  embedding:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6
+    profiles: ["vector"]
+    restart: unless-stopped
+    command: ["--model-id", "BAAI/bge-small-zh-v1.5", "--port", "80"]
+
+volumes:
+  ruobai_db:
+  ruobai_assets:
+  ruobai_qdrant:

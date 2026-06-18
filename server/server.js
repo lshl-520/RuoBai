@@ -1,4 +1,5 @@
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import session from 'express-session';
@@ -24,6 +25,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
 const publicDir = path.join(projectRoot, 'public');
+const reactDistDir = path.join(projectRoot, 'frontend-react', 'dist');
+const reactIndexFile = path.join(reactDistDir, 'index.html');
+const hasReactBuild = fs.existsSync(reactIndexFile);
 const userAssetsDir = path.join(projectRoot, 'user_assets');
 const app = express();
 const requestedPort = Number(process.env.PORT) || 3000;
@@ -82,6 +86,10 @@ app.use((req, res, next) => {
   return next();
 });
 
+if (hasReactBuild) {
+  app.use(express.static(reactDistDir));
+}
+
 app.use(express.static(publicDir));
 app.use('/user_assets', express.static(userAssetsDir));
 
@@ -122,7 +130,7 @@ app.get('*', (req, res) => {
     return res.status(404).json({ success: false, error: 'API not found' });
   }
 
-  return res.sendFile(path.join(publicDir, 'index.html'));
+  return res.sendFile(hasReactBuild ? reactIndexFile : path.join(publicDir, 'index.html'));
 });
 
 app.use((error, _req, res, _next) => {

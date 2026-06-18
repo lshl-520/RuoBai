@@ -62,6 +62,26 @@ test('update check compares local HEAD with origin/main and lists changed files'
   assert.match(result.time_since_current, /1 天/);
 });
 
+test('docker deploy mode disables git based update flow with a clear message', async () => {
+  const service = createUpdateService({
+    deployMode: 'docker',
+    runCommand: async () => {
+      throw new Error('git commands should not run in docker deploy mode');
+    }
+  });
+
+  const checkResult = await service.checkForUpdates();
+  assert.equal(checkResult.disabled, true);
+  assert.equal(checkResult.deploy_mode, 'docker');
+  assert.equal(checkResult.is_behind, false);
+  assert.match(checkResult.message, /Docker 部署模式/);
+
+  await assert.rejects(
+    () => service.applyUpdate(),
+    /Docker 部署模式/
+  );
+});
+
 test('update apply backs up database before pulling code and reloads pm2 after health check', async () => {
   const calls = [];
   const service = createUpdateService({
@@ -91,8 +111,10 @@ test('update apply backs up database before pulling code and reloads pm2 after h
       if (command === 'mysqldump') return { stdout: '' };
       if (key === 'git rev-parse HEAD') return { stdout: 'old111\n' };
       if (key === 'git pull --ff-only origin main') return { stdout: 'updated\n' };
-      if (key === 'git diff --name-only old111 HEAD') return { stdout: 'server/package.json\n' };
+      if (key === 'git diff --name-only old111 HEAD') return { stdout: 'server/package.json\nfrontend-react/src/App.jsx\nfrontend-react/package.json\n' };
       if (key === 'npm install --production') return { stdout: '' };
+      if (key === 'npm install') return { stdout: '' };
+      if (key === 'npm run build') return { stdout: '' };
       if (key === 'node server/init-db.js') return { stdout: '' };
       if (key === 'pm2 reload ruobai') return { stdout: '' };
       if (key === 'git rev-parse HEAD') return { stdout: 'new222\n' };
@@ -105,8 +127,13 @@ test('update apply backs up database before pulling code and reloads pm2 after h
   assert.equal(result.success, true);
   assert.equal(result.previous_hash, 'old111');
   assert.equal(result.backup_file, '/app/_manual_backups/update-20260527-010203.sql');
+  assert.equal(result.server_package_changed, true);
+  assert.equal(result.frontend_package_changed, true);
+  assert.equal(result.frontend_built, true);
   assert.ok(calls.indexOf('mysqldump --host localhost --port 3306 --user root --single-transaction --routines --triggers ruobai') < calls.indexOf('git pull --ff-only origin main'));
   assert.ok(calls.includes('npm install --production'));
+  assert.ok(calls.includes('npm install'));
+  assert.ok(calls.includes('npm run build'));
   assert.ok(calls.includes('node server/init-db.js'));
   assert.ok(calls.includes('pm2 reload ruobai'));
 });

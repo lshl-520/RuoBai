@@ -104,6 +104,7 @@ export function createUpdateService(options = {}) {
   const now = options.now || (() => new Date());
   const healthCheck = options.healthCheck || defaultHealthCheck;
   const historyFile = options.historyFile || path.join(projectRoot, 'logs', 'update-history.json');
+  const deployMode = options.deployMode || process.env.DEPLOY_MODE || '';
 
   async function run(command, args, extra = {}) {
     return runCommand(command, args, {
@@ -189,6 +190,20 @@ export function createUpdateService(options = {}) {
   }
 
   async function checkForUpdates() {
+    if (deployMode === 'docker') {
+      return {
+        disabled: true,
+        deploy_mode: 'docker',
+        is_behind: false,
+        current: { hash: 'docker', committed_at: '' },
+        remote: { hash: '', committed_at: '' },
+        behind_count: 0,
+        changed_files: ['Docker 部署请重新运行一键部署脚本更新'],
+        time_since_current: '',
+        message: '当前是 Docker 部署模式，后台不会执行 git/pm2 更新。需要更新时，请在服务器终端重新运行一键部署命令。'
+      };
+    }
+
     await run('git', ['fetch', 'origin', 'main']);
 
     const currentHash = trimOutput(await run('git', ['rev-parse', 'HEAD']));
@@ -218,10 +233,16 @@ export function createUpdateService(options = {}) {
   }
 
   async function applyUpdate() {
+    if (deployMode === 'docker') {
+      throw new Error('当前是 Docker 部署模式，请在服务器终端重新运行一键部署脚本更新。');
+    }
+
     const started = now();
     let previousHash = '';
     let backupFile = '';
-    let packageChanged = false;
+    let serverPackageChanged = false;
+    let frontendPackageChanged = false;
+    let frontendChanged = false;
 
     try {
       backupFile = await createDatabaseBackup({ prefix: 'update', retentionDays: 7 });
@@ -229,11 +250,31 @@ export function createUpdateService(options = {}) {
 
       await run('git', ['pull', '--ff-only', 'origin', 'main']);
       const changedFiles = splitLines(trimOutput(await run('git', ['diff', '--name-only', previousHash, 'HEAD'])));
-      packageChanged = changedFiles.some(file => /(^|\/)package(-lock)?\.json$/.test(file));
+      serverPackageChanged = changedFiles.some(file => /^server\/package(-lock)?\.json$/.test(file));
+      frontendPackageChanged = changedFiles.some(file => /^frontend-react\/package(-lock)?\.json$/.test(file));
+      frontendChanged = changedFiles.some(file => file.startsWith('frontend-react/'));
 
-      if (packageChanged) {
+      if (serverPackageChanged) {
         await runCommand('npm', ['install', '--production'], {
           cwd: path.join(projectRoot, 'server'),
+          env: process.env,
+          timeout: 300000,
+          maxBuffer: 1024 * 1024 * 200
+        });
+      }
+
+      if (frontendPackageChanged) {
+        await runCommand('npm', ['install'], {
+          cwd: path.join(projectRoot, 'frontend-react'),
+          env: process.env,
+          timeout: 300000,
+          maxBuffer: 1024 * 1024 * 200
+        });
+      }
+
+      if (frontendChanged) {
+        await runCommand('npm', ['run', 'build'], {
+          cwd: path.join(projectRoot, 'frontend-react'),
           env: process.env,
           timeout: 300000,
           maxBuffer: 1024 * 1024 * 200
@@ -254,7 +295,10 @@ export function createUpdateService(options = {}) {
         previous_hash: previousHash,
         new_hash: newHash,
         backup_file: backupFile,
-        package_changed: packageChanged,
+        package_changed: serverPackageChanged || frontendPackageChanged,
+        server_package_changed: serverPackageChanged,
+        frontend_package_changed: frontendPackageChanged,
+        frontend_built: frontendChanged,
         duration_ms: now().getTime() - started.getTime()
       };
 
