@@ -3,6 +3,8 @@ set -eu
 
 echo "[RuoBai] 等待数据库启动..."
 
+cd /app/server
+
 node --input-type=module <<'NODE'
 import mysql from 'mysql2/promise';
 
@@ -31,7 +33,7 @@ for (let attempt = 1; attempt <= 60; attempt += 1) {
 NODE
 
 echo "[RuoBai] 初始化/迁移数据库..."
-node server/init-db.js
+node init-db.js
 
 echo "[RuoBai] 启动后端服务..."
-exec node server/server.js
+exec node server.js
