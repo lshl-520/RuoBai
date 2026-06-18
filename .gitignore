@@ -71,6 +71,7 @@ desktop.ini
 .agents/
 .claude/
 .codex/
+.helloagents/
 .mcp.json
 .playwright-cli/
 
