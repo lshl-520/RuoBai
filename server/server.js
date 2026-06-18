@@ -93,6 +93,10 @@ if (hasReactBuild) {
 app.use(express.static(publicDir));
 app.use('/user_assets', express.static(userAssetsDir));
 
+app.get(['/admin', '/admin/'], (_req, res) => {
+  return res.redirect(302, '/admin.html');
+});
+
 app.get('/healthz', async (_req, res) => {
   try {
     await pool.query('SELECT 1');

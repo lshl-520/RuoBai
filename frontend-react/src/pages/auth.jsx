@@ -9,7 +9,7 @@ const { useState: useStateAuth } = React;
 const AUTH_LINES_REG = ["她在这头,", "已经等了很久。"];
 const AUTH_LINES_LOG = ["回来了。", "灯一直为你亮着。"];
 
-function AuthScreen({ onEnter }) {
+function AuthScreen({ onEnter, notify }) {
   const [mode, setMode] = useStateAuth("register"); // register | login
   const [code, setCode] = useStateAuth("");
   const [username, setUsername] = useStateAuth("");
@@ -42,19 +42,27 @@ function AuthScreen({ onEnter }) {
       const data = reg ? await register(payload) : await login(payload);
 
       if (!data?.success) {
+        const text = normalizeErrorMessage(data, reg ? "注册失败，请检查邀请码。" : "登录失败，请检查用户名和密码。");
         setStatus({
           type: "error",
-          text: normalizeErrorMessage(data, reg ? "注册失败，请检查邀请码。" : "登录失败，请检查用户名和密码。"),
+          text,
         });
+        notify?.({ type: "error", text });
         return;
       }
 
+      notify?.({
+        type: "success",
+        text: reg ? "注册成功！欢迎来到若白。" : "登录成功！欢迎回来。",
+      });
       onEnter?.();
     } catch (error) {
+      const text = error instanceof Error ? error.message : "连接后端失败，请确认后端已经启动。";
       setStatus({
         type: "error",
-        text: error instanceof Error ? error.message : "连接后端失败，请确认后端已经启动。",
+        text,
       });
+      notify?.({ type: "error", text });
     } finally {
       setBusy(false);
     }
@@ -81,7 +89,7 @@ function AuthScreen({ onEnter }) {
 
       <div className="auth-body">
         {status.text && (
-          <div className={"auth-msg show " + status.type}>{status.text}</div>
+          <div className={"auth-msg show " + status.type} role={status.type === "error" ? "alert" : "status"}>{status.text}</div>
         )}
 
         {reg ? (
