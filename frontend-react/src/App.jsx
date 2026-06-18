@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { Icon, AGENTS, MOMENTS, MEMORIES, USER } from "./store.jsx";
 import { HomePage } from "./pages/HomePage.jsx";
@@ -16,6 +16,23 @@ const TABS = [
   { key: "memory",  path: "/memory",     label: "记忆", icon: "book" },
   { key: "me",      path: "/profile",    label: "我的", icon: "me" },
 ];
+
+function AppToast({ toast, onClose }) {
+  if (!toast?.text) return null;
+
+  const isError = toast.type === "error";
+
+  return (
+    <div className="app-toast-stack" role={isError ? "alert" : "status"} aria-live={isError ? "assertive" : "polite"}>
+      <div className={"app-toast " + (isError ? "error" : "success")} key={toast.id}>
+        <span className="app-toast-icon"><Icon name={isError ? "alert" : "check"} /></span>
+        <span className="app-toast-text">{toast.text}</span>
+        <button className="app-toast-close" type="button" aria-label="关闭提示" onClick={onClose}>×</button>
+        <span className="app-toast-progress" />
+      </div>
+    </div>
+  );
+}
 
 function RuobaiApp({ authed, setAuthed }) {
   const navigate = useNavigate();
@@ -130,6 +147,17 @@ export default function App() {
   const navigate = useNavigate();
   const [authed, setAuthed] = useState(false);
   const [checking, setChecking] = useState(true);
+  const [toast, setToast] = useState(null);
+  const toastTimerRef = useRef(null);
+
+  function showToast(nextToast) {
+    const id = Date.now();
+    setToast({ id, ...nextToast });
+    window.clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast((current) => current?.id === id ? null : current);
+    }, 3000);
+  }
 
   useEffect(() => {
     try {
@@ -140,15 +168,20 @@ export default function App() {
     getSession().then((data) => {
       if (data?.loggedIn) setAuthed(true);
     }).catch(() => {}).finally(() => setChecking(false));
+
+    return () => window.clearTimeout(toastTimerRef.current);
   }, []);
 
   if (checking) return null; // 等 session 检查完再渲染
 
   return (
-    <Routes>
-      <Route path="/" element={<HomePage />} />
-      <Route path="/auth" element={<AuthScreen onEnter={() => { setAuthed(true); navigate("/chat", { replace: true }); }} />} />
-      <Route path="/*" element={<RuobaiApp authed={authed} setAuthed={setAuthed} />} />
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/auth" element={<AuthScreen notify={showToast} onEnter={() => { setAuthed(true); navigate("/chat", { replace: true }); }} />} />
+        <Route path="/*" element={<RuobaiApp authed={authed} setAuthed={setAuthed} />} />
+      </Routes>
+      <AppToast toast={toast} onClose={() => setToast(null)} />
+    </>
   );
 }

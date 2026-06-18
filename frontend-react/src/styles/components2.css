@@ -430,6 +430,83 @@ select.fld { appearance: none; background-image: url("data:image/svg+xml,%3Csvg 
 .auth-switch { display: block; width: 100%; text-align: center; margin-top: 18px; font-size: 13px; color: var(--ink-faint); }
 .auth-switch b { color: var(--rose-deep); font-weight: 700; }
 .auth-foot { text-align: center; font-size: 10.5px; color: var(--ink-ghost); margin-top: 24px; }
+.auth-msg { margin: 0 0 12px; padding: 11px 13px; border-radius: 14px; font-size: 13px; line-height: 1.5; border: 1px solid var(--line); background: var(--card); color: var(--ink-soft); animation: fadeIn 0.22s ease; }
+.auth-msg.error { background: #fff0f3; border-color: #ffd3df; color: #b54564; }
+.auth-msg.success { background: #effaf4; border-color: #bde7ca; color: #2f8f5c; }
+
+/* 全局状态提示：登录成功 / 账号密码错误等关键反馈 */
+.app-toast-stack {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  z-index: 300;
+  width: min(320px, calc(100vw - 24px));
+  pointer-events: none;
+}
+.app-toast {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px 1fr 24px;
+  align-items: center;
+  gap: 10px;
+  min-height: 62px;
+  padding: 14px 12px 16px 16px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.96);
+  color: var(--ink);
+  border: 1px solid rgba(255,255,255,0.72);
+  box-shadow: 0 16px 46px rgba(86, 54, 66, 0.18), 0 2px 8px rgba(193,101,121,0.08);
+  backdrop-filter: blur(14px);
+  pointer-events: auto;
+  animation: appToastIn 0.28s cubic-bezier(0.2, 0.85, 0.25, 1);
+}
+.app-toast-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: var(--sage);
+}
+.app-toast-icon svg { width: 14px; height: 14px; stroke-width: 3; }
+.app-toast.error .app-toast-icon { background: var(--rose); }
+.app-toast-text { font-size: 14px; font-weight: 600; line-height: 1.45; }
+.app-toast-close {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  color: var(--ink-faint);
+  font-size: 18px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+.app-toast-close:active { background: var(--paper-2); }
+.app-toast-progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 4px;
+  width: 100%;
+  background: var(--sage);
+  transform-origin: left center;
+  animation: appToastProgress 3s linear forwards;
+}
+.app-toast.error .app-toast-progress { background: var(--rose); }
+@keyframes appToastIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes appToastProgress {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-toast, .auth-msg { animation: none; }
+  .app-toast-progress { animation: none; transform: scaleX(1); opacity: 0.45; }
+}
 
 /* ============== 主题:原版(粉紫·玻璃) ============== */
 [data-theme="classic"] {
