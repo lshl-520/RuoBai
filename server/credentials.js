@@ -65,7 +65,6 @@ function guessCapabilities(modelId) {
     name.includes('4o') ||
     name.includes('5o') ||
     name.includes('gpt-4') ||
-    name.includes('gpt-5') ||
     name.includes('claude-3') ||
     name.includes('claude-4') ||
     name.includes('claude-opus') ||
