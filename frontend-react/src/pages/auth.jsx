@@ -77,7 +77,10 @@ function AuthScreen({ onEnter, notify }) {
   return (
     <div className="auth">
       <div className="auth-hero">
-        <img className="auth-hero-bg" src="/assets/auth-hero.png" alt="" />
+        <picture>
+          <source srcSet="/assets/auth-hero.webp" type="image/webp" />
+          <img className="auth-hero-bg" src="/assets/auth-hero.png" alt="" />
+        </picture>
         <div className="auth-hero-scrim" />
         <div className="statusbar on-photo"><span className="time">9:41</span><span className="notch" /><span className="icons"><Bars /></span></div>
         <div className="auth-badge"><span className="auth-badge-dot" /> 微光 · 若白</div>

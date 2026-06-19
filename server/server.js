@@ -2,6 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
+import compression from 'compression';
 import session from 'express-session';
 import MySQLStoreFactory from 'express-mysql-session';
 import { dbConfig, pool, testDatabaseConnection } from './db.js';
@@ -86,12 +87,27 @@ app.use((req, res, next) => {
   return next();
 });
 
+app.use(compression());
+
 if (hasReactBuild) {
-  app.use(express.static(reactDistDir));
+  app.use('/assets', express.static(path.join(reactDistDir, 'assets'), {
+    maxAge: '1y',
+    immutable: true,
+  }));
+  app.use(express.static(reactDistDir, {
+    maxAge: 0,
+    etag: true,
+  }));
 }
 
-app.use(express.static(publicDir));
-app.use('/user_assets', express.static(userAssetsDir));
+app.use(express.static(publicDir, {
+  maxAge: '7d',
+  etag: true,
+}));
+app.use('/user_assets', express.static(userAssetsDir, {
+  maxAge: '1h',
+  etag: true,
+}));
 
 app.get(['/admin', '/admin/'], (_req, res) => {
   return res.redirect(302, '/admin.html');

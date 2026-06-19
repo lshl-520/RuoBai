@@ -452,7 +452,10 @@ function MomentsScreen({ moments: momentsProp, agents: agentsProp, user: userPro
 
       {list.length === 0 ? (
         <div className="empty-immersive moments-empty-full">
-          <img className="empty-immersive-img" src="/assets/empty-moments.png" alt="" />
+          <picture>
+            <source srcSet="/assets/empty-moments.webp" type="image/webp" />
+            <img className="empty-immersive-img" src="/assets/empty-moments.png" alt="" />
+          </picture>
           <div className="empty-immersive-scrim" />
           <div className="empty-immersive-guide">
             <div className="empty-state-title">她们还没来</div>
