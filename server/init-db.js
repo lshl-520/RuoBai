@@ -1,6 +1,7 @@
 import { ensureDatabaseExists, pool } from './db.js';
 import bcrypt from 'bcryptjs';
 import { DEFAULT_CHARACTERS, DEFAULT_MODEL_CONFIG } from './defaults.js';
+import { runCredentialMigration } from './migrate-credentials-2026.js';
 
 const DEFAULT_ADMIN_USERNAME = 'admin';
 const DEFAULT_ADMIN_PASSWORD = '123456';
@@ -481,6 +482,11 @@ async function init() {
       console.log(`  密码：${DEFAULT_ADMIN_PASSWORD}`);
       console.log(`  ⚠️  请尽快登录后台更改账号密码\n`);
     }
+
+    await runCredentialMigration({
+      pool,
+      ensureDatabaseExists: async () => {}
+    });
 
     console.log('Database initialized successfully.');
   } catch (error) {
