@@ -7,6 +7,7 @@ INSTALL_DIR="${INSTALL_DIR:-/www/wwwroot/ruobai}"
 DOMAIN="${DOMAIN:-}"
 APP_BIND="${APP_BIND:-127.0.0.1}"
 APP_PORT="${APP_PORT:-3000}"
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-ruobai}"
 ENABLE_VECTOR="${ENABLE_VECTOR:-0}"
 
 DEFAULT_ADMIN_USERNAME="admin"
@@ -87,7 +88,7 @@ else
   CORS_ORIGINS="$(make_cors_origins)"
 
   cat > "$ENV_FILE" <<EOF
-COMPOSE_PROJECT_NAME=ruobai
+COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME
 DOMAIN=$DOMAIN
 APP_BIND=$APP_BIND
 APP_PORT=$APP_PORT
@@ -134,7 +135,8 @@ cat <<EOF
   http://127.0.0.1:$APP_PORT
 
 后台地址：
-  $SITE_URL/admin-login.html
+  $SITE_URL/admin
+  （会自动进入 $SITE_URL/admin.html；未登录时打开后台登录）
 
 默认管理员：
   用户名：$DEFAULT_ADMIN_USERNAME

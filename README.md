@@ -40,7 +40,14 @@ DOMAIN=ruobai.example.com bash -c "$(curl -fsSL https://raw.githubusercontent.co
 ```
 
 脚本会自动拉代码、生成配置、启动数据库和网站容器，并打印后台地址和默认管理员账号。
+默认后台入口是 `https://你的域名/admin`，会自动进入真正的后台页面。
 Docker 模式以后更新代码，也重新运行这条命令。
+
+如果同一台服务器要测试第二套安装，先换安装目录、端口和容器项目名，避免碰到正在用的站点：
+
+```bash
+COMPOSE_PROJECT_NAME=ruobai_test INSTALL_DIR=/www/wwwroot/ruobai-test APP_PORT=3001 DOMAIN=test.example.com bash -c "$(curl -fsSL https://raw.githubusercontent.com/lshl-520/RuoBai/main/scripts/install-docker.sh)"
+```
 
 如果不用 Docker，也可以按下面的手动流程部署。
 
