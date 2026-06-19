@@ -203,7 +203,10 @@ function MemoryScreen({ agents: agentsProp }) {
 
         {sorted.length === 0 ? (
           <div className="empty-immersive memory-empty-full">
-            <img className="empty-immersive-img" src="/assets/empty-memory.png" alt="" />
+            <picture>
+              <source srcSet="/assets/empty-memory.webp" type="image/webp" />
+              <img className="empty-immersive-img" src="/assets/empty-memory.png" alt="" />
+            </picture>
             <div className="empty-immersive-scrim" />
             <div className="empty-immersive-guide">
               <div className="empty-state-title">以后的每一天</div>
