@@ -1,0 +1,14 @@
+{
+  "appId": "fun.lshl.ruobai",
+  "appName": "RuoBai",
+  "webDir": "dist",
+  "server": {
+    "url": "https://lshl.fun",
+    "cleartext": false
+  },
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  }
+}

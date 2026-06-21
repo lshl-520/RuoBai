@@ -5,11 +5,14 @@ import express from 'express';
 import compression from 'compression';
 import session from 'express-session';
 import MySQLStoreFactory from 'express-mysql-session';
+import firebaseAdmin from 'firebase-admin';
 import { dbConfig, pool, testDatabaseConnection } from './db.js';
 import { ensureRuntimeSchema } from './schema.js';
 import { requireAuth, requireOwner } from './middleware.js';
 import { createAdminRouter } from './admin.js';
 import { createUpdateService, startDailyBackupScheduler } from './admin-update.js';
+import { createFcmSender, startProactiveScheduler } from './proactive.js';
+import { createPushRouter } from './push.js';
 import authRoutes from './auth.js';
 import chatRoutes from './chat.js';
 import memoryRoutes from './memory.js';
@@ -34,6 +37,8 @@ const app = express();
 const requestedPort = Number(process.env.PORT) || 3000;
 const updateService = createUpdateService();
 const adminRoutes = createAdminRouter({ updateService });
+const pushRoutes = createPushRouter({ pool });
+const fcmSender = createFcmSender({ admin: firebaseAdmin });
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -144,6 +149,7 @@ app.use('/api/moments', requireAuth, momentRoutes);
 app.use('/api/settings', requireAuth, settingsRoutes);
 app.use('/api/relationship', requireAuth, settingsRoutes);
 app.use('/api/usage', requireAuth, settingsRoutes);
+app.use('/api/push', requireAuth, pushRoutes);
 
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) {
@@ -191,6 +197,7 @@ async function start() {
         console.log(`  ⚠️  请尽快登录后台更改账号密码`);
         console.log(`  ─────────────────────────────────\n`);
         startDailyBackupScheduler(updateService);
+        startProactiveScheduler({ pool, sendPush: fcmSender });
         return;
       } catch (error) {
         lastError = error;

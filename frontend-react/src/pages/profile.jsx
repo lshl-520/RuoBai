@@ -4,6 +4,12 @@ import { ModelsSection } from "./models.jsx";
 import { getSessionProfile, getUsageStats, logoutSession, uploadAvatarImage, updateNickname, updateRole } from "../lib/profile.js";
 import { getRoles, getRoleAvatarRound } from "../lib/roles.js";
 import {
+  enableNativePush,
+  getPushPreferences,
+  isNativePushAvailable,
+  updatePushPreferences,
+} from "../lib/push.js";
+import {
   DEFAULT_ROLE_AVATAR,
   DEFAULT_USER_AVATAR,
   fallbackToDefaultRoleAvatar,
@@ -123,13 +129,59 @@ function ThemeSheet({ current, onClose, onPick }) {
 /* ====== 通知与主动消息 ====== */
 function NotifSheet({ onClose }) {
   useLockBody();
+  const nativeReady = isNativePushAvailable();
+  const [saving, setSaving] = useStateP("");
+  const [error, setError] = useStateP("");
   const [items, setItems] = useStateP([
-    { k: "proactive", t: "她主动找你", s: "想你的时候,会先开口", on: true },
-    { k: "moments", t: "她发了新动态", s: "她过自己的日子时提醒你", on: true },
-    { k: "reply", t: "她回复了", s: "你不在时她说了话", on: true },
-    { k: "quiet", t: "深夜不打扰", s: "23:00–7:00 静音,只留早安", on: false },
+    { k: "proactive_enabled", t: "她主动找你", s: "超过 3 小时没聊天时,她会先开口", on: true },
+    { k: "bedtime_enabled", t: "深夜提醒睡觉", s: "23:30 还在线时,她会温柔催你休息", on: true },
+    { k: "quiet_night_enabled", t: "深夜不打扰", s: "保留设置入口,后续细化安静时段", on: false },
   ]);
-  const flip = (k) => setItems((p) => p.map((x) => x.k === k ? { ...x, on: !x.on } : x));
+
+  useEffectP(() => {
+    let cancelled = false;
+    getPushPreferences().then((res) => {
+      if (cancelled || !res?.item) return;
+      setItems((prev) => prev.map((item) => ({
+        ...item,
+        on: Boolean(res.item[item.k]),
+      })));
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const persist = async (nextItems) => {
+    const payload = Object.fromEntries(nextItems.map((item) => [item.k, item.on]));
+    await updatePushPreferences(payload);
+  };
+
+  const flip = async (k) => {
+    setError("");
+    setSaving(k);
+    const next = items.map((x) => x.k === k ? { ...x, on: !x.on } : x);
+    setItems(next);
+    try {
+      await persist(next);
+    } catch (err) {
+      setItems(items);
+      setError(err.message || "保存失败");
+    } finally {
+      setSaving("");
+    }
+  };
+
+  const enablePush = async () => {
+    setError("");
+    setSaving("enable");
+    try {
+      await enableNativePush();
+    } catch (err) {
+      setError(err.message || "开启失败");
+    } finally {
+      setSaving("");
+    }
+  };
+
   return (
     <div className="sheet-mask" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "72%" }}>
@@ -141,13 +193,17 @@ function NotifSheet({ onClose }) {
           </button>
         </div>
         <div className="sheet-body">
-          <div className="date-hint">她不是冷冰冰的程序 —— 会在你没注意的时候,悄悄惦记你。频率你说了算。</div>
+          <div className="date-hint">她不是冷冰冰的程序 —— 会在你没注意的时候,悄悄惦记你。通知权限只在安卓 APP 里开启。</div>
+          <button className="pill pill-primary grow" style={{ width: "100%", marginBottom: 12 }} disabled={!nativeReady || saving === "enable"} onClick={enablePush}>
+            <Icon name="bell" /> {nativeReady ? (saving === "enable" ? "正在开启..." : "开启原生推送") : "APP 内可用"}
+          </button>
+          {error && <div className="ob-hint" style={{ color: "var(--rose-deep)", marginBottom: 10 }}>{error}</div>}
           <div className="cap-card">
             {items.map((it, i) => (
               <div key={it.k} className={"prow" + (i === items.length - 1 ? " last" : "")}>
                 <span className={"prow-ic " + (it.on ? "on" : "")}><Icon name="bell" /></span>
                 <span className="prow-main"><span className="prow-t">{it.t}</span><span className="prow-s">{it.s}</span></span>
-                <Toggle on={it.on} onClick={() => flip(it.k)} />
+                <Toggle on={it.on} onClick={() => !saving && flip(it.k)} />
               </div>
             ))}
           </div>

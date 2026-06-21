@@ -125,3 +125,9 @@ public-vue/*
 qdrant_storage/
 .cache/transformers/
 server/vector-memory/.local/
+
+# Firebase / FCM 本地配置与服务端密钥，必须由部署者自己放置，不能进 git
+google-services.json
+frontend-react/android/app/google-services.json
+firebase-service-account*.json
+server/firebase-service-account*.json

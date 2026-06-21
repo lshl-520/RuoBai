@@ -46,6 +46,57 @@ const CHARACTER_RUNTIME_COLUMNS = [
   }
 ];
 
+const PUSH_RUNTIME_TABLES = [
+  `
+    CREATE TABLE IF NOT EXISTS push_devices (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      fcm_token VARCHAR(768) NOT NULL,
+      platform VARCHAR(20) DEFAULT 'android',
+      app_version VARCHAR(50) DEFAULT '',
+      enabled TINYINT(1) DEFAULT 1,
+      last_seen_at DATETIME DEFAULT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE KEY unique_fcm_token (fcm_token),
+      INDEX idx_push_user_enabled (user_id, enabled),
+      INDEX idx_push_seen (last_seen_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS push_preferences (
+      user_id INT PRIMARY KEY,
+      proactive_enabled TINYINT(1) DEFAULT 1,
+      bedtime_enabled TINYINT(1) DEFAULT 1,
+      quiet_night_enabled TINYINT(1) DEFAULT 0,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS proactive_events (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      character_id INT NOT NULL,
+      message_id BIGINT DEFAULT NULL,
+      event_type VARCHAR(30) NOT NULL,
+      event_date VARCHAR(10) DEFAULT NULL,
+      content TEXT NOT NULL,
+      status VARCHAR(20) DEFAULT 'created',
+      error_message VARCHAR(500) DEFAULT '',
+      sent_at DATETIME DEFAULT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+      FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE SET NULL,
+      INDEX idx_proactive_user_char_type (user_id, character_id, event_type),
+      INDEX idx_proactive_date (event_date),
+      INDEX idx_proactive_created (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `
+];
+
 async function columnExists(db, tableName, columnName) {
   const [rows] = await db.query(
     `
@@ -74,6 +125,13 @@ export async function ensureCharacterRuntimeColumns(db) {
   }
 }
 
+export async function ensurePushRuntimeTables(db) {
+  for (const statement of PUSH_RUNTIME_TABLES) {
+    await db.query(statement);
+  }
+}
+
 export async function ensureRuntimeSchema(db) {
   await ensureCharacterRuntimeColumns(db);
+  await ensurePushRuntimeTables(db);
 }
