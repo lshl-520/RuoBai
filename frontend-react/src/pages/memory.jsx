@@ -68,9 +68,9 @@ function MemoryCard({ m, onPin, onEdit, onDelete }) {
   );
 }
 
-function MemoryScreen({ agents: agentsProp }) {
+function MemoryScreen() {
   const [realAgents, setRealAgents] = useStateMem(null);
-  const agents = realAgents || agentsProp || [];
+  const agents = realAgents ?? [];
 
   const [activeId, setActiveId] = useStateMem(null);
   const [list, setList] = useStateMem([]);
@@ -91,7 +91,7 @@ function MemoryScreen({ agents: agentsProp }) {
           setRealAgents(mapped);
           if (mapped.length && !activeId) setActiveId(mapped[0].id);
         }
-      } catch (e) { /* 静默用 prop fallback */ }
+      } catch (e) { setRealAgents([]); }
     })();
   }, []);
 

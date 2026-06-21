@@ -3,13 +3,14 @@ import { Icon, Bars, useLockBody } from "../store.jsx";
 import { ModelsSection } from "./models.jsx";
 import { getSessionProfile, getUsageStats, logoutSession, uploadAvatarImage, updateNickname, updateRole } from "../lib/profile.js";
 import { getRoles, getRoleAvatarRound } from "../lib/roles.js";
+import { DEFAULT_ROLE_AVATAR, DEFAULT_USER_AVATAR } from "../lib/default-assets.js";
 /* 我的 / 设置 / 模型接入(见 models.jsx) / 能力配置 */
 const { useState: useStateP, useEffect: useEffectP } = React;
 
 const FALLBACK_USER = {
   name: "你",
   handle: "@user · 从 3.13 走到现在",
-  avatar: "/assets/portraits/round/3.png",
+  avatar: DEFAULT_USER_AVATAR,
   longestDays: 0,
   msgCount: 0,
 };
@@ -18,7 +19,7 @@ const FALLBACK_ROLE = {
   id: "ruobai-fallback",
   name: "小白",
   isDefault: true,
-  avatar: "/assets/portraits/round/0.png",
+  avatar: DEFAULT_ROLE_AVATAR,
 };
 
 function Toggle({ on, onClick }) {
@@ -461,7 +462,7 @@ function OnboardSheet({ role, onClose, onDone }) {
   );
 }
 
-function ProfileScreen({ user: userProp, agents: agentsProp, onOnboard, onGoMemory, onLogout }) {
+function ProfileScreen({ user: userProp, onOnboard, onGoMemory, onLogout }) {
   const [sheet, setSheet] = useStateP(null);
   const [theme, setThemeState] = useStateP((typeof document !== "undefined" && document.documentElement.dataset.theme) || "");
 
@@ -490,7 +491,7 @@ function ProfileScreen({ user: userProp, agents: agentsProp, onOnboard, onGoMemo
     return () => { cancelled = true; };
   }, []);
 
-  // 合并：真实数据优先，假数据兜底；真实角色列表为空时也不能白屏。
+  // 合并：真实数据优先；真实角色列表为空时只用公开版小白兜底，不能回退到演示角色。
   const fallbackUser = userProp || FALLBACK_USER;
   const user = realUser ? {
     name: realUser.nickname || realUser.username || fallbackUser.name,
@@ -504,9 +505,9 @@ function ProfileScreen({ user: userProp, agents: agentsProp, onOnboard, onGoMemo
   const agents = hasRealAgents
     ? realAgents.map((r) => ({
         id: r.id, name: r.name, isDefault: !!r.is_active,
-        avatar: getRoleAvatarRound(r) || "/assets/portraits/round/0.png",
+        avatar: getRoleAvatarRound(r) || DEFAULT_ROLE_AVATAR,
       }))
-    : (Array.isArray(agentsProp) && agentsProp.length > 0 ? agentsProp : [FALLBACK_ROLE]);
+    : [FALLBACK_ROLE];
 
   const ruobai = agents.find((a) => a.isDefault) || agents[0] || FALLBACK_ROLE;
   const [avatar, setAvatar] = useStateP(user.avatar || FALLBACK_USER.avatar);

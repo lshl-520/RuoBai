@@ -129,7 +129,7 @@ function toAgent(role) {
 }
 
 /* ---------------- 聊天列表 ---------------- */
-function ChatListScreen({ agents: fallbackAgents, onOpen }) {
+function ChatListScreen({ onOpen }) {
   const [agents, setAgents] = useStateC(null);
   const seqRef = useRefC(0);
 
@@ -145,7 +145,9 @@ function ChatListScreen({ agents: fallbackAgents, onOpen }) {
         } else if (data?.success !== false && Array.isArray(data?.items)) {
           setAgents(data.items.map(toAgent));
         }
-      } catch {}
+      } catch {
+        if (!cancelled && seqRef.current === id) setAgents([]);
+      }
     }
     load();
     const onFocus = () => load();
@@ -159,7 +161,7 @@ function ChatListScreen({ agents: fallbackAgents, onOpen }) {
     };
   }, []);
 
-  const list = agents ?? fallbackAgents;
+  const list = agents ?? [];
   const displayList = list;
 
   return (

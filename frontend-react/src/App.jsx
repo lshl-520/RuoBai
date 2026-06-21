@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
-import { Icon, AGENTS, MOMENTS, MEMORIES, USER } from "./store.jsx";
+import { Icon } from "./store.jsx";
 import { HomePage } from "./pages/HomePage.jsx";
 import { AuthScreen } from "./pages/auth.jsx";
 import { ChatListScreen, ChatRoom } from "./pages/chat.jsx";
@@ -8,6 +8,7 @@ import { AgentsScreen, AgentEditor, CharacterDetail } from "./pages/agents.jsx";
 import { MomentsScreen } from "./pages/moments.jsx";
 import { MemoryScreen } from "./pages/memory.jsx";
 import { ProfileScreen, OnboardSheet } from "./pages/profile.jsx";
+import { DEFAULT_USER_AVATAR } from "./lib/default-assets.js";
 
 const TABS = [
   { key: "chat",    path: "/chat",       label: "聊天", icon: "chat" },
@@ -36,9 +37,9 @@ function AppToast({ toast, onClose }) {
 
 function RuobaiApp({ authed, setAuthed }) {
   const navigate = useNavigate();
-  const [agents, setAgents] = useState(AGENTS);
-  const [moments, setMoments] = useState(MOMENTS);
-  const [memories, setMemories] = useState(MEMORIES);
+  const [agents, setAgents] = useState([]);
+  const [moments, setMoments] = useState([]);
+  const [memories, setMemories] = useState({});
   const [chatAgent, setChatAgent] = useState(null);
   const [detailAgent, setDetailAgent] = useState(null);
   const [editAgent, setEditAgent] = useState(undefined);
@@ -85,7 +86,7 @@ function RuobaiApp({ authed, setAuthed }) {
 
   const likeMoment = (id) => setMoments((p) => p.map((m) => m.id === id ? { ...m, liked: !m.liked, likes: m.likes + (m.liked ? -1 : 1) } : m));
   const postMoment = (data) => {
-    const m = { id: Date.now(), who: "你", agentId: 0, avatar: USER.avatar, tag: "我", tagType: "lav", time: "刚刚", content: data.content, mood: data.mood, images: [], likes: 0, liked: false, comments: [] };
+    const m = { id: Date.now(), who: "你", agentId: 0, avatar: DEFAULT_USER_AVATAR, tag: "我", tagType: "lav", time: "刚刚", content: data.content, mood: data.mood, images: [], likes: 0, liked: false, comments: [] };
     setMoments((p) => [m, ...p]);
   };
 
@@ -111,9 +112,9 @@ function RuobaiApp({ authed, setAuthed }) {
         <Routes>
           <Route path="/chat" element={<ChatListScreen agents={agents} onOpen={openChat} />} />
           <Route path="/characters" element={<AgentsScreen agents={agents} onChat={openChat} onDetail={setDetailAgent} onCreate={() => setEditAgent(null)} />} />
-          <Route path="/moments" element={<MomentsScreen moments={moments} agents={agents} user={USER} onLike={likeMoment} onPost={postMoment} />} />
+          <Route path="/moments" element={<MomentsScreen onLike={likeMoment} onPost={postMoment} />} />
           <Route path="/memory" element={<MemoryScreen agents={agents} memories={memories} onAdd={addMemory} onUpdate={updateMemory} onDelete={deleteMemory} onPin={pinMemory} />} />
-          <Route path="/profile" element={<ProfileScreen user={USER} agents={agents} onGoMemory={() => navigate("/memory")} onLogout={() => { setAuthed(false); navigate("/auth"); }} />} />
+          <Route path="/profile" element={<ProfileScreen onGoMemory={() => navigate("/memory")} onLogout={() => { setAuthed(false); navigate("/auth"); }} />} />
           <Route path="*" element={<Navigate to="/chat" replace />} />
         </Routes>
 
