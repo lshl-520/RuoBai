@@ -47,12 +47,19 @@ test('logged-in loading and empty role states do not fall back to demo character
 
 test('user avatar fallback points to a public deployable asset instead of scattered placeholders', async () => {
   const defaults = await readProjectFile('frontend-react', 'src', 'lib', 'default-assets.js');
+  const chat = await readProjectFile('frontend-react', 'src', 'pages', 'chat.jsx');
   const moments = await readProjectFile('frontend-react', 'src', 'pages', 'moments.jsx');
   const profile = await readProjectFile('frontend-react', 'src', 'pages', 'profile.jsx');
 
   assert.match(defaults, /DEFAULT_USER_AVATAR\s*=\s*["']\/assets\/default-user-avatar\.png["']/);
+  assert.match(defaults, /fallbackToDefaultUserAvatar/);
+  assert.match(chat, /DEFAULT_USER_AVATAR/);
+  assert.match(chat, /fallbackToDefaultUserAvatar/);
   assert.match(moments, /DEFAULT_USER_AVATAR/);
+  assert.match(moments, /fallbackToDefaultUserAvatar/);
   assert.match(profile, /DEFAULT_USER_AVATAR/);
+  assert.match(profile, /fallbackToDefaultUserAvatar/);
+  assert.doesNotMatch(chat, /\/assets\/portraits\/round\/3\.png/);
   assert.doesNotMatch(moments, /\/assets\/avatar\.png/);
   assert.doesNotMatch(profile, /\/assets\/portraits\/round\/3\.png/);
 });

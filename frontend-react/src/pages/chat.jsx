@@ -3,6 +3,11 @@ import { Icon, Bars, greetByHour, STICKERS } from "../store.jsx";
 import { getRoles, getRolePortraitSrc, clampIntimacy } from "../lib/roles.js";
 import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage } from "../lib/chat.js";
 import { getSessionProfile, getCapabilities, updateCapability } from "../lib/profile.js";
+import {
+  DEFAULT_USER_AVATAR,
+  fallbackToDefaultRoleAvatar,
+  fallbackToDefaultUserAvatar,
+} from "../lib/default-assets.js";
 /* 聊天列表 + 聊天室(沉浸: 常驻立绘随情绪变化 / 全屏立绘 / 语音 / 表情包 / 思考过程 / 搜索) */
 const { useState: useStateC, useRef: useRefC, useEffect: useEffectC } = React;
 
@@ -177,7 +182,7 @@ function ChatListScreen({ onOpen }) {
         {displayList.map((a, i) => (
           <button key={a.id} className={"cl-card" + (a.isDefault ? " cl-primary" : "")} onClick={() => onOpen(a)} style={{ animationDelay: `${i * 50}ms` }}>
             <div className="cl-avatar">
-              <img src={a.avatar} alt={a.name} />
+              <img src={a.avatar} alt={a.name} onError={fallbackToDefaultRoleAvatar} />
               {a.online && <span className="cl-online" />}
               {a.isDefault && <span className="cl-glow" />}
             </div>
@@ -313,12 +318,12 @@ function Bubble({ m, agent, tts, myAvatar }) {
   if (m.type === "sticker") {
     return (
       <div className={"row " + (isMe ? "me" : "her")}>
-        {!isMe && <div className="row-avatar"><img src={agent.avatar} alt="" /></div>}
+        {!isMe && <div className="row-avatar"><img src={agent.avatar} alt="" onError={fallbackToDefaultRoleAvatar} /></div>}
         <div className="sticker-wrap">
           <div className="sticker"><span className="st-emo">{m.sticker}</span>{m.label && <span className="st-label">{m.label}</span>}</div>
           {m.time && <span className="msg-time">{m.time}</span>}
         </div>
-        {isMe && <div className="row-avatar"><img src={myAvatar} alt="" /></div>}
+        {isMe && <div className="row-avatar"><img src={myAvatar} alt="" onError={fallbackToDefaultUserAvatar} /></div>}
       </div>
     );
   }
@@ -337,7 +342,7 @@ function Bubble({ m, agent, tts, myAvatar }) {
           </div>
           {m.time && <span className="msg-time">{m.time}</span>}
         </div>
-        <div className="row-avatar"><img src={myAvatar} alt="" /></div>
+        <div className="row-avatar"><img src={myAvatar} alt="" onError={fallbackToDefaultUserAvatar} /></div>
       </div>
     );
   }
@@ -348,7 +353,7 @@ function Bubble({ m, agent, tts, myAvatar }) {
     <div className="her-block">
       {m.type === "proactive" && <div className="proactive-tag"><Icon name="sparkSm" /> {m.tag}</div>}
       <div className="row her">
-        <div className="row-avatar"><img src={agent.avatar} alt="" /></div>
+        <div className="row-avatar"><img src={agent.avatar} alt="" onError={fallbackToDefaultRoleAvatar} /></div>
         <div className="her-stack">
           <div className={"bubble her-bubble" + (m.type === "proactive" ? " proactive" : "")}>
             {m.images && m.images.length > 0 && (
@@ -370,7 +375,7 @@ function Bubble({ m, agent, tts, myAvatar }) {
 function Typing({ agent }) {
   return (
     <div className="row her">
-      <div className="row-avatar"><img src={agent.avatar} alt="" /></div>
+      <div className="row-avatar"><img src={agent.avatar} alt="" onError={fallbackToDefaultRoleAvatar} /></div>
       <div className="her-stack">
         <div className="typing-status">{agent.name}正在输入…</div>
         <div className="bubble her-bubble typing"><span /><span /><span /></div>
@@ -487,7 +492,7 @@ function ChatRoom({ agent, onBack }) {
   const hasEmo = agent.isDefault; // 小白有专属情绪立绘
   const roleId = agent._raw?.id || agent.id;
   const [msgs, setMsgs] = useStateC([]);
-  const [myAvatar, setMyAvatar] = useStateC("/assets/portraits/round/3.png");
+  const [myAvatar, setMyAvatar] = useStateC(DEFAULT_USER_AVATAR);
   const [draft, setDraft] = useStateC("");
   const [typing, setTyping] = useStateC(false);
   const [showFig, setShowFig] = useStateC(true);
@@ -692,7 +697,7 @@ function ChatRoom({ agent, onBack }) {
 
       <header className="chat-top">
         <button className="ct-back" onClick={onBack}><Icon name="back" /></button>
-        <div className="ct-avatar" onClick={() => setBig(true)}><img src={agent.avatar} alt="" />{agent.online && <span className="cl-online" />}</div>
+        <div className="ct-avatar" onClick={() => setBig(true)}><img src={agent.avatar} alt="" onError={fallbackToDefaultRoleAvatar} />{agent.online && <span className="cl-online" />}</div>
         <div className="ct-info">
           <div className="ct-name">{agent.name}<TempDot temp={agent.temp} /></div>
           <button className="ct-model" onClick={() => setModelOpen(!modelOpen)}>
@@ -725,7 +730,7 @@ function ChatRoom({ agent, onBack }) {
 
       {!showFig && !big && (
         <button className="call-her" onClick={() => setShowFig(true)}>
-          <span className="ch-av"><img src={agent.avatar} alt="" /></span>叫她出来
+          <span className="ch-av"><img src={agent.avatar} alt="" onError={fallbackToDefaultRoleAvatar} /></span>叫她出来
         </button>
       )}
 
