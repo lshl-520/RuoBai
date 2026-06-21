@@ -3,6 +3,7 @@ import { Icon, Bars } from "../store.jsx";
 import { getRoles, getRolePortraitSrc, getRoleAvatarRound } from "../lib/roles.js";
 import { getMoments, createMoment, likeMoment as apiLike, deleteMoment as apiDelete } from "../lib/moments.js";
 import { getSessionProfile } from "../lib/profile.js";
+import { DEFAULT_ROLE_AVATAR, DEFAULT_USER_AVATAR } from "../lib/default-assets.js";
 /* 动态 / 朋友圈 — 从后端拉真实数据 */
 const { useState: useStateM, useEffect: useEffectM } = React;
 
@@ -16,7 +17,7 @@ function mapMoment(m, agentsMap, user) {
     id: m.id,
     who: isUser ? (user?.name || "我") : (agent?.name || "她"),
     agentId: m.character_id || 0,
-    avatar: isUser ? (user?.avatar || "/assets/avatar.png") : (agent?.avatar || "/assets/avatar-bai.png"),
+    avatar: isUser ? (user?.avatar || DEFAULT_USER_AVATAR) : (agent?.avatar || DEFAULT_ROLE_AVATAR),
     tag: isUser ? "我" : "她",
     tagType: isUser ? "lav" : "rose",
     time: timeStr,
@@ -339,7 +340,7 @@ function Composer({ user, onClose, onPost }) {
   );
 }
 
-function MomentsScreen({ moments: momentsProp, agents: agentsProp, user: userProp, onLike: onLikeProp, onPost: onPostProp }) {
+function MomentsScreen() {
   const [composing, setComposing] = useStateM(false);
   const [filter, setFilter] = useStateM(null);
 
@@ -349,8 +350,8 @@ function MomentsScreen({ moments: momentsProp, agents: agentsProp, user: userPro
   const [realUser, setRealUser] = useStateM(null);
   const [loading, setLoading] = useStateM(true);
 
-  const agents = realAgents || agentsProp || [];
-  const user = realUser || userProp || { name: "我", avatar: "/assets/avatar.png" };
+  const agents = realAgents ?? [];
+  const user = realUser || { name: "我", avatar: DEFAULT_USER_AVATAR };
 
   const agentsMap = React.useMemo(() => {
     const m = new Map();
@@ -377,13 +378,13 @@ function MomentsScreen({ moments: momentsProp, agents: agentsProp, user: userPro
         if (rolesRes?.success && Array.isArray(rolesRes.items)) {
           setRealAgents(rolesRes.items.map((r) => ({
             id: r.id, name: r.name, isDefault: !!r.is_active,
-            avatar: getRoleAvatarRound(r) || "/assets/portraits/round/0.png",
+            avatar: getRoleAvatarRound(r) || DEFAULT_ROLE_AVATAR,
           })));
         }
         if (sessionRes?.success && sessionRes.user) {
           setRealUser({
             name: sessionRes.user.nickname || sessionRes.user.username,
-            avatar: sessionRes.user.avatar || "/assets/avatar.png",
+            avatar: sessionRes.user.avatar || DEFAULT_USER_AVATAR,
           });
         }
       } catch (e) { /* 静默 */ }
@@ -397,7 +398,7 @@ function MomentsScreen({ moments: momentsProp, agents: agentsProp, user: userPro
     fetchMoments(filter);
   }, [loading, filter, agents.length]);
 
-  const moments = realMoments ?? momentsProp ?? [];
+  const moments = realMoments ?? [];
   const list = filter ? moments.filter((m) => m.agentId === filter) : moments;
 
   const handleLike = async (id) => {
@@ -439,7 +440,7 @@ function MomentsScreen({ moments: momentsProp, agents: agentsProp, user: userPro
       {/* 头像筛选栏 */}
       <div className="mem-roles" style={{ marginTop: 2 }}>
         <button className={"mem-role" + (filter === null ? " on" : "")} onClick={() => setFilter(null)}>
-          <span className="mem-role-av"><img src={user?.avatar || "/assets/portraits/round/0.png"} alt={user?.username || "我"} /></span>
+          <span className="mem-role-av"><img src={user?.avatar || DEFAULT_USER_AVATAR} alt={user?.username || "我"} /></span>
           <span className="mem-role-name">{user?.username || "我"}</span>
         </button>
         {agents.map((a) => (
