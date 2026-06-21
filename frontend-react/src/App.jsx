@@ -9,6 +9,7 @@ import { MomentsScreen } from "./pages/moments.jsx";
 import { MemoryScreen } from "./pages/memory.jsx";
 import { ProfileScreen, OnboardSheet } from "./pages/profile.jsx";
 import { DEFAULT_USER_AVATAR } from "./lib/default-assets.js";
+import { bootNativePushIfPossible, isNativePushAvailable } from "./lib/push.js";
 
 const TABS = [
   { key: "chat",    path: "/chat",       label: "聊天", icon: "chat" },
@@ -44,6 +45,10 @@ function RuobaiApp({ authed, setAuthed }) {
   const [detailAgent, setDetailAgent] = useState(null);
   const [editAgent, setEditAgent] = useState(undefined);
   const [onboardRole, setOnboardRole] = useState(null);
+
+  useEffect(() => {
+    bootNativePushIfPossible();
+  }, []);
 
   // 进聊天室时往浏览器历史塞一条记录，让手机系统返回键能正确退回聊天列表，
   // 而不是把聊天室当透明、直接退到更早的页面（甚至退出 app）。
@@ -178,7 +183,7 @@ export default function App() {
   return (
     <>
       <Routes>
-        <Route path="/" element={<HomePage />} />
+        <Route path="/" element={isNativePushAvailable() ? <Navigate to="/chat" replace /> : <HomePage />} />
         <Route path="/auth" element={<AuthScreen notify={showToast} onEnter={() => { setAuthed(true); navigate("/chat", { replace: true }); }} />} />
         <Route path="/*" element={<RuobaiApp authed={authed} setAuthed={setAuthed} />} />
       </Routes>

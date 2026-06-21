@@ -133,10 +133,27 @@ function toAgent(role) {
   };
 }
 
+function openAgentFromQuery(agents, onOpen, openedRef) {
+  const params = new URLSearchParams(window.location.search);
+  const characterId = params.get("character_id");
+  const messageId = params.get("message_id") || "";
+  if (!characterId) return;
+
+  const marker = `${characterId}:${messageId}`;
+  if (openedRef.current === marker) return;
+
+  const match = agents.find((agent) => String(agent.id) === characterId);
+  if (!match) return;
+
+  openedRef.current = marker;
+  onOpen(match);
+}
+
 /* ---------------- 聊天列表 ---------------- */
 function ChatListScreen({ onOpen }) {
   const [agents, setAgents] = useStateC(null);
   const seqRef = useRefC(0);
+  const openedFromQueryRef = useRefC("");
 
   useEffectC(() => {
     let cancelled = false;
@@ -146,9 +163,13 @@ function ChatListScreen({ onOpen }) {
         const data = await getRoles();
         if (cancelled || seqRef.current !== id) return;
         if (Array.isArray(data)) {
-          setAgents(data.map(toAgent));
+          const nextAgents = data.map(toAgent);
+          setAgents(nextAgents);
+          openAgentFromQuery(nextAgents, onOpen, openedFromQueryRef);
         } else if (data?.success !== false && Array.isArray(data?.items)) {
-          setAgents(data.items.map(toAgent));
+          const nextAgents = data.items.map(toAgent);
+          setAgents(nextAgents);
+          openAgentFromQuery(nextAgents, onOpen, openedFromQueryRef);
         }
       } catch {
         if (!cancelled && seqRef.current === id) setAgents([]);
