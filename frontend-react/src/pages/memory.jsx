@@ -1,8 +1,9 @@
 import React from "react";
 import { Icon, Bars } from "../store.jsx";
-import { getRoles, getRolePortraitSrc, getRoleAvatarRound } from "../lib/roles.js";
+import { getRoles, getRoleAvatarRound } from "../lib/roles.js";
 import { getMemories, createMemory, updateMemory as apiUpdateMemory, deleteMemory as apiDeleteMemory } from "../lib/memory.js";
 import { ChatHistoryView } from "./history.jsx";
+import { DEFAULT_ROLE_AVATAR } from "../lib/default-assets.js";
 /* 记忆页 — 多角色记忆管理 + 完整聊天记录 */
 const { useState: useStateMem, useEffect: useEffectMem } = React;
 
@@ -71,6 +72,8 @@ function MemoryCard({ m, onPin, onEdit, onDelete }) {
 function MemoryScreen() {
   const [realAgents, setRealAgents] = useStateMem(null);
   const agents = realAgents ?? [];
+  const rolesLoaded = realAgents !== null;
+  const hasAgents = agents.length > 0;
 
   const [activeId, setActiveId] = useStateMem(null);
   const [list, setList] = useStateMem([]);
@@ -86,12 +89,22 @@ function MemoryScreen() {
         if (res?.success && Array.isArray(res.items)) {
           const mapped = res.items.map((r) => ({
             id: r.id, name: r.name, isDefault: !!r.is_active,
-            avatar: getRoleAvatarRound(r) || "/assets/portraits/round/0.png",
+            avatar: getRoleAvatarRound(r) || DEFAULT_ROLE_AVATAR,
           }));
           setRealAgents(mapped);
           if (mapped.length && !activeId) setActiveId(mapped[0].id);
+          if (mapped.length === 0) {
+            setActiveId(null);
+            setList([]);
+            setLoading(false);
+          }
         }
-      } catch (e) { setRealAgents([]); }
+      } catch (e) {
+        setRealAgents([]);
+        setActiveId(null);
+        setList([]);
+        setLoading(false);
+      }
     })();
   }, []);
 
@@ -102,7 +115,11 @@ function MemoryScreen() {
 
   /* 切换角色时拉该角色的记忆 */
   useEffectMem(() => {
-    if (!activeId) return;
+    if (!activeId) {
+      setList([]);
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -124,7 +141,7 @@ function MemoryScreen() {
     return () => { cancelled = true; };
   }, [activeId]);
 
-  const agent = agents.find((a) => a.id === activeId) || agents[0] || { id: 0, name: "加载中", avatar: "" };
+  const agent = agents.find((a) => a.id === activeId) || agents[0] || null;
   const sorted = [...list].sort((a, b) => (b.isImportant ? 1 : 0) - (a.isImportant ? 1 : 0));
 
   /* 操作：调后端 API 后刷新列表 */
@@ -143,6 +160,7 @@ function MemoryScreen() {
   };
 
   const handleSave = async (data) => {
+    if (!activeId) return;
     try {
       if (data.id) {
         await apiUpdateMemory(data.id, { content: data.content, tag: data.tag, category: data.category, is_important: data.isImportant });
@@ -164,7 +182,7 @@ function MemoryScreen() {
     refreshList();
   };
 
-  if (history) return <ChatHistoryView agent={agent} onBack={() => setHistory(false)} />;
+  if (history && agent) return <ChatHistoryView agent={agent} onBack={() => setHistory(false)} />;
 
   return (
     <div className="screen anim-screen">
@@ -173,7 +191,7 @@ function MemoryScreen() {
           <h1>记忆</h1>
           <div className="sub">她们各自记得关于你的事</div>
         </div>
-        <button className="pill pill-primary" style={{ padding: "9px 16px", fontSize: 13 }} onClick={() => setEditor(null)}>
+        <button className="pill pill-primary" style={{ padding: "9px 16px", fontSize: 13 }} disabled={!hasAgents} onClick={() => hasAgents && setEditor(null)}>
           <Icon name="plus" /> 新建
         </button>
       </div>
@@ -188,20 +206,36 @@ function MemoryScreen() {
       </div>
 
       <div className="pad">
-        <button className="history-entry" onClick={() => setHistory(true)}>
-          <span className="he-ic"><Icon name="chat" /></span>
-          <span className="he-main">
-            <span className="he-t">和{agent.name}的完整聊天记录</span>
-            <span className="he-s">夜深人静,翻看说过的每一句话</span>
-          </span>
-          <Icon name="chevron" className="row-chev" />
-        </button>
+        {!rolesLoaded ? (
+          <div className="date-hint">正在加载角色...</div>
+        ) : !hasAgents ? (
+          <div className="empty-immersive memory-empty-full">
+            <picture>
+              <source srcSet="/assets/empty-memory.webp" type="image/webp" />
+              <img className="empty-immersive-img" src="/assets/empty-memory.png" alt="" />
+            </picture>
+            <div className="empty-immersive-scrim" />
+            <div className="empty-immersive-guide">
+              <div className="empty-state-title">这里还没有角色</div>
+              <div className="empty-state-desc">先创建或恢复公开版小白，<br/>再写下要她记住的事。</div>
+              <button className="empty-state-btn" onClick={() => window.location.href = "/characters"}>去迎回第一个她</button>
+            </div>
+          </div>
+        ) : (<>
+          <button className="history-entry" onClick={() => setHistory(true)}>
+            <span className="he-ic"><Icon name="chat" /></span>
+            <span className="he-main">
+              <span className="he-t">和{agent.name}的完整聊天记录</span>
+              <span className="he-s">夜深人静,翻看说过的每一句话</span>
+            </span>
+            <Icon name="chevron" className="row-chev" />
+          </button>
 
-        <div className="section-label" style={{ margin: "20px 0 12px" }}>
-          <span>{agent.name}记得的事 · {list.length}</span><span className="sl-line" />
-        </div>
+          <div className="section-label" style={{ margin: "20px 0 12px" }}>
+            <span>{agent.name}记得的事 · {list.length}</span><span className="sl-line" />
+          </div>
 
-        {sorted.length === 0 ? (
+          {sorted.length === 0 ? (
           <div className="empty-immersive memory-empty-full">
             <picture>
               <source srcSet="/assets/empty-memory.webp" type="image/webp" />
@@ -222,11 +256,12 @@ function MemoryScreen() {
                 onDelete={(x) => handleDelete(x)} />
             ))}
           </div>
-        )}
+          )}
+        </>)}
         <div style={{ height: 24 }} />
       </div>
 
-      {editor !== undefined && (
+      {editor !== undefined && agent && (
         <MemoryEditor agent={agent} memory={editor}
           onClose={() => setEditor(undefined)}
           onSave={handleSave} />

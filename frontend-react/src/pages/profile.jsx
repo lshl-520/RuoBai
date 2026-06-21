@@ -491,7 +491,7 @@ function ProfileScreen({ user: userProp, onOnboard, onGoMemory, onLogout }) {
     return () => { cancelled = true; };
   }, []);
 
-  // 合并：真实数据优先；真实角色列表为空时只用公开版小白兜底，不能回退到演示角色。
+  // 合并：真实数据优先；真实角色列表为空时保持 0 角色，只把公开版小白当引导卡，不当成真实角色。
   const fallbackUser = userProp || FALLBACK_USER;
   const user = realUser ? {
     name: realUser.nickname || realUser.username || fallbackUser.name,
@@ -507,9 +507,10 @@ function ProfileScreen({ user: userProp, onOnboard, onGoMemory, onLogout }) {
         id: r.id, name: r.name, isDefault: !!r.is_active,
         avatar: getRoleAvatarRound(r) || DEFAULT_ROLE_AVATAR,
       }))
-    : [FALLBACK_ROLE];
+    : [];
 
-  const ruobai = agents.find((a) => a.isDefault) || agents[0] || FALLBACK_ROLE;
+  const visibleAgents = hasRealAgents ? agents : [];
+  const guideRole = agents.find((a) => a.isDefault) || agents[0] || FALLBACK_ROLE;
   const [avatar, setAvatar] = useStateP(user.avatar || FALLBACK_USER.avatar);
   const [nameOverride, setNameOverride] = useStateP(null); // 保存昵称后立刻更新显示
   const displayName = nameOverride ?? user.name;
@@ -552,12 +553,12 @@ function ProfileScreen({ user: userProp, onOnboard, onGoMemory, onLogout }) {
 
       {/* 让她认识你 */}
       <div className="pad" style={{ marginTop: 12 }}>
-        <button className="onboard-card" onClick={() => setSheet("onboard")}>
+        <button className="onboard-card" onClick={() => hasRealAgents ? setSheet("onboard") : (window.location.href = "/characters")}>
           <span className="ob-glow" />
-          <span className="ob-av"><img src={ruobai.avatar} alt="" /></span>
+          <span className="ob-av"><img src={guideRole.avatar} alt="" /></span>
           <span className="ob-main">
-            <span className="ob-t serif">让{ruobai.name}更懂你</span>
-            <span className="ob-s">回答几个她想问的,她会把你记得更深</span>
+            <span className="ob-t serif">{hasRealAgents ? `让${guideRole.name}更懂你` : "创建或恢复小白"}</span>
+            <span className="ob-s">{hasRealAgents ? "回答几个她想问的,她会把你记得更深" : "这里现在是 0 角色，先迎回第一个她"}</span>
           </span>
           <Icon name="chevron" className="row-chev" />
         </button>
@@ -565,7 +566,7 @@ function ProfileScreen({ user: userProp, onOnboard, onGoMemory, onLogout }) {
 
       {/* 数据 */}
       <div className="pad me-stats" style={{ marginTop: 12 }}>
-        {[[user.longestDays, "陪伴天数"], [agents.length, "羁绊"], [user.msgCount, "说过的话"]].map(([n, l]) => (
+        {[[user.longestDays, "陪伴天数"], [visibleAgents.length, "羁绊"], [user.msgCount, "说过的话"]].map(([n, l]) => (
           <div key={l} className="ms"><b>{n}</b><span>{l}</span></div>
         ))}
       </div>
@@ -590,8 +591,8 @@ function ProfileScreen({ user: userProp, onOnboard, onGoMemory, onLogout }) {
       <div style={{ height: 20 }} />
 
       {sheet === "editme" && <EditProfileSheet name={displayName} avatar={avatar} onClose={() => setSheet(null)} onSave={({ name, avatar: av }) => { if (name) setNameOverride(name); if (av) setAvatar(av); }} />}
-      {sheet === "export" && <ExportSheet agents={agents} onClose={() => setSheet(null)} />}
-      {sheet === "privacy" && <PrivacySheet agents={agents} onClose={() => setSheet(null)} />}
+      {sheet === "export" && <ExportSheet agents={visibleAgents} onClose={() => setSheet(null)} />}
+      {sheet === "privacy" && <PrivacySheet agents={visibleAgents} onClose={() => setSheet(null)} />}
       {sheet === "theme" && <ThemeSheet current={theme} onClose={() => setSheet(null)} onPick={(t) => { setThemeState(t); try { if (t) { document.documentElement.dataset.theme = t; localStorage.setItem("ruobai_theme", t); } else { delete document.documentElement.dataset.theme; localStorage.removeItem("ruobai_theme"); } } catch (e) {} }} />}
       {sheet === "notif" && <NotifSheet onClose={() => setSheet(null)} />}
       {sheet === "about" && <AboutSheet onClose={() => setSheet(null)} />}
