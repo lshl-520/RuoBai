@@ -3,7 +3,12 @@ import { Icon, Bars } from "../store.jsx";
 import { getRoles, getRolePortraitSrc, getRoleAvatarRound } from "../lib/roles.js";
 import { getMoments, createMoment, likeMoment as apiLike, deleteMoment as apiDelete } from "../lib/moments.js";
 import { getSessionProfile } from "../lib/profile.js";
-import { DEFAULT_ROLE_AVATAR, DEFAULT_USER_AVATAR } from "../lib/default-assets.js";
+import {
+  DEFAULT_ROLE_AVATAR,
+  DEFAULT_USER_AVATAR,
+  fallbackToDefaultRoleAvatar,
+  fallbackToDefaultUserAvatar,
+} from "../lib/default-assets.js";
 /* 动态 / 朋友圈 — 从后端拉真实数据 */
 const { useState: useStateM, useEffect: useEffectM } = React;
 
@@ -61,7 +66,7 @@ function MomentCard({ m, onLike, onDelete, currentUserId }) {
         e.currentTarget.style.boxShadow = 'none';
       }}
     >
-      <div className="m-avatar"><img src={m.avatar} alt={m.who} /></div>
+      <div className="m-avatar"><img src={m.avatar} alt={m.who} onError={m.isUser ? fallbackToDefaultUserAvatar : fallbackToDefaultRoleAvatar} /></div>
       <div className="m-main">
         <div className="m-head" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
           <span className="m-name">{m.who}</span>
@@ -226,7 +231,7 @@ function Composer({ user, onClose, onPost }) {
         </div>
         <div className="sheet-body">
           <div className="compose-head">
-            <img src={user.avatar} alt="" />
+            <img src={user.avatar} alt="" onError={fallbackToDefaultUserAvatar} />
             <span>{user.name}</span>
           </div>
           <textarea className="fld area" style={{ minHeight: 130 }} autoFocus value={text}
@@ -434,18 +439,18 @@ function MomentsScreen() {
         <div className="mc-scrim" />
         <div className="mc-title serif">动态</div>
         <div className="mc-sub">她们在过自己的日子,你也可以在这儿说说话</div>
-        <div className="mc-user"><img src={user.avatar} alt="" /></div>
+        <div className="mc-user"><img src={user.avatar} alt="" onError={fallbackToDefaultUserAvatar} /></div>
       </div>
 
       {/* 头像筛选栏 */}
       <div className="mem-roles" style={{ marginTop: 2 }}>
         <button className={"mem-role" + (filter === null ? " on" : "")} onClick={() => setFilter(null)}>
-          <span className="mem-role-av"><img src={user?.avatar || DEFAULT_USER_AVATAR} alt={user?.username || "我"} /></span>
+          <span className="mem-role-av"><img src={user?.avatar || DEFAULT_USER_AVATAR} alt={user?.username || "我"} onError={fallbackToDefaultUserAvatar} /></span>
           <span className="mem-role-name">{user?.username || "我"}</span>
         </button>
         {agents.map((a) => (
           <button key={a.id} className={"mem-role" + (filter === a.id ? " on" : "")} onClick={() => setFilter(a.id)}>
-            <span className="mem-role-av"><img src={a.avatar} alt={a.name} /></span>
+            <span className="mem-role-av"><img src={a.avatar} alt={a.name} onError={fallbackToDefaultRoleAvatar} /></span>
             <span className="mem-role-name">{a.name}</span>
           </button>
         ))}

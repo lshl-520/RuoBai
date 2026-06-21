@@ -3,7 +3,7 @@ import { Icon, Bars } from "../store.jsx";
 import { getRoles, getRoleAvatarRound } from "../lib/roles.js";
 import { getMemories, createMemory, updateMemory as apiUpdateMemory, deleteMemory as apiDeleteMemory } from "../lib/memory.js";
 import { ChatHistoryView } from "./history.jsx";
-import { DEFAULT_ROLE_AVATAR } from "../lib/default-assets.js";
+import { DEFAULT_ROLE_AVATAR, fallbackToDefaultRoleAvatar } from "../lib/default-assets.js";
 /* 记忆页 — 多角色记忆管理 + 完整聊天记录 */
 const { useState: useStateMem, useEffect: useEffectMem } = React;
 
@@ -199,7 +199,7 @@ function MemoryScreen() {
       <div className="mem-roles">
         {agents.map((a) => (
           <button key={a.id} className={"mem-role" + (a.id === activeId ? " on" : "")} onClick={() => setActiveId(a.id)}>
-            <span className="mem-role-av"><img src={a.avatar} alt={a.name} /></span>
+            <span className="mem-role-av"><img src={a.avatar} alt={a.name} onError={fallbackToDefaultRoleAvatar} /></span>
             <span className="mem-role-name">{a.name}</span>
           </button>
         ))}

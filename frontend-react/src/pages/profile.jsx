@@ -3,7 +3,12 @@ import { Icon, Bars, useLockBody } from "../store.jsx";
 import { ModelsSection } from "./models.jsx";
 import { getSessionProfile, getUsageStats, logoutSession, uploadAvatarImage, updateNickname, updateRole } from "../lib/profile.js";
 import { getRoles, getRoleAvatarRound } from "../lib/roles.js";
-import { DEFAULT_ROLE_AVATAR, DEFAULT_USER_AVATAR } from "../lib/default-assets.js";
+import {
+  DEFAULT_ROLE_AVATAR,
+  DEFAULT_USER_AVATAR,
+  fallbackToDefaultRoleAvatar,
+  fallbackToDefaultUserAvatar,
+} from "../lib/default-assets.js";
 /* 我的 / 设置 / 模型接入(见 models.jsx) / 能力配置 */
 const { useState: useStateP, useEffect: useEffectP } = React;
 
@@ -71,7 +76,7 @@ function ExportSheet({ agents, onClose }) {
           <div className="cap-card">
             {agents.map((a, i) => (
               <button key={a.id} className={"prow" + (i === agents.length - 1 ? " last" : "")} onClick={() => exp(a)}>
-                <span className="prow-ic"><img src={a.avatar} alt="" style={{ width: "100%", height: "100%", borderRadius: 12, objectFit: "cover" }} /></span>
+                <span className="prow-ic"><img src={a.avatar} alt="" onError={fallbackToDefaultRoleAvatar} style={{ width: "100%", height: "100%", borderRadius: 12, objectFit: "cover" }} /></span>
                 <span className="prow-main"><span className="prow-t">{a.name}</span><span className="prow-s">共 {counts(a.id)} 条</span></span>
                 <span className="route-val"><Icon name="download" /> 导出</span>
               </button>
@@ -291,7 +296,7 @@ function EditProfileSheet({ name, avatar, onClose, onSave }) {
           <div className="date-hint">换张头像、改个名字 —— 她看到的就是这个你。</div>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "8px 0 18px" }}>
             <label className="me-avatar" style={{ cursor: "pointer" }}>
-              <img src={pic} alt="" />
+              <img src={pic} alt="" onError={fallbackToDefaultUserAvatar} />
               <span className="me-avatar-edit"><Icon name="edit" /></span>
               <input type="file" accept="image/*" onChange={onPick} hidden />
             </label>
@@ -536,7 +541,7 @@ function ProfileScreen({ user: userProp, onOnboard, onGoMemory, onLogout }) {
       <div className="pad">
         <div className="me-hero" onClick={() => setSheet("editme")} role="button" style={{ cursor: "pointer" }}>
           <span className="me-avatar">
-            <img src={avatar} alt="" />
+            <img src={avatar} alt="" onError={fallbackToDefaultUserAvatar} />
             <span className="me-avatar-edit"><Icon name="edit" /></span>
           </span>
           <div className="me-info">
@@ -555,7 +560,7 @@ function ProfileScreen({ user: userProp, onOnboard, onGoMemory, onLogout }) {
       <div className="pad" style={{ marginTop: 12 }}>
         <button className="onboard-card" onClick={() => hasRealAgents ? setSheet("onboard") : (window.location.href = "/characters")}>
           <span className="ob-glow" />
-          <span className="ob-av"><img src={guideRole.avatar} alt="" /></span>
+          <span className="ob-av"><img src={guideRole.avatar} alt="" onError={fallbackToDefaultRoleAvatar} /></span>
           <span className="ob-main">
             <span className="ob-t serif">{hasRealAgents ? `让${guideRole.name}更懂你` : "创建或恢复小白"}</span>
             <span className="ob-s">{hasRealAgents ? "回答几个她想问的,她会把你记得更深" : "这里现在是 0 角色，先迎回第一个她"}</span>
