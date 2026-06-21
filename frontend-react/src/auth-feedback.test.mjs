@@ -40,6 +40,7 @@ test('profile keeps rendering when the backend returns an empty role list', asyn
 
   assert.match(profile, /const FALLBACK_ROLE = /);
   assert.match(profile, /const hasRealAgents = Array\.isArray\(realAgents\) && realAgents\.length > 0;/);
-  assert.match(profile, /const ruobai = agents\.find\(\(a\) => a\.isDefault\) \|\| agents\[0\] \|\| FALLBACK_ROLE;/);
+  assert.match(profile, /const guideRole = agents\.find\(\(a\) => a\.isDefault\) \|\| agents\[0\] \|\| FALLBACK_ROLE;/);
+  assert.match(profile, /const visibleAgents = hasRealAgents \? agents : \[\];/);
   assert.doesNotMatch(profile, /const agents = realAgents\s*\?\s*realAgents\.map/);
 });

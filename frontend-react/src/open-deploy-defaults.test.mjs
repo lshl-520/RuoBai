@@ -56,3 +56,22 @@ test('user avatar fallback points to a public deployable asset instead of scatte
   assert.doesNotMatch(moments, /\/assets\/avatar\.png/);
   assert.doesNotMatch(profile, /\/assets\/portraits\/round\/3\.png/);
 });
+
+test('profile keeps default Xiaobai as a guide only and preserves true zero-role counts', async () => {
+  const profile = await readProjectFile('frontend-react', 'src', 'pages', 'profile.jsx');
+
+  assert.match(profile, /const visibleAgents = hasRealAgents \? agents : \[\];/);
+  assert.match(profile, /\[visibleAgents\.length,\s*"羁绊"\]/);
+  assert.doesNotMatch(profile, /:\s*\[FALLBACK_ROLE\]/);
+  assert.match(profile, /hasRealAgents \? setSheet\("onboard"\) : \(window\.location\.href = ["']\/characters["']\)/);
+});
+
+test('memory page uses a real zero-role image state instead of a fake loading role', async () => {
+  const memory = await readProjectFile('frontend-react', 'src', 'pages', 'memory.jsx');
+
+  assert.match(memory, /const hasAgents = agents\.length > 0;/);
+  assert.match(memory, /disabled=\{!hasAgents\}/);
+  assert.match(memory, /这里还没有角色/);
+  assert.match(memory, /先创建或恢复公开版小白/);
+  assert.doesNotMatch(memory, /name:\s*["']加载中["']/);
+});
