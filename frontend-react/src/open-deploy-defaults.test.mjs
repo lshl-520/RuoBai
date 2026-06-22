@@ -51,7 +51,7 @@ test('user avatar fallback points to a public deployable asset instead of scatte
   const moments = await readProjectFile('frontend-react', 'src', 'pages', 'moments.jsx');
   const profile = await readProjectFile('frontend-react', 'src', 'pages', 'profile.jsx');
 
-  assert.match(defaults, /DEFAULT_USER_AVATAR\s*=\s*["']\/assets\/default-user-avatar\.png["']/);
+  assert.match(defaults, /DEFAULT_USER_AVATAR\s*=\s*["']\/assets\/default-user-avatar\.webp["']/);
   assert.match(defaults, /fallbackToDefaultUserAvatar/);
   assert.match(chat, /DEFAULT_USER_AVATAR/);
   assert.match(chat, /fallbackToDefaultUserAvatar/);

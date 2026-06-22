@@ -223,7 +223,7 @@ function ChatListScreen({ onOpen }) {
         ))}
         {list.length === 0 && agents !== null && (
           <div className="empty-immersive">
-            <img className="empty-immersive-img" src="/assets/empty-chat.png" alt="" />
+            <img className="empty-immersive-img" src="/assets/empty-chat.webp" alt="" />
             <div className="empty-immersive-scrim" />
             <div className="empty-immersive-guide">
               <div className="empty-state-title">这里还空着</div>
