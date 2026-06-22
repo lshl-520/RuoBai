@@ -39,6 +39,7 @@ const updateService = createUpdateService();
 const adminRoutes = createAdminRouter({ updateService });
 const pushRoutes = createPushRouter({ pool });
 const fcmSender = createFcmSender({ admin: firebaseAdmin });
+const SKIP_COMPRESSION_EXTENSIONS = /\.(?:avif|webp|png|jpe?g|gif|ico|svg|mp3|mp4|webm|ogg|zip|apk)$/i;
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -92,7 +93,14 @@ app.use((req, res, next) => {
   return next();
 });
 
-app.use(compression());
+app.use(compression({
+  filter: (req, res) => {
+    if (SKIP_COMPRESSION_EXTENSIONS.test(req.path)) {
+      return false;
+    }
+    return compression.filter(req, res);
+  },
+}));
 
 if (hasReactBuild) {
   app.use('/assets', express.static(path.join(reactDistDir, 'assets'), {
