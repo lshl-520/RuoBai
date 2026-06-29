@@ -506,16 +506,17 @@ router.delete('/:id', asyncHandler(async (req, res) => {
   }
 
   const immediate = String(req.query?.mode || '').trim().toLowerCase() === 'hard';
+  let deleted = false;
 
   await withTransaction(async connection => {
-    const deleted = immediate
+    deleted = immediate
       ? await permanentlyDeleteCharacter(connection, req.userId, characterId)
       : await markCharacterDeleted(connection, req.userId, characterId);
-
-    if (!deleted) {
-      throw new Error('角色不存在');
-    }
   });
+
+  if (!deleted) {
+    return res.status(404).json({ success: false, error: '角色不存在' });
+  }
 
   return res.json({
     success: true,
@@ -529,7 +530,9 @@ router.post('/:id/restore', asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, error: 'Invalid role id' });
   }
 
-  const restored = await withTransaction(async connection => {
+  let restored = null;
+
+  await withTransaction(async connection => {
     const [rows] = await connection.query(
       `
         SELECT id
@@ -541,7 +544,7 @@ router.post('/:id/restore', asyncHandler(async (req, res) => {
     );
 
     if (!rows.length) {
-      throw new Error('Role not found');
+      return;
     }
 
     await connection.query(
@@ -579,8 +582,12 @@ router.post('/:id/restore', asyncHandler(async (req, res) => {
       [characterId, req.userId]
     );
 
-    return updatedRows[0];
+    restored = updatedRows[0];
   });
+
+  if (!restored) {
+    return res.status(404).json({ success: false, error: '角色不存在' });
+  }
 
   return res.json({ success: true, item: restored });
 }));
