@@ -53,6 +53,18 @@ export function switchRole(roleId) {
   });
 }
 
+export function deleteRole(roleId, options = {}) {
+  const params = new URLSearchParams();
+  if (options.immediate) {
+    params.set("mode", "hard");
+  }
+
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return request(`/api/roles/${encodeURIComponent(roleId)}${suffix}`, {
+    method: "DELETE",
+  });
+}
+
 export function patchRole(roleId, payload) {
   return request(`/api/roles/${encodeURIComponent(roleId)}`, {
     method: "PATCH",

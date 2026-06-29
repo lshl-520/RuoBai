@@ -194,6 +194,23 @@ async function markCharacterDeleted(connection, userId, characterId) {
   return true;
 }
 
+async function permanentlyDeleteCharacter(connection, userId, characterId) {
+  const [result] = await connection.query(
+    `
+      DELETE FROM characters
+      WHERE id = ? AND user_id = ?
+    `,
+    [characterId, userId]
+  );
+
+  if (!result.affectedRows) {
+    return false;
+  }
+
+  await ensureActiveCharacter(userId, connection);
+  return true;
+}
+
 async function loadRoles(userId, { includeDeleted = false } = {}, connection = pool) {
   await finalizeExpiredCharacterDeletes(userId, connection);
   await ensureActiveCharacter(userId, connection);
@@ -488,14 +505,22 @@ router.delete('/:id', asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, error: '角色 ID 非法' });
   }
 
+  const immediate = String(req.query?.mode || '').trim().toLowerCase() === 'hard';
+
   await withTransaction(async connection => {
-    const deleted = await markCharacterDeleted(connection, req.userId, characterId);
+    const deleted = immediate
+      ? await permanentlyDeleteCharacter(connection, req.userId, characterId)
+      : await markCharacterDeleted(connection, req.userId, characterId);
+
     if (!deleted) {
       throw new Error('角色不存在');
     }
   });
 
-  return res.json({ success: true, message: '角色已删除' });
+  return res.json({
+    success: true,
+    message: immediate ? '角色已立即删除' : '角色已删除'
+  });
 }));
 
 router.post('/:id/restore', asyncHandler(async (req, res) => {
