@@ -451,3 +451,36 @@ test('DELETE /api/roles/:id?mode=hard permanently deletes role', async () => {
     assert.match(calls[1].sql, /SELECT id, is_active/i);
   });
 });
+
+test('DELETE /api/roles/:id returns 404 when role is already missing', async () => {
+  const connection = {
+    query: async (sql, params) => {
+      if (sql.includes('DELETE FROM characters')) {
+        assert.deepEqual(params, [7, 1]);
+        return [{ affectedRows: 0 }];
+      }
+
+      if (sql.includes('SELECT id, is_active')) {
+        assert.deepEqual(params, [1]);
+        return [[]];
+      }
+
+      throw new Error(`Unexpected query: ${sql}`);
+    }
+  };
+
+  const router = createRolesRouter({
+    withTransaction: async work => work(connection)
+  });
+
+  await withServer(createApp({ router }), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/roles/7?mode=hard`, {
+      method: 'DELETE'
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 404);
+    assert.equal(payload.success, false);
+    assert.equal(payload.error, '角色不存在');
+  });
+});
