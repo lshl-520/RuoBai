@@ -195,6 +195,23 @@ function AgentsScreen({ agents: fallbackAgents, onChat, onDetail, onCreate }) {
 /* ============ 角色详情 ============ */
 function CharacterDetail({ agent, memCount, onClose, onChat, onEdit, onDelete, onSetMain, onOnboard }) {
   const [confirm, setConfirm] = useStateA(false);
+  const [deleting, setDeleting] = useStateA(false);
+  const [deleteError, setDeleteError] = useStateA("");
+
+  const handleDelete = async (options = {}) => {
+    if (!onDelete || deleting) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await onDelete(agent.id, options);
+      setConfirm(false);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "删除失败");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="detail-screen anim-screen">
       <div className="detail-photo">
@@ -269,10 +286,21 @@ function CharacterDetail({ agent, memCount, onClose, onChat, onEdit, onDelete, o
         <div className="confirm-mask" onClick={() => setConfirm(false)}>
           <div className="confirm-box" onClick={(e) => e.stopPropagation()}>
             <div className="cf-t serif">要和{agent.name}告别吗?</div>
-            <div className="cf-s">删除后,你们的聊天与记忆都会一起消失。7 天内还能找回来,7 天后彻底删除。</div>
+            <div className="cf-s">“狠心删除”还能恢复。“立即删除”会把这个角色和相关内容直接清掉，适合删测试角色。</div>
+            {deleteError && <div className="chat-error" style={{ marginBottom: 10 }}>{deleteError}</div>}
             <div className="cf-actions">
-              <button className="pill pill-ghost grow" onClick={() => setConfirm(false)}>再想想</button>
-              <button className="pill grow cf-del" onClick={() => { onDelete(agent.id); }}>狠心删除</button>
+              <button className="pill pill-ghost grow" disabled={deleting} onClick={() => setConfirm(false)}>再想想</button>
+              <button className="pill grow" disabled={deleting} onClick={() => handleDelete()}>
+                {deleting ? "删除中…" : "狠心删除"}
+              </button>
+              <button
+                className="pill grow cf-del"
+                disabled={deleting}
+                onClick={() => handleDelete({ immediate: true })}
+                title="适合直接清理测试角色"
+              >
+                {deleting ? "删除中…" : "立即删除"}
+              </button>
             </div>
           </div>
         </div>

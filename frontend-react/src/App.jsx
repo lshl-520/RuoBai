@@ -76,7 +76,23 @@ function RuobaiApp({ authed, setAuthed }) {
     }
     setEditAgent(undefined);
   };
-  const deleteAgent = (id) => { setAgents((p) => p.filter((a) => a.id !== id)); setDetailAgent(null); };
+  const deleteAgent = async (id, options = {}) => {
+    try {
+      const { deleteRole } = await import("./lib/roles.js");
+      await deleteRole(id, options);
+      setAgents((p) => p.filter((a) => a.id !== id));
+      setMemories((m) => {
+        const next = { ...m };
+        delete next[id];
+        return next;
+      });
+      setDetailAgent(null);
+      setTimeout(() => window.dispatchEvent(new Event("focus")), 100);
+    } catch (err) {
+      console.error("删除角色失败", err);
+      throw err;
+    }
+  };
   const setMainCompanion = async (id) => {
     try {
       const { switchRole } = await import("./lib/roles.js");

@@ -413,3 +413,41 @@ test('POST /api/roles/:id/restore requires authentication', async () => {
     assert.equal(payload.success, false);
   });
 });
+
+test('DELETE /api/roles/:id?mode=hard permanently deletes role', async () => {
+  const calls = [];
+  const connection = {
+    query: async (sql, params) => {
+      calls.push({ sql, params });
+
+      if (sql.includes('DELETE FROM characters')) {
+        assert.deepEqual(params, [7, 1]);
+        return [{ affectedRows: 1 }];
+      }
+
+      if (sql.includes('SELECT id, is_active')) {
+        assert.deepEqual(params, [1]);
+        return [[{ id: 9, is_active: 1 }]];
+      }
+
+      throw new Error(`Unexpected query: ${sql}`);
+    }
+  };
+
+  const router = createRolesRouter({
+    withTransaction: async work => work(connection)
+  });
+
+  await withServer(createApp({ router }), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/roles/7?mode=hard`, {
+      method: 'DELETE'
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.success, true);
+    assert.equal(payload.message, '角色已立即删除');
+    assert.match(calls[0].sql, /DELETE FROM characters/i);
+    assert.match(calls[1].sql, /SELECT id, is_active/i);
+  });
+});
