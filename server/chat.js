@@ -429,7 +429,7 @@ export function createChatRouter({
       }
 
       await requireCharacterForUser(req.userId, characterId, pool);
-      const limit = normalizeLimit(req.query?.limit, 50, 200);
+      const limit = normalizeLimit(req.query?.limit, 50, 5000);
       const messages = await loadRecentMessages(req.userId, characterId, limit);
 
       return res.json({
