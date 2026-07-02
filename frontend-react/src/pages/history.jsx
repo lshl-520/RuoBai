@@ -2,6 +2,8 @@ import React from "react";
 import { Icon, Bars } from "../store.jsx";
 import { Bubble } from "./chat.jsx";
 import { getMessages } from "../lib/chat.js";
+import { getSessionProfile } from "../lib/profile.js";
+import { DEFAULT_USER_AVATAR } from "../lib/default-assets.js";
 /* 聊天记录查看器 — 微信式:窗口化懒加载 + 日期分隔 + 搜索定位 + 按日期跳转 + 导出
    性能说明:即使上万条,也只渲染「最近一个窗口」(默认 30 条),
    向上滚到顶才追加上一页(每页 24 条),并保持滚动位置不跳。
@@ -57,6 +59,15 @@ function mapMessage(m) {
 function ChatHistoryView({ agent, onBack }) {
   const [full, setFull] = useStateH([]);
   const [loading, setLoading] = useStateH(true);
+  const [myAvatar, setMyAvatar] = useStateH(DEFAULT_USER_AVATAR);
+
+  /* 拉用户头像 */
+  useEffectH(() => {
+    getSessionProfile().then(res => {
+      const av = res?.user?.avatar || res?.avatar;
+      if (av) setMyAvatar(av);
+    }).catch(() => {});
+  }, []);
 
   /* 从后端拉真实聊天记录 */
   useEffectH(() => {
@@ -137,7 +148,7 @@ function ChatHistoryView({ agent, onBack }) {
       <React.Fragment key={gi}>
         {showDay && <div className="time-div" id={"h-day-" + m.day}>{m.day}</div>}
         <div id={"h-msg-" + gi} className={"h-msg" + (hit === gi ? " h-hit" : "")}>
-          <Bubble m={m} agent={agent} />
+          <Bubble m={m} agent={agent} myAvatar={myAvatar} />
         </div>
       </React.Fragment>
     );
