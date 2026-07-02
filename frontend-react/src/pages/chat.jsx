@@ -238,18 +238,16 @@ function ChatListScreen({ onOpen }) {
 }
 
 /* ---------------- 思考过程 ---------------- */
+// 同时支持 <think>（Claude/通用）和 <thinking>（Grok）两种标签
 function extractThink(text) {
   if (!text) return { content: text, think: "" };
-  const re = /<think>([\s\S]*?)<\/think>/gi;
+  const re = /<(think|thinking)>([\s\S]*?)<\/\1>/gi;
   let think = "";
-  let content = text;
-  const matches = text.match(re);
-  if (matches) {
-    for (const m of matches) {
-      think += m.replace(/<\/?think>/gi, "").trim() + "\n";
-    }
-    content = text.replace(re, "").trim();
+  let match;
+  while ((match = re.exec(text)) !== null) {
+    think += match[2].trim() + "\n";
   }
+  const content = text.replace(/<(think|thinking)>[\s\S]*?<\/\1>/gi, "").trim();
   return { content, think: think.trim() };
 }
 
