@@ -93,6 +93,10 @@ function RuobaiApp({ authed, setAuthed }) {
       throw err;
     }
   };
+  const restoreAgent = () => {
+    // 角色恢复后触发列表刷新
+    setTimeout(() => window.dispatchEvent(new Event("focus")), 100);
+  };
   const setMainCompanion = async (id) => {
     try {
       const { switchRole } = await import("./lib/roles.js");
@@ -132,7 +136,7 @@ function RuobaiApp({ authed, setAuthed }) {
       <div className="viewport">
         <Routes>
           <Route path="/chat" element={<ChatListScreen agents={agents} onOpen={openChat} />} />
-          <Route path="/characters" element={<AgentsScreen agents={agents} onChat={openChat} onDetail={setDetailAgent} onCreate={() => setEditAgent(null)} />} />
+          <Route path="/characters" element={<AgentsScreen agents={agents} onChat={openChat} onDetail={setDetailAgent} onCreate={() => setEditAgent(null)} onRestore={restoreAgent} />} />
           <Route path="/moments" element={<MomentsScreen onLike={likeMoment} onPost={postMoment} />} />
           <Route path="/memory" element={<MemoryScreen agents={agents} memories={memories} onAdd={addMemory} onUpdate={updateMemory} onDelete={deleteMemory} onPin={pinMemory} />} />
           <Route path="/profile" element={<ProfileScreen onGoMemory={() => navigate("/memory")} onLogout={() => { setAuthed(false); navigate("/auth"); }} />} />

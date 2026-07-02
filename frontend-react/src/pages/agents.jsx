@@ -1,6 +1,6 @@
 import React from "react";
 import { Icon, AGENTS } from "../store.jsx";
-import { getRoles, getRolePortraitSrc, clampIntimacy, createRole, updateRole, switchRole, buildRolePayload } from "../lib/roles.js";
+import { getRoles, getRolePortraitSrc, clampIntimacy, createRole, updateRole, switchRole, buildRolePayload, restoreRole } from "../lib/roles.js";
 /* 角色 — 列表(Hero + 网格) + 详情 + 创建/编辑 */
 const { useState: useStateA, useEffect: useEffectA, useRef: useRefA } = React;
 
@@ -92,7 +92,7 @@ function AgentCard({ agent, onDetail }) {
   );
 }
 
-function AgentsScreen({ agents: fallbackAgents, onChat, onDetail, onCreate }) {
+function AgentsScreen({ agents: fallbackAgents, onChat, onDetail, onCreate, onRestore }) {
   const [agents, setAgents] = useStateA(null);
   const seqRef = useRefA(0);
 
@@ -187,7 +187,9 @@ function AgentsScreen({ agents: fallbackAgents, onChat, onDetail, onCreate }) {
           <span className="an-s">给她一个名字和性格</span>
         </button>
       </div>
-      <div style={{ height: 24 }} />
+
+      <RecoverableAgents onRestored={() => { reloadRoles(); onRestore?.(); }} />
+      <div style={{ height: 32 }} />
     </div>
   );
 }
@@ -435,4 +437,76 @@ function AgentEditor({ agent, onClose, onSave }) {
   );
 }
 
-export { AgentsScreen, AgentEditor, CharacterDetail };
+/* ============ 可恢复角色区域 ============ */
+function RecoverableAgents({ onRestored }) {
+  const [deleted, setDeleted] = useStateA(null);
+  const [restoring, setRestoring] = useStateA(null);
+  const [open, setOpen] = useStateA(false);
+
+  useEffectA(() => {
+    async function load() {
+      try {
+        const data = await getRoles({ includeDeleted: true });
+        const items = Array.isArray(data) ? data : (data?.items || []);
+        setDeleted(items.filter((r) => r.is_deleted === 1 || r.is_deleted === true));
+      } catch { setDeleted([]); }
+    }
+    load();
+  }, []);
+
+  const handleRestore = async (roleId) => {
+    if (restoring) return;
+    setRestoring(roleId);
+    try {
+      await restoreRole(roleId);
+      setDeleted((p) => p.filter((r) => r.id !== roleId));
+      onRestored?.();
+    } catch { /* 静默失败 */ }
+    finally { setRestoring(null); }
+  };
+
+  if (!deleted || deleted.length === 0) return null;
+
+  return (
+    <div className="recoverable-section pad">
+      <button
+        className="recoverable-header"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <Icon name="clock" style={{ width: 14, height: 14, opacity: 0.6 }} />
+        <span>可恢复角色 · {deleted.length} 位</span>
+        <span className={"rec-chev" + (open ? " open" : "")}>
+          <Icon name="chevronD" style={{ width: 14, height: 14 }} />
+        </span>
+      </button>
+
+      {open && (
+        <div className="recoverable-list">
+          <p className="recoverable-hint">这些角色已删除，但还能从本地数据里找回来。</p>
+          {deleted.map((role) => (
+            <div key={role.id} className="recoverable-row">
+              <img
+                className="rec-avatar"
+                src={getRolePortraitSrc(role) || "/assets/portraits/round/0.png"}
+                alt={role.name}
+              />
+              <div className="rec-info">
+                <div className="rec-name serif">{role.name}</div>
+                <div className="rec-sub">{role.persona ? role.persona.slice(0, 36) + "…" : "无人设"}</div>
+              </div>
+              <button
+                className="pill pill-ghost rec-restore-btn"
+                disabled={restoring === role.id}
+                onClick={() => handleRestore(role.id)}
+              >
+                {restoring === role.id ? "恢复中…" : "恢复"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export { AgentsScreen, AgentEditor, CharacterDetail, RecoverableAgents };

@@ -616,3 +616,89 @@
   .fab { width: 46px; height: 46px; right: 14px; bottom: 14px; }
   .fab svg { width: 20px; height: 20px; }
 }
+
+/* ============ 可恢复角色区域 ============ */
+.recoverable-section {
+  margin-top: 4px;
+}
+
+.recoverable-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 0;
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+}
+
+.recoverable-header span:nth-child(2) { flex: 1; }
+
+.rec-chev { transition: transform var(--t-fast); display: flex; }
+.rec-chev.open { transform: rotate(180deg); }
+
+.recoverable-hint {
+  font-size: 12px;
+  color: var(--ink-faint);
+  margin-bottom: 10px;
+  line-height: 1.6;
+}
+
+.recoverable-list {
+  border-radius: var(--r);
+  background: var(--card);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  margin-bottom: 8px;
+  padding: 12px 14px 6px;
+}
+
+.recoverable-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.recoverable-row:last-child { border-bottom: none; }
+
+.rec-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  opacity: 0.7;
+  filter: grayscale(30%);
+}
+
+.rec-info { flex: 1; min-width: 0; }
+
+.rec-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.rec-sub {
+  font-size: 12px;
+  color: var(--ink-faint);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rec-restore-btn {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  font-size: 13px;
+  border-color: var(--rose-soft);
+  color: var(--rose-deep);
+}
