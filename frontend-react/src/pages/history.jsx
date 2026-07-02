@@ -64,7 +64,7 @@ function ChatHistoryView({ agent, onBack }) {
     (async () => {
       setLoading(true);
       try {
-        const res = await getMessages(agent.id, 200);
+        const res = await getMessages(agent.id, 5000);
         if (!cancelled && res?.success && Array.isArray(res.items)) {
           setFull(res.items.map(mapMessage));
         }
