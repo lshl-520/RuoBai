@@ -1,7 +1,7 @@
 import React from "react";
 import { Icon, Bars, greetByHour, STICKERS } from "../store.jsx";
 import { getRoles, getRolePortraitSrc, getRoleFullPortrait, clampIntimacy } from "../lib/roles.js";
-import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage } from "../lib/chat.js";
+import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage, uploadVoice } from "../lib/chat.js";
 import { getSessionProfile, getCapabilities, updateCapability } from "../lib/profile.js";
 import {
   DEFAULT_USER_AVATAR,
@@ -268,16 +268,35 @@ function ThinkCard({ text }) {
 }
 
 /* ---------------- 语音气泡 ---------------- */
-function VoiceBubble({ mine, dur }) {
+function VoiceBubble({ mine, dur, src }) {
   const [playing, setPlaying] = useStateC(false);
+  const audioRef = useRefC(null);
   const bars = [8, 14, 10, 17, 12, 9, 15, 11, 7, 13, 9, 16, 10, 8, 12];
+
+  useEffectC(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const onEnd = () => setPlaying(false);
+    audio.addEventListener("ended", onEnd);
+    return () => audio.removeEventListener("ended", onEnd);
+  }, [src]);
+
+  const toggle = (e) => {
+    e.stopPropagation();
+    const audio = audioRef.current;
+    if (!audio || !src) return;
+    if (playing) { audio.pause(); setPlaying(false); }
+    else { audio.play().then(() => setPlaying(true)).catch(() => {}); }
+  };
+
   return (
-    <button className={"voice" + (mine ? " mine" : "")} onClick={() => setPlaying(!playing)}>
+    <button className={"voice" + (mine ? " mine" : "")} onClick={toggle}>
+      {src && <audio ref={audioRef} src={src} preload="none" />}
       <span className="voice-play"><Icon name={playing ? "pause" : "play"} /></span>
       <span className="voice-wave">
         {bars.map((h, i) => <i key={i} style={{ height: h, opacity: playing ? 1 : 0.5, animationDelay: `${i * 60}ms` }} className={playing ? "on" : ""} />)}
       </span>
-      <span className="voice-dur">{dur}</span>
+      <span className="voice-dur">{dur || "0\""}</span>
     </button>
   );
 }
@@ -306,27 +325,94 @@ function TTSButton({ text }) {
   );
 }
 
-/* ---------------- 语音转文字(STT) ---------------- */
-function VoiceInput({ agent, onCancel, onResult }) {
-  const samples = ["今天想早点睡了", "谢谢你一直都在", "我有点想你了", "明天又要早起,哎"];
-  const fullRef = useRefC(samples[Math.floor(Math.random() * samples.length)]);
-  const [partial, setPartial] = useStateC("");
+/* ---------------- 语音转文字(STT) + 录音 ---------------- */
+function VoiceRecorder({ onCancel, onDone }) {
+  const [status, setStatus] = useStateC("idle"); // idle | recording | uploading
+  const [seconds, setSeconds] = useStateC(0);
+  const [errMsg, setErrMsg] = useStateC("");
+  const mediaRef = useRefC(null);
+  const chunksRef = useRefC([]);
+  const timerRef = useRefC(null);
+  const recognRef = useRefC(null);
+  const transcriptRef = useRefC("");
+
   useEffectC(() => {
-    let i = 0;
-    const id = setInterval(() => { i++; setPartial(fullRef.current.slice(0, i)); if (i >= fullRef.current.length) clearInterval(id); }, 95);
-    return () => clearInterval(id);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (mediaRef.current?.state === "recording") mediaRef.current.stop();
+      if (recognRef.current) recognRef.current.stop();
+    };
   }, []);
+
+  const startRec = async () => {
+    setErrMsg(""); transcriptRef.current = "";
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+      const mr = new MediaRecorder(stream, { mimeType });
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        if (!chunksRef.current.length) { setStatus("idle"); return; }
+        setStatus("uploading");
+        try {
+          const blob = new Blob(chunksRef.current, { type: mimeType });
+          const audioUrl = await uploadVoice(blob);
+          const dur = Math.max(1, seconds);
+          onDone({ audioUrl, dur, transcript: transcriptRef.current });
+        } catch {
+          setErrMsg("上传失败，请重试"); setStatus("idle");
+        }
+      };
+      mr.start();
+      mediaRef.current = mr;
+      setStatus("recording");
+      setSeconds(0);
+      timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
+
+      // 同时启动浏览器 STT 识别（兜底：AI 收到文字内容）
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SR) {
+        const r = new SR();
+        r.lang = "zh-CN"; r.continuous = true; r.interimResults = false;
+        r.onresult = (e) => {
+          const t = Array.from(e.results).map((x) => x[0].transcript).join("");
+          transcriptRef.current = t;
+        };
+        r.start();
+        recognRef.current = r;
+      }
+    } catch {
+      setErrMsg("请允许麦克风权限");
+    }
+  };
+
+  const stopRec = () => {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    if (recognRef.current) { recognRef.current.stop(); recognRef.current = null; }
+    if (mediaRef.current?.state === "recording") mediaRef.current.stop();
+  };
+
   return (
-    <div className="vin-mask" onClick={onCancel}>
+    <div className="vin-mask" onClick={status === "idle" ? onCancel : undefined}>
       <div className="vin" onClick={(e) => e.stopPropagation()}>
-        <div className="vin-title">正在聆听… <span>说完点「转成文字」</span></div>
-        <div className="vin-wave">{Array.from({ length: 26 }).map((_, i) => <i key={i} style={{ animationDelay: `${i * 45}ms` }} />)}</div>
-        <div className="vin-partial">{partial || "请说话…"}<span className="vin-caret" /></div>
-        <div className="vin-actions">
-          <button className="vin-cancel" onClick={onCancel}>取消</button>
-          <button className="vin-done" onClick={() => onResult(fullRef.current)}><Icon name="check" /> 转成文字</button>
+        <div className="vin-title">
+          {status === "idle" && "准备录音"}
+          {status === "recording" && <><span className="vin-rec-dot" />录音中… {seconds}&quot;</>}
+          {status === "uploading" && "上传中…"}
         </div>
-        <div className="vin-hint">语音转文字 · 转出来会填进输入框,能改能发 · 走「语音(TTS)」渠道识别</div>
+        <div className={"vin-wave" + (status === "recording" ? " active" : "")}>
+          {Array.from({ length: 26 }).map((_, i) => <i key={i} style={{ animationDelay: `${i * 45}ms` }} />)}
+        </div>
+        {errMsg && <div className="vin-partial" style={{ color: "var(--rose)" }}>{errMsg}</div>}
+        <div className="vin-actions">
+          <button className="vin-cancel" onClick={() => { stopRec(); onCancel(); }}>取消</button>
+          {status === "idle" && <button className="vin-done" onClick={startRec}><Icon name="mic" /> 开始录音</button>}
+          {status === "recording" && <button className="vin-done" onClick={stopRec}><Icon name="check" /> 完成</button>}
+          {status === "uploading" && <button className="vin-done" disabled>上传中…</button>}
+        </div>
+        <div className="vin-hint">录完后她会用语音回复你 · 同时识别文字让她听懂你说了什么</div>
       </div>
     </div>
   );
@@ -360,7 +446,7 @@ function Bubble({ m, agent, tts, myAvatar }) {
                 {m.images.map((src, i) => <img key={i} src={src} alt="" />)}
               </div>
             )}
-            {m.type === "voice" ? <VoiceBubble mine dur={m.dur} /> : (m.text && <span className="msg-text">{m.text}</span>)}
+            {m.type === "voice" ? <VoiceBubble mine dur={m.dur} src={m.audioUrl} /> : (m.text && <span className="msg-text">{m.text}</span>)}
           </div>
           {m.time && <span className="msg-time">{m.time}</span>}
         </div>
@@ -383,7 +469,7 @@ function Bubble({ m, agent, tts, myAvatar }) {
                 {m.images.map((src, i) => <img key={i} src={src} alt="" />)}
               </div>
             )}
-            {m.type === "voice" ? <VoiceBubble dur={m.dur} /> : (herText && <span className="msg-text">{herText}</span>)}
+            {m.type === "voice" ? <VoiceBubble dur={m.dur} src={m.audioUrl} /> : (herText && <span className="msg-text">{herText}</span>)}
           </div>
           {m.time && <span className="msg-time">{m.time}</span>}
           {tts && m.type === "text" && herText && <TTSButton text={herText} />}
@@ -438,7 +524,9 @@ function toMsg(m) {
     who: m.role === "user" ? "me" : "her",
     type: m.message_type || "text",
     text: m.content || "",
-    images: m.media_url ? [m.media_url] : [],
+    images: (m.message_type === "image" && m.media_url) ? [m.media_url] : [],
+    audioUrl: m.message_type === "voice" ? (m.media_url || m.audio_url || "") : "",
+    dur: m.dur || "",
     time,
     _date,
   };
@@ -526,6 +614,7 @@ function ChatRoom({ agent, onBack }) {
   const [calling, setCalling] = useStateC(false);
   const [atts, setAtts] = useStateC([]);
   const [listening, setListening] = useStateC(false);
+  const [voiceMode, setVoiceMode] = useStateC(false); // 语音/文字切换
   const [modelOpen, setModelOpen] = useStateC(false);
   const [modelChoice, setModelChoice] = useStateC(() => {
     try { const s = JSON.parse(localStorage.getItem(`ruobai_model_${roleId}`)); if (s) return s; } catch (e) {}
@@ -704,6 +793,53 @@ function ChatRoom({ agent, onBack }) {
     setTimeout(() => { setTyping(false); setMsgs((p) => [...p, { who: "her", type: "sticker", sticker: rs, label: "", time: now() }]); }, 1400);
   };
 
+  /* 发语音消息 */
+  const sendVoice = async ({ audioUrl, dur, transcript }) => {
+    const tm = now();
+    const durLabel = `${dur}"`;
+    setChatError("");
+    // 1. 前端立即显示用户语音气泡
+    setMsgs((p) => [...p, { who: "me", type: "voice", audioUrl, dur: durLabel, time: tm }]);
+    setTyping(true);
+    try {
+      // 2. 存用户语音消息到数据库（content 用识别到的文字，方便搜索；audio_url 保存语音文件）
+      await saveUserMessage({
+        role: "user",
+        message_type: "voice",
+        content: transcript || "[语音消息]",
+        media_url: audioUrl,
+        character_id: roleId,
+      });
+      // 3. 调AI，把识别到的文字（或"用户发了语音"）作为内容
+      const userText = transcript ? transcript : "[用户发送了一条语音消息，请用文字回复]";
+      let aiText = "";
+      await streamAssistantReply(
+        roleId,
+        { content: userText, credential_id: modelChoice.credentialId, model_id: modelChoice.modelId, think_level: modelChoice.thinkLevel },
+        {
+          onChunk: (chunk) => { aiText += chunk; },
+          onDone: async () => {
+            setTyping(false);
+            const aiMsg = { who: "her", type: "text", text: aiText, time: now() };
+            setMsgs((p) => [...p, aiMsg]);
+            // 4. 语音模式下自动 TTS：用浏览器朗读 AI 回复
+            if (voiceMode && aiText && "speechSynthesis" in window) {
+              const u = new SpeechSynthesisUtterance(aiText.replace(/<[^>]+>/g, ""));
+              u.lang = "zh-CN"; u.rate = 0.95;
+              window.speechSynthesis.cancel();
+              window.speechSynthesis.speak(u);
+            }
+            try { await saveMessage({ role: "assistant", content: aiText, character_id: roleId }); } catch {}
+          },
+          onError: (err) => { setTyping(false); setChatError(String(err)); },
+        }
+      );
+    } catch (err) {
+      setTyping(false);
+      setChatError(String(err));
+    }
+  };
+
   const shown = q.trim() ? msgs.filter((m) => (m.text || "").includes(q.trim())) : msgs;
 
   return (
@@ -773,25 +909,61 @@ function ChatRoom({ agent, onBack }) {
           </div>
         )}
         <div className="input-row">
-          <button className="ib-tool" onClick={() => setCalling(true)}><Icon name="phone" /></button>
-          <button className="ib-tool" onClick={openPicker} disabled={uploading} style={(atts.length || uploading) ? { color: "var(--rose)" } : null}><Icon name="image" /></button>
-          <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={onPickImage} />
-          <button className="ib-tool" onClick={() => setStickerOpen(!stickerOpen)} style={stickerOpen ? { color: "var(--rose)" } : null}><Icon name="star" /></button>
-          <div className="ib-field">
-            <textarea value={draft} rows={1} onFocus={() => setStickerOpen(false)}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-              placeholder={typing ? `${agent.name}正在回复…` : `和${agent.name}说点什么…`} />
-          </div>
-          {(draft.trim() || atts.length > 0)
-            ? <button className={"ib-send on" + (typing ? " busy" : "")} onClick={send} disabled={typing || uploading}><Icon name="send" /></button>
-            : <button className="ib-tool" onClick={() => setListening(true)}><Icon name="mic" /></button>}
+          {/* 左侧：语音/键盘切换 */}
+          <button
+            className={"ib-tool" + (voiceMode ? " on" : "")}
+            onClick={() => { setVoiceMode(!voiceMode); setStickerOpen(false); }}
+            title={voiceMode ? "切换到文字" : "切换到语音"}
+          >
+            <Icon name={voiceMode ? "keyboard" : "mic"} />
+          </button>
+
+          {voiceMode ? (
+            /* 语音模式：大按钮，点击打开录音 */
+            <>
+              <button
+                className="ib-voice-bar"
+                onClick={() => setListening(true)}
+                disabled={typing}
+              >
+                <Icon name="mic" />
+                <span>{typing ? `${agent.name}正在回复…` : "点击录音"}</span>
+              </button>
+              <button className="ib-tool" onClick={() => setStickerOpen(!stickerOpen)} style={stickerOpen ? { color: "var(--rose)" } : null}><Icon name="star" /></button>
+            </>
+          ) : (
+            /* 文字模式：原有布局 */
+            <>
+              <button className="ib-tool" onClick={() => setCalling(true)}><Icon name="phone" /></button>
+              <button className="ib-tool" onClick={openPicker} disabled={uploading} style={(atts.length || uploading) ? { color: "var(--rose)" } : null}><Icon name="image" /></button>
+              <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={onPickImage} />
+              <button className="ib-tool" onClick={() => setStickerOpen(!stickerOpen)} style={stickerOpen ? { color: "var(--rose)" } : null}><Icon name="star" /></button>
+              <div className="ib-field">
+                <textarea value={draft} rows={1} onFocus={() => setStickerOpen(false)}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+                  placeholder={typing ? `${agent.name}正在回复…` : `和${agent.name}说点什么…`} />
+              </div>
+              {(draft.trim() || atts.length > 0)
+                ? <button className={"ib-send on" + (typing ? " busy" : "")} onClick={send} disabled={typing || uploading}><Icon name="send" /></button>
+                : null}
+            </>
+          )}
         </div>
       </footer>
 
       {listening && (
-        <VoiceInput agent={agent} onCancel={() => setListening(false)}
-          onResult={(text) => { setDraft((d) => (d ? d + " " : "") + text); setListening(false); }} />
+        <VoiceRecorder
+          onCancel={() => setListening(false)}
+          onDone={({ audioUrl, dur, transcript }) => {
+            setListening(false);
+            if (voiceMode) {
+              sendVoice({ audioUrl, dur, transcript });
+            } else {
+              if (transcript) setDraft((d) => (d ? d + " " : "") + transcript);
+            }
+          }}
+        />
       )}
 
       {stickerOpen && (

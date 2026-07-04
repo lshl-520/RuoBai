@@ -264,6 +264,12 @@
 .ib-send:active { transform: scale(0.9); }
 .ib-send svg { width: 20px; height: 20px; }
 .ib-send.busy { opacity: 0.5; }
+/* 语音模式切换：激活状态 */
+.ib-tool.on { color: var(--rose); background: var(--rose-tint); }
+/* 语音模式：大录音按钮 */
+.ib-voice-bar { flex: 1; height: 40px; border-radius: 22px; background: var(--card); border: 1.5px solid var(--line); display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-size: 14px; font-weight: 600; color: var(--ink-soft); box-shadow: var(--shadow-sm); transition: background 0.15s, color 0.15s; }
+.ib-voice-bar svg { width: 18px; height: 18px; }
+.ib-voice-bar:active { background: var(--rose-tint); color: var(--rose); }
 
 /* 消息内图片 + 文字 */
 .msg-imgs { display: grid; gap: 4px; border-radius: 12px; overflow: hidden; margin-bottom: 7px; }

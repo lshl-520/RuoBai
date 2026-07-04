@@ -79,16 +79,25 @@ export async function uploadChatImage(file) {
   const imageData = await readFileAsDataUrl(file);
   const data = await request("/api/chat/upload-image", {
     method: "POST",
-    body: JSON.stringify({
-      image_data: imageData,
-    }),
+    body: JSON.stringify({ image_data: imageData }),
   });
-
-  if (!data?.success || !data.media_url) {
-    throw new Error(data?.error || "上传图片失败");
-  }
-
+  if (!data?.success || !data.media_url) throw new Error(data?.error || "上传图片失败");
   return data.media_url;
+}
+
+export async function uploadVoice(blob) {
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+  const data = await request("/api/chat/upload-voice", {
+    method: "POST",
+    body: JSON.stringify({ audio_data: dataUrl }),
+  });
+  if (!data?.success || !data.audio_url) throw new Error(data?.error || "上传语音失败");
+  return data.audio_url;
 }
 
 export async function streamAssistantReply(roleId, payload, handlers = {}) {
