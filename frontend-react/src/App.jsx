@@ -62,8 +62,19 @@ function RuobaiApp({ authed, setAuthed }) {
 
   const saveAgent = (data) => {
     if (data.id) {
-      setAgents((p) => p.map((a) => a.id === data.id ? { ...a, ...data } : a));
-      setDetailAgent((d) => d?.id === data.id ? { ...d, ...data } : d);
+      // 根据新 avatar 路径推算 cover（全屏立绘），修复"换立绘后英雄图/聊天室没更新"的 bug
+      let extraFields = {};
+      if (data.avatar) {
+        const m = String(data.avatar).match(/\/assets\/portraits\/(?:square|round)\/(\d+)\.png/);
+        if (m) {
+          extraFields.cover = `/assets/portraits/full/${m[1]}.png`;
+        } else if (!String(data.avatar).startsWith("/assets/portraits/")) {
+          extraFields.cover = data.avatar; // 自定义上传图，cover 用同一张
+        }
+      }
+      setAgents((p) => p.map((a) => a.id === data.id ? { ...a, ...data, ...extraFields } : a));
+      setDetailAgent((d) => d?.id === data.id ? { ...d, ...data, ...extraFields } : d);
+      setTimeout(() => window.dispatchEvent(new Event("focus")), 100); // 触发 ChatListScreen 刷新
     } else {
       const id = Date.now();
       setAgents((p) => [...p, {
