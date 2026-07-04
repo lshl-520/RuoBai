@@ -113,10 +113,12 @@ function AgentsScreen({ agents: fallbackAgents, onChat, onDetail, onCreate, onRe
     const onFocus = () => load();
     const onVisible = () => { if (document.visibilityState === "visible") load(); };
     window.addEventListener("focus", onFocus);
+    window.addEventListener("ruobai:role-saved", onFocus);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
       window.removeEventListener("focus", onFocus);
+      window.removeEventListener("ruobai:role-saved", onFocus);
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);

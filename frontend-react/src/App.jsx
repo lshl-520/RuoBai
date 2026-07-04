@@ -74,7 +74,9 @@ function RuobaiApp({ authed, setAuthed }) {
       }
       setAgents((p) => p.map((a) => a.id === data.id ? { ...a, ...data, ...extraFields } : a));
       setDetailAgent((d) => d?.id === data.id ? { ...d, ...data, ...extraFields } : d);
-      setTimeout(() => window.dispatchEvent(new Event("focus")), 100); // 触发 ChatListScreen 刷新
+      // 立即派发自定义事件，让已挂载的 AgentsScreen/ChatListScreen 重新拉后端数据
+      window.dispatchEvent(new CustomEvent("ruobai:role-saved"));
+      setTimeout(() => window.dispatchEvent(new Event("focus")), 100);
     } else {
       const id = Date.now();
       setAgents((p) => [...p, {
