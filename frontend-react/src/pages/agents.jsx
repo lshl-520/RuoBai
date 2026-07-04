@@ -326,7 +326,7 @@ function AgentEditor({ agent, onClose, onSave }) {
   const [tagsStr, setTagsStr] = useStateA((agent?.tags || []).join(" "));
   const [auto, setAuto] = useStateA(agent?.autoMoments ?? true);
   const [freq, setFreq] = useStateA(agent?.momentFreq ?? 4);
-  const [style, setStyle] = useStateA(agent?.figureStyle || "anime");
+  const [compact, setCompact] = useStateA((agent?._raw?.speech_style || "") === "compact");
   const [busy, setBusy] = useStateA(false);
   const [error, setError] = useStateA("");
 
@@ -375,13 +375,6 @@ function AgentEditor({ agent, onClose, onSave }) {
             </div>
           </div>
 
-          <label className="field-label">立绘风格 <span className="lbl-hint">聊天时她出现在背景里的样子</span></label>
-          <div className="freq-row" style={{ marginTop: 0 }}>
-            {[["anime", "动漫感"], ["real", "真人感"], ["none", "不显示"]].map(([k, l]) => (
-              <button key={k} className={"freq-chip" + (style === k ? " on" : "")} onClick={() => setStyle(k)}>{l}</button>
-            ))}
-          </div>
-
           <label className="field-label">名字</label>
           <input className="fld" value={name} onChange={(e) => setName(e.target.value)} placeholder="她叫什么" />
 
@@ -412,6 +405,14 @@ function AgentEditor({ agent, onClose, onSave }) {
               ))}
             </div>
           )}
+
+          <div className="switch-row">
+            <div>
+              <div className="sr-t">紧凑回复</div>
+              <div className="sr-s">回复连成一句,不会每句都换行。适合简短日常聊天</div>
+            </div>
+            <button className={"toggle" + (compact ? " on" : "")} onClick={() => setCompact(!compact)}><i /></button>
+          </div>
         </div>
 
         <div className="sheet-foot">
@@ -432,6 +433,7 @@ function AgentEditor({ agent, onClose, onSave }) {
                 portrait_id: portraitId,
                 portrait_custom_url: portraitCustomUrl,
                 auto_moments_enabled: auto,
+                speech_style: compact ? "compact" : "natural",
               };
               if (editing && agent._raw?.id) {
                 await updateRole(agent._raw.id, payload);
