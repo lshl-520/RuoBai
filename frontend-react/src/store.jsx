@@ -346,6 +346,7 @@ function Icon({ name, ...p }) {
     chevronD: <polyline points="6 9 12 15 18 9"/>,
     image: <><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M21 16l-5-5L5 20"/></>,
     mic: <><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v3"/></>,
+    keyboard: <><rect x="2" y="6" width="20" height="13" rx="2.5"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h12M8 14v-1M16 14v-1"/></>,
     edit: <><path d="M14 5l5 5M4 20l1-4L16.5 4.5a2 2 0 0 1 3 3L8 19l-4 1z"/></>,
     trash: <><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></>,
     cpu: <><rect x="6" y="6" width="12" height="12" rx="2.5"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/></>,

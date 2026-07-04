@@ -19,6 +19,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
 const userChatImageDir = path.join(projectRoot, 'user_assets', 'chat');
+const userVoiceDir = path.join(projectRoot, 'user_assets', 'voice');
 const STREAM_INTERRUPTED_MESSAGE = '她暂时没反应，稍后再试好吗';
 
 const ACTION_PAREN_RE = /[（(][^）)]{2,60}[）)]/g;
@@ -476,6 +477,31 @@ export function createChatRouter({
         success: false,
         error: error.message
       });
+    }
+  });
+
+  router.post('/upload-voice', async (req, res) => {
+    try {
+      if (!req.session?.userId) {
+        return res.status(401).json({ success: false, error: '请先登录' });
+      }
+      const audioData = String(req.body?.audio_data || '').trim();
+      const match = audioData.match(/^data:(audio\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/);
+      if (!match) {
+        return res.status(400).json({ success: false, error: '只支持base64音频数据' });
+      }
+      const ext = match[1].includes('webm') ? 'webm' : match[1].includes('ogg') ? 'ogg' : 'mp4';
+      const buffer = Buffer.from(match[2], 'base64');
+      if (!buffer.length) {
+        return res.status(400).json({ success: false, error: '音频内容为空' });
+      }
+      await fileStorage.mkdir(userVoiceDir, { recursive: true });
+      const filename = `${req.session.userId}-${Date.now()}.${ext}`;
+      const filePath = path.join(userVoiceDir, filename);
+      await fileStorage.writeFile(filePath, buffer);
+      return res.json({ success: true, audio_url: `/user_assets/voice/${filename}` });
+    } catch (error) {
+      return res.status(400).json({ success: false, error: error.message });
     }
   });
 
