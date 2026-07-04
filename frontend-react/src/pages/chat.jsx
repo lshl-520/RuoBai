@@ -811,29 +811,36 @@ function ChatRoom({ agent, onBack }) {
         character_id: roleId,
       });
       // 3. 调AI，把识别到的文字（或"用户发了语音"）作为内容
-      const userText = transcript ? transcript : "[用户发送了一条语音消息，请用文字回复]";
+      const userText = transcript || "[用户发送了一条语音消息，请用文字回复]";
+      const replyId = Date.now();
       let aiText = "";
+      setMsgs((p) => [...p, { who: "her", type: "text", text: "", time: now(), _id: replyId }]);
       await streamAssistantReply(
         roleId,
-        { content: userText, credential_id: modelChoice.credentialId, model_id: modelChoice.modelId, think_level: modelChoice.thinkLevel },
         {
-          onChunk: (chunk) => { aiText += chunk; },
-          onDone: async () => {
-            setTyping(false);
-            const aiMsg = { who: "her", type: "text", text: aiText, time: now() };
-            setMsgs((p) => [...p, aiMsg]);
-            // 4. 语音模式下自动 TTS：用浏览器朗读 AI 回复
-            if (voiceMode && aiText && "speechSynthesis" in window) {
-              const u = new SpeechSynthesisUtterance(aiText.replace(/<[^>]+>/g, ""));
-              u.lang = "zh-CN"; u.rate = 0.95;
-              window.speechSynthesis.cancel();
-              window.speechSynthesis.speak(u);
-            }
-            try { await saveMessage({ role: "assistant", content: aiText, character_id: roleId }); } catch {}
+          content: userText,
+          role: "user",
+          skip_server_persistence: true,
+          ...(modelChoice.credentialId && modelChoice.modelId ? { credential_id: modelChoice.credentialId, model_id: modelChoice.modelId } : {}),
+          ...(modelChoice.thinkLevel && modelChoice.thinkLevel !== "off" ? { thinking_level: modelChoice.thinkLevel } : {}),
+        },
+        {
+          onToken: (token) => {
+            aiText += token;
+            setMsgs((p) => p.map((m) => m._id === replyId ? { ...m, text: aiText } : m));
           },
           onError: (err) => { setTyping(false); setChatError(String(err)); },
         }
       );
+      setTyping(false);
+      // 4. 语音模式下自动 TTS
+      if (voiceMode && aiText && "speechSynthesis" in window) {
+        const u = new SpeechSynthesisUtterance(aiText.replace(/<[^>]+>/g, ""));
+        u.lang = "zh-CN"; u.rate = 0.95;
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(u);
+      }
+      try { await saveMessage({ role: "assistant", content: aiText, character_id: roleId }); } catch {}
     } catch (err) {
       setTyping(false);
       setChatError(String(err));
