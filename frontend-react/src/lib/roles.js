@@ -115,6 +115,14 @@ export function getRolePortraitSrc(role) {
   return avatar;
 }
 
+export function getRoleFullPortrait(role) {
+  const portraitId = Number(role?.portrait_id ?? role?.portraitId);
+  const customUrl = String(role?.portrait_custom_url ?? role?.portraitCustomUrl ?? "").trim();
+  if (portraitId === 999 && customUrl) return customUrl;
+  if (Number.isInteger(portraitId) && portraitId >= 0 && portraitId <= 17) return `/assets/portraits/full/${portraitId}.png`;
+  return String(role?.avatar ?? "").trim() || `/assets/portraits/full/0.png`;
+}
+
 export function getRoleAvatarRound(role) {
   const portraitId = Number(role?.portrait_id ?? role?.portraitId);
   const customUrl = String(role?.portrait_custom_url ?? role?.portraitCustomUrl ?? "").trim();

@@ -1,6 +1,6 @@
 import React from "react";
 import { Icon, Bars, greetByHour, STICKERS } from "../store.jsx";
-import { getRoles, getRolePortraitSrc, clampIntimacy } from "../lib/roles.js";
+import { getRoles, getRolePortraitSrc, getRoleFullPortrait, clampIntimacy } from "../lib/roles.js";
 import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage } from "../lib/chat.js";
 import { getSessionProfile, getCapabilities, updateCapability } from "../lib/profile.js";
 import {
@@ -122,6 +122,7 @@ function toAgent(role) {
     id: role.id,
     name: role.name,
     avatar: getRolePortraitSrc(role) || `/assets/portraits/round/0.png`,
+    cover: getRoleFullPortrait(role),
     tag: role.tag || "",
     lastMsg: role.persona ? role.persona.slice(0, 30) + "…" : "点击开始聊天",
     lastTime: "",
