@@ -42,17 +42,17 @@
 
 /* 语音气泡 */
 .voice { display: inline-flex; align-items: center; gap: 10px; padding: 11px 15px; border-radius: 18px; background: var(--card); box-shadow: var(--shadow-sm); border-bottom-left-radius: 6px; animation: bubbleIn 0.3s ease; }
-.voice.mine { background: var(--rose); border-bottom-left-radius: 18px; border-bottom-right-radius: 6px; box-shadow: var(--shadow-rose); }
+.voice.mine { background: #fff0f5; border-bottom-left-radius: 18px; border-bottom-right-radius: 6px; box-shadow: 0 1px 6px rgba(220,100,140,0.12); border: 1px solid rgba(220,100,140,0.14); }
 .voice-play { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--rose-tint); color: var(--rose); flex-shrink: 0; }
-.voice.mine .voice-play { background: rgba(255,255,255,0.25); color: #fff; }
+.voice.mine .voice-play { background: var(--rose-tint); color: var(--rose); }
 .voice-play svg { width: 14px; height: 14px; }
 .voice-wave { display: flex; align-items: center; gap: 2px; height: 22px; }
 .voice-wave i { width: 2.5px; border-radius: 2px; background: var(--rose); display: block; }
-.voice.mine .voice-wave i { background: rgba(255,255,255,0.85); }
+.voice.mine .voice-wave i { background: var(--rose); }
 .voice-wave i.on { animation: vbar 0.7s ease-in-out infinite; }
 @keyframes vbar { 0%, 100% { transform: scaleY(0.5); } 50% { transform: scaleY(1.15); } }
 .voice-dur { font-size: 12px; font-weight: 600; color: var(--ink-soft); }
-.voice.mine .voice-dur { color: #fff; }
+.voice.mine .voice-dur { color: var(--ink-soft); }
 
 /* 表情包气泡 + 面板 */
 .sticker-wrap { display: flex; flex-direction: column; align-items: flex-start; }
