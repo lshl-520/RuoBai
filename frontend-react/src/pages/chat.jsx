@@ -511,7 +511,7 @@ function EmojiPanel({ agent, onSendSticker, onInsertEmoji }) {
 
 /* ---------------- 聊天室 ---------------- */
 function ChatRoom({ agent, onBack }) {
-  const hasEmo = agent.isDefault; // 小白有专属情绪立绘
+  const hasEmo = false; // 统一用 portrait_id 那套逻辑，所有角色一视同仁
   const roleId = agent._raw?.id || agent.id;
   const [msgs, setMsgs] = useStateC([]);
   const [myAvatar, setMyAvatar] = useStateC(DEFAULT_USER_AVATAR);
