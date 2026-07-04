@@ -420,7 +420,19 @@ function AgentEditor({ agent, onClose, onSave }) {
             if (!name.trim() || !persona.trim()) { setError("名字和人设不能为空"); return; }
             setBusy(true); setError("");
             try {
-              const payload = { name: name.trim(), persona: persona.trim(), tag: tagsStr.split(/\s+/).filter(Boolean)[0] || "", avatar: portrait, auto_moments_enabled: auto };
+              // 从立绘路径提取 portrait_id，让后端知道选的是哪个预设立绘
+              const presetMatch = portrait.match(/\/assets\/portraits\/(?:square|round|full)\/(\d+)\.png/);
+              const portraitId = presetMatch ? parseInt(presetMatch[1], 10) : (portrait.startsWith("data:") ? 999 : null);
+              const portraitCustomUrl = portraitId === 999 ? portrait : null;
+              const payload = {
+                name: name.trim(),
+                persona: persona.trim(),
+                tag: tagsStr.split(/\s+/).filter(Boolean)[0] || "",
+                avatar: portrait,
+                portrait_id: portraitId,
+                portrait_custom_url: portraitCustomUrl,
+                auto_moments_enabled: auto,
+              };
               if (editing && agent._raw?.id) {
                 await updateRole(agent._raw.id, payload);
               } else {
