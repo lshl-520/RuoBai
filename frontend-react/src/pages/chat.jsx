@@ -462,7 +462,7 @@ function Bubble({ m, agent, tts, myAvatar, onDelete }) {
 
   const menuEl = menuPos && (
     <div className="msg-menu-mask" onMouseDown={() => setMenuPos(null)} onClick={() => setMenuPos(null)}>
-      <div className="msg-menu" style={{ left: menuPos.x, top: menuPos.y }} onClick={(e) => e.stopPropagation()}>
+      <div className="msg-menu" style={{ left: menuPos.x, top: menuPos.y }} onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
         <button className="msg-menu-del" onClick={() => { setMenuPos(null); onDelete?.(m.id); }}>
           <Icon name="trash" /> 删除
         </button>
