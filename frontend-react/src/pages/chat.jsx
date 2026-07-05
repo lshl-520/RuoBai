@@ -377,6 +377,7 @@ function VoiceRecorder({ onCancel, onDone }) {
           const blob = new Blob(chunksRef.current, { type: mimeType });
           const audioUrl = await uploadVoice(blob);
           const dur = Math.max(1, seconds);
+          // transcript 为空也照常发送，sendVoice 里用自然占位符兜底
           onDone({ audioUrl, dur, transcript: transcriptRef.current });
         } catch {
           setErrMsg("上传失败，请重试"); setStatus("idle");
@@ -388,22 +389,22 @@ function VoiceRecorder({ onCancel, onDone }) {
       setSeconds(0);
       timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
 
-      // 同时启动浏览器 STT 识别（兜底：AI 收到文字内容）
-      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (SR) {
-        const r = new SR();
-        r.lang = "zh-CN";
-        r.continuous = true;
-        r.interimResults = true; // 实时拿到中间结果，不等最终确认
-        r.onresult = (e) => {
-          // 合并所有结果（含中间结果），取最长的版本
-          const t = Array.from(e.results).map((x) => x[0].transcript).join("");
-          if (t.length > transcriptRef.current.length) transcriptRef.current = t;
-        };
-        r.onerror = () => {}; // 静默处理识别错误，不影响录音
-        r.start();
-        recognRef.current = r;
-      }
+      // SpeechRecognition 用独立麦克风流（不抢 MediaRecorder 的 stream），
+      // 两者共存可能冲突，改为仅在浏览器原生支持且 MR 未独占时启用
+      try {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (SR) {
+          const r = new SR();
+          r.lang = "zh-CN"; r.continuous = true; r.interimResults = true;
+          r.onresult = (e) => {
+            const t = Array.from(e.results).map((x) => x[0].transcript).join("");
+            if (t.length > transcriptRef.current.length) transcriptRef.current = t;
+          };
+          r.onerror = () => {};
+          r.start();
+          recognRef.current = r;
+        }
+      } catch { /* 识别启动失败不影响录音 */ }
     } catch {
       setErrMsg("请允许麦克风权限");
     }
@@ -826,24 +827,19 @@ function ChatRoom({ agent, onBack }) {
     setMsgs((p) => [...p, { who: "me", type: "voice", audioUrl, dur: durLabel, transcript: transcript || "", time: now() }]);
     setTyping(true);
 
-    // 如果没有识别到文字，告知用户，不发给AI
-    if (!transcript) {
-      setTyping(false);
-      setChatError("未识别到语音内容，请重试或切换文字模式");
-      return;
-    }
+    // 无论识别成功与否都发送；无识别时用自然中文告知AI
+    const textForAI = transcript || "（发了语音）";
 
     try {
       await saveUserMessage(roleId, {
         role: "user", message_type: "voice",
-        content: transcript, media_url: audioUrl,
+        content: textForAI, media_url: audioUrl,
       });
-      // 实时流式：先插入空气泡，再用 onToken 逐步填充（和 send() 保持一致）
       const replyId = "_voice_" + Date.now();
       let fullReply = "";
       setMsgs((p) => [...p, { who: "her", type: "text", text: "", time: now(), _id: replyId }]);
       await streamAssistantReply(roleId, {
-        content: transcript,
+        content: textForAI,
         role: "user",
         skip_server_persistence: true,
         ...(modelChoice.credentialId && modelChoice.modelId ? { credential_id: modelChoice.credentialId, model_id: modelChoice.modelId } : {}),
