@@ -350,6 +350,9 @@ select.fld { appearance: none; background-image: url("data:image/svg+xml,%3Csvg 
 .tts-btn.on { background: var(--lav); color: #fff; }
 .tts-btn.on svg { animation: ttsPulse 0.9s ease-in-out infinite; }
 @keyframes ttsPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.22); } }
+/* 语音气泡 → 转文字 */
+.voice-transcript { margin-top: 4px; }
+.voice-transcript-text { margin-top: 6px; padding: 8px 12px; background: var(--card); border-radius: 12px; font-size: 12.5px; color: var(--ink-soft); line-height: 1.6; border-left: 2px solid var(--rose-tint); animation: fadeIn 0.2s ease; }
 
 .vin-mask { position: absolute; inset: 0; z-index: 70; background: rgba(38,26,30,0.34); backdrop-filter: blur(3px); display: flex; align-items: flex-end; animation: fadeIn 0.2s ease; }
 .vin { width: 100%; background: var(--paper); border-radius: 28px 28px 0 0; padding: 22px 22px calc(20px + env(safe-area-inset-bottom)); animation: sheetUp 0.3s cubic-bezier(0.2,0.85,0.25,1); box-shadow: var(--shadow-lg); }

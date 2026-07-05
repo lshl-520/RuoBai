@@ -325,6 +325,20 @@ function TTSButton({ text }) {
   );
 }
 
+/* 语音气泡 → 转文字 */
+function VoiceTranscriptButton({ transcript }) {
+  const [open, setOpen] = useStateC(false);
+  if (!transcript) return null;
+  return (
+    <div className="voice-transcript">
+      <button className="tts-btn" onClick={() => setOpen(!open)}>
+        <Icon name="book" /><span>{open ? "收起" : "转文字"}</span>
+      </button>
+      {open && <div className="voice-transcript-text">{transcript}</div>}
+    </div>
+  );
+}
+
 /* ---------------- 语音转文字(STT) + 录音 ---------------- */
 function VoiceRecorder({ onCancel, onDone }) {
   const [status, setStatus] = useStateC("idle"); // idle | recording | uploading
@@ -453,6 +467,7 @@ function Bubble({ m, agent, tts, myAvatar }) {
             </div>
           )}
           {m.time && <span className="msg-time">{m.time}</span>}
+          {m.type === "voice" && m.transcript && <VoiceTranscriptButton transcript={m.transcript} />}
         </div>
         <div className="row-avatar"><img src={myAvatar} alt="" onError={fallbackToDefaultUserAvatar} /></div>
       </div>
@@ -799,55 +814,38 @@ function ChatRoom({ agent, onBack }) {
 
   /* 发语音消息 */
   const sendVoice = async ({ audioUrl, dur, transcript }) => {
-    const tm = now();
     const durLabel = `${dur}"`;
     setChatError("");
-    // 1. 前端立即显示用户语音气泡
-    setMsgs((p) => [...p, { who: "me", type: "voice", audioUrl, dur: durLabel, time: tm }]);
+    // 1. 前端立即显示用户语音气泡（带转文字用的 transcript）
+    setMsgs((p) => [...p, { who: "me", type: "voice", audioUrl, dur: durLabel, transcript: transcript || "", time: now() }]);
     setTyping(true);
     try {
       // 2. 存用户语音消息到数据库
       await saveUserMessage(roleId, {
-        role: "user",
-        message_type: "voice",
-        content: transcript || "[语音消息]",
-        media_url: audioUrl,
+        role: "user", message_type: "voice",
+        content: transcript || "[语音消息]", media_url: audioUrl,
       });
-      // 3. 调AI，把识别到的文字（或"用户发了语音"）作为内容
+      // 3. 调AI
       const userText = transcript || "[用户发送了一条语音消息，请用文字回复]";
-      const replyId = Date.now();
       let aiText = "";
-      setMsgs((p) => [...p, { who: "her", type: "text", text: "", time: now(), _id: replyId }]);
-      await streamAssistantReply(
-        roleId,
-        {
-          content: userText,
-          role: "user",
-          skip_server_persistence: true,
-          ...(modelChoice.credentialId && modelChoice.modelId ? { credential_id: modelChoice.credentialId, model_id: modelChoice.modelId } : {}),
-          ...(modelChoice.thinkLevel && modelChoice.thinkLevel !== "off" ? { thinking_level: modelChoice.thinkLevel } : {}),
-        },
-        {
-          onToken: (token) => {
-            aiText += token;
-            setMsgs((p) => p.map((m) => m._id === replyId ? { ...m, text: aiText } : m));
-          },
-          onError: (err) => { setTyping(false); setChatError(String(err)); },
-        }
-      );
+      await streamAssistantReply(roleId, {
+        content: userText, role: "user", skip_server_persistence: true,
+        ...(modelChoice.credentialId && modelChoice.modelId ? { credential_id: modelChoice.credentialId, model_id: modelChoice.modelId } : {}),
+        ...(modelChoice.thinkLevel && modelChoice.thinkLevel !== "off" ? { thinking_level: modelChoice.thinkLevel } : {}),
+      }, {
+        onToken: (token) => { aiText += token; },
+        onError: (err) => { setTyping(false); setChatError(String(err)); },
+      });
       setTyping(false);
+      setMsgs((p) => [...p, { who: "her", type: "text", text: aiText, time: now() }]);
       // 4. 语音模式下自动 TTS
       if (voiceMode && aiText && "speechSynthesis" in window) {
         const u = new SpeechSynthesisUtterance(aiText.replace(/<[^>]+>/g, ""));
         u.lang = "zh-CN"; u.rate = 0.95;
-        window.speechSynthesis.cancel();
-        window.speechSynthesis.speak(u);
+        window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
       }
       try { await saveMessage(roleId, { role: "assistant", content: aiText }); } catch {}
-    } catch (err) {
-      setTyping(false);
-      setChatError(String(err));
-    }
+    } catch (err) { setTyping(false); setChatError(String(err)); }
   };
 
   const shown = q.trim() ? msgs.filter((m) => (m.text || "").includes(q.trim())) : msgs;
