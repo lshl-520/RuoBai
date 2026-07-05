@@ -448,14 +448,15 @@ function Bubble({ m, agent, tts, myAvatar, onDelete }) {
   if (m.type === "time") return <div className="time-div">{m.text}</div>;
   const isMe = m.who === "me";
 
-  const openMenu = (e) => {
-    e.preventDefault();
-    if (!m.id) return; // 流式占位气泡没有真实id，不允许删除
-    const rect = e.currentTarget.getBoundingClientRect();
-    setMenuPos({ x: e.clientX || rect.left + rect.width / 2, y: e.clientY || rect.top });
+  const openMenu = (x, y) => {
+    if (!m.id) return;
+    setMenuPos({ x, y });
   };
   const startPress = (e) => {
-    pressRef.current = setTimeout(() => openMenu(e), 500);
+    if (!m.id) return;
+    const x = e.clientX || (e.touches?.[0]?.clientX ?? 200);
+    const y = e.clientY || (e.touches?.[0]?.clientY ?? 200);
+    pressRef.current = setTimeout(() => openMenu(x, y), 500);
   };
   const cancelPress = () => { if (pressRef.current) { clearTimeout(pressRef.current); pressRef.current = null; } };
 
@@ -470,7 +471,7 @@ function Bubble({ m, agent, tts, myAvatar, onDelete }) {
   );
 
   const longPressProps = m.id ? {
-    onContextMenu: openMenu,
+    onContextMenu: (e) => { e.preventDefault(); openMenu(e.clientX, e.clientY); },
     onTouchStart: startPress,
     onTouchEnd: cancelPress,
     onTouchMove: cancelPress,
