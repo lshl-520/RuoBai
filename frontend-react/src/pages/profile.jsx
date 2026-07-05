@@ -627,7 +627,7 @@ function ProfileScreen({ user: userProp, onOnboard, onGoMemory, onLogout }) {
 
       {/* 数据 */}
       <div className="pad me-stats" style={{ marginTop: 12 }}>
-        {[[user.longestDays, "陪伴天数"], [visibleAgents.length, "羁绊"], [user.msgCount, "说过的话"]].map(([n, l]) => (
+        {[[visibleAgents.length, "羁绊"], [user.msgCount, "说过的话"]].map(([n, l]) => (
           <div key={l} className="ms"><b>{n}</b><span>{l}</span></div>
         ))}
       </div>
