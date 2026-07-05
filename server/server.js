@@ -31,7 +31,10 @@ const projectRoot = path.resolve(__dirname, '..');
 const publicDir = path.join(projectRoot, 'public');
 const reactDistDir = path.join(projectRoot, 'frontend-react', 'dist');
 const reactIndexFile = path.join(reactDistDir, 'index.html');
-const hasReactBuild = fs.existsSync(reactIndexFile);
+// SERVE_REACT=false 时强制走旧版HTML，哪怕dist/存在也不用
+// 本地比较两套界面时在 .env 里加 SERVE_REACT=false
+const serveReactEnv = process.env.SERVE_REACT;
+const hasReactBuild = serveReactEnv !== 'false' && fs.existsSync(reactIndexFile);
 const userAssetsDir = path.join(projectRoot, 'user_assets');
 const app = express();
 const requestedPort = Number(process.env.PORT) || 3000;
