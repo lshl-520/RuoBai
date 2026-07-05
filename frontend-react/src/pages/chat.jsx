@@ -1,7 +1,7 @@
 import React from "react";
 import { Icon, Bars, greetByHour, STICKERS } from "../store.jsx";
 import { getRoles, getRolePortraitSrc, getRoleFullPortrait, clampIntimacy } from "../lib/roles.js";
-import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage, uploadVoice, deleteAllMessages } from "../lib/chat.js";
+import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage, uploadVoice, deleteAllMessages, deleteMessage } from "../lib/chat.js";
 import { getSessionProfile, getCapabilities, updateCapability } from "../lib/profile.js";
 import {
   DEFAULT_USER_AVATAR,
@@ -441,9 +441,43 @@ function VoiceRecorder({ onCancel, onDone }) {
 }
 
 /* ---------------- 单条消息 ---------------- */
-function Bubble({ m, agent, tts, myAvatar }) {
+function Bubble({ m, agent, tts, myAvatar, onDelete }) {
+  const [menuPos, setMenuPos] = useStateC(null); // {x, y} 或 null
+  const pressRef = useRefC(null);
+
   if (m.type === "time") return <div className="time-div">{m.text}</div>;
   const isMe = m.who === "me";
+
+  const openMenu = (e) => {
+    e.preventDefault();
+    if (!m.id) return; // 流式占位气泡没有真实id，不允许删除
+    const rect = e.currentTarget.getBoundingClientRect();
+    setMenuPos({ x: e.clientX || rect.left + rect.width / 2, y: e.clientY || rect.top });
+  };
+  const startPress = (e) => {
+    pressRef.current = setTimeout(() => openMenu(e), 500);
+  };
+  const cancelPress = () => { if (pressRef.current) { clearTimeout(pressRef.current); pressRef.current = null; } };
+
+  const menuEl = menuPos && (
+    <div className="msg-menu-mask" onMouseDown={() => setMenuPos(null)} onClick={() => setMenuPos(null)}>
+      <div className="msg-menu" style={{ left: menuPos.x, top: menuPos.y }} onClick={(e) => e.stopPropagation()}>
+        <button className="msg-menu-del" onClick={() => { setMenuPos(null); onDelete?.(m.id); }}>
+          <Icon name="trash" /> 删除
+        </button>
+      </div>
+    </div>
+  );
+
+  const longPressProps = m.id ? {
+    onContextMenu: openMenu,
+    onTouchStart: startPress,
+    onTouchEnd: cancelPress,
+    onTouchMove: cancelPress,
+    onMouseDown: startPress,
+    onMouseUp: cancelPress,
+    onMouseLeave: cancelPress,
+  } : {};
 
   if (m.type === "sticker") {
     return (
@@ -460,50 +494,56 @@ function Bubble({ m, agent, tts, myAvatar }) {
 
   if (isMe) {
     return (
-      <div className="row me">
-        <div className="me-stack">
-          {m.type === "voice" ? (
-            <VoiceBubble mine dur={m.dur} src={m.audioUrl} />
-          ) : (
-            <div className="bubble me-bubble">
-              {m.images && m.images.length > 0 && (
-                <div className={"msg-imgs c" + Math.min(m.images.length, 3)}>
-                  {m.images.map((src, i) => <img key={i} src={src} alt="" />)}
-                </div>
-              )}
-              {m.text && <span className="msg-text">{m.text}</span>}
-            </div>
-          )}
-          {m.time && <span className="msg-time">{m.time}</span>}
-          {m.type === "voice" && m.transcript && <VoiceTranscriptButton transcript={m.transcript} />}
+      <>
+        {menuEl}
+        <div className="row me" {...longPressProps}>
+          <div className="me-stack">
+            {m.type === "voice" ? (
+              <VoiceBubble mine dur={m.dur} src={m.audioUrl} />
+            ) : (
+              <div className="bubble me-bubble">
+                {m.images && m.images.length > 0 && (
+                  <div className={"msg-imgs c" + Math.min(m.images.length, 3)}>
+                    {m.images.map((src, i) => <img key={i} src={src} alt="" />)}
+                  </div>
+                )}
+                {m.text && <span className="msg-text">{m.text}</span>}
+              </div>
+            )}
+            {m.time && <span className="msg-time">{m.time}</span>}
+            {m.type === "voice" && <VoiceTranscriptButton transcript={m.transcript || ""} />}
+          </div>
+          <div className="row-avatar"><img src={myAvatar} alt="" onError={fallbackToDefaultUserAvatar} /></div>
         </div>
-        <div className="row-avatar"><img src={myAvatar} alt="" onError={fallbackToDefaultUserAvatar} /></div>
-      </div>
+      </>
     );
   }
 
   const { content: herText, think: herThink } = !isMe ? extractThink(m.text) : { content: m.text, think: "" };
 
   return (
-    <div className="her-block">
-      {m.type === "proactive" && <div className="proactive-tag"><Icon name="sparkSm" /> {m.tag}</div>}
-      <div className="row her">
-        <div className="row-avatar"><img src={agent.avatar} alt="" onError={fallbackToDefaultRoleAvatar} /></div>
-        <div className="her-stack">
-          <div className={"bubble her-bubble" + (m.type === "proactive" ? " proactive" : "")}>
-            {m.images && m.images.length > 0 && (
-              <div className={"msg-imgs c" + Math.min(m.images.length, 3)}>
-                {m.images.map((src, i) => <img key={i} src={src} alt="" />)}
-              </div>
-            )}
-            {m.type === "voice" ? <VoiceBubble dur={m.dur} src={m.audioUrl} /> : (herText && <span className="msg-text">{herText}</span>)}
+    <>
+      {menuEl}
+      <div className="her-block" {...longPressProps}>
+        {m.type === "proactive" && <div className="proactive-tag"><Icon name="sparkSm" /> {m.tag}</div>}
+        <div className="row her">
+          <div className="row-avatar"><img src={agent.avatar} alt="" onError={fallbackToDefaultRoleAvatar} /></div>
+          <div className="her-stack">
+            <div className={"bubble her-bubble" + (m.type === "proactive" ? " proactive" : "")}>
+              {m.images && m.images.length > 0 && (
+                <div className={"msg-imgs c" + Math.min(m.images.length, 3)}>
+                  {m.images.map((src, i) => <img key={i} src={src} alt="" />)}
+                </div>
+              )}
+              {m.type === "voice" ? <VoiceBubble dur={m.dur} src={m.audioUrl} /> : (herText && <span className="msg-text">{herText}</span>)}
+            </div>
+            {m.time && <span className="msg-time">{m.time}</span>}
+            {tts && m.type === "text" && herText && <TTSButton text={herText} />}
+            {(m.think || herThink) && <ThinkCard text={m.think || herThink} />}
           </div>
-          {m.time && <span className="msg-time">{m.time}</span>}
-          {tts && m.type === "text" && herText && <TTSButton text={herText} />}
-          {(m.think || herThink) && <ThinkCard text={m.think || herThink} />}
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -822,6 +862,15 @@ function ChatRoom({ agent, onBack }) {
     } catch (e) { setChatError("清空失败：" + String(e)); }
   };
 
+  /* 删除单条消息 */
+  const deleteMsg = async (msgId) => {
+    if (!msgId) return;
+    try {
+      await deleteMessage(msgId);
+      setMsgs((p) => p.filter((m) => m.id !== msgId));
+    } catch (e) { setChatError("删除失败：" + String(e)); }
+  };
+
   const sendSticker = (s) => {
     setStickerOpen(false);
     setMsgs((p) => [...p, { who: "me", type: "sticker", sticker: s.e, label: s.label, time: now() }]);
@@ -922,7 +971,7 @@ function ChatRoom({ agent, onBack }) {
 
       <div className="msg-area" ref={areaRef}>
         {q.trim() && <div className="search-note">找到 {shown.filter((m) => m.type !== "time").length} 条包含"{q.trim()}"的记录</div>}
-        {shown.map((m, i) => (m.type === "time" && q.trim()) ? null : <Bubble key={i} m={m} agent={agent} tts={!q.trim()} myAvatar={myAvatar} />)}
+        {shown.map((m, i) => (m.type === "time" && q.trim()) ? null : <Bubble key={i} m={m} agent={agent} tts={!q.trim()} myAvatar={myAvatar} onDelete={deleteMsg} />)}
         {typing && !q.trim() && <Typing agent={agent} />}
         {chatError && <div className="chat-error" onClick={() => setChatError("")}>{chatError}<span style={{marginLeft:8,opacity:0.6}}>点击关闭</span></div>}
         <div style={{ height: 8 }} />

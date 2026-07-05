@@ -368,7 +368,11 @@ select.fld { appearance: none; background-image: url("data:image/svg+xml,%3Csvg 
 .vin-done { flex: 2; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 13px; border-radius: 999px; background: var(--rose); color: #fff; font-size: 14px; font-weight: 600; box-shadow: var(--shadow-rose); }
 .vin-done svg { width: 16px; height: 16px; }
 .vin-hint { text-align: center; font-size: 10.5px; color: var(--ink-faint); margin-top: 12px; line-height: 1.5; }
-/* 录音指示器 */
+/* 单条消息删除菜单 */
+.msg-menu-mask { position: fixed; inset: 0; z-index: 200; }
+.msg-menu { position: fixed; z-index: 201; background: var(--paper); border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); overflow: hidden; transform: translate(-50%, -110%); }
+.msg-menu-del { display: flex; align-items: center; gap: 8px; padding: 13px 20px; font-size: 14px; font-weight: 600; color: #e24b4b; white-space: nowrap; }
+.msg-menu-del svg { width: 16px; height: 16px; }
 .vin-rec-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #e24b4b; margin-right: 6px; animation: recBlink 1s steps(2) infinite; vertical-align: middle; }
 @keyframes recBlink { 0%,100% { opacity: 1; } 50% { opacity: 0.2; } }
 .vin-wave.active i { animation: vinBar 0.45s ease-in-out infinite; }
