@@ -100,6 +100,10 @@ export async function uploadVoice(blob) {
   return data.audio_url;
 }
 
+export function deleteAllMessages(roleId) {
+  return request(`/api/chat?character_id=${encodeURIComponent(roleId)}`, { method: "DELETE" });
+}
+
 export async function streamAssistantReply(roleId, payload, handlers = {}) {
   const response = await fetch("/api/chat", {
     method: "POST",

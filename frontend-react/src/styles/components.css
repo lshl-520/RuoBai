@@ -266,6 +266,12 @@
 .ib-send.busy { opacity: 0.5; }
 /* 语音模式切换：激活状态 */
 .ib-tool.on { color: var(--rose); background: var(--rose-tint); }
+/* 聊天室更多菜单 */
+.chat-more-menu { position: absolute; top: 60px; right: 10px; z-index: 50; }
+.cmm-inner { background: var(--paper); border-radius: 14px; box-shadow: 0 4px 20px rgba(0,0,0,0.12); overflow: hidden; min-width: 130px; }
+.cmm-item { display: block; width: 100%; padding: 13px 18px; text-align: left; font-size: 14px; font-weight: 500; color: var(--ink); border-bottom: 1px solid var(--line); }
+.cmm-item:last-child { border-bottom: none; }
+.cmm-item.danger { color: #e24b4b; }
 /* 语音模式：大录音按钮 */
 .ib-voice-bar { flex: 1; height: 40px; border-radius: 22px; background: var(--card); border: 1.5px solid var(--line); display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-size: 14px; font-weight: 600; color: var(--ink-soft); box-shadow: var(--shadow-sm); transition: background 0.15s, color 0.15s; }
 .ib-voice-bar svg { width: 18px; height: 18px; }

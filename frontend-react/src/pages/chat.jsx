@@ -1,7 +1,7 @@
 import React from "react";
 import { Icon, Bars, greetByHour, STICKERS } from "../store.jsx";
 import { getRoles, getRolePortraitSrc, getRoleFullPortrait, clampIntimacy } from "../lib/roles.js";
-import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage, uploadVoice } from "../lib/chat.js";
+import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage, uploadVoice, deleteAllMessages } from "../lib/chat.js";
 import { getSessionProfile, getCapabilities, updateCapability } from "../lib/profile.js";
 import {
   DEFAULT_USER_AVATAR,
@@ -642,6 +642,7 @@ function ChatRoom({ agent, onBack }) {
   const [atts, setAtts] = useStateC([]);
   const [listening, setListening] = useStateC(false);
   const [voiceMode, setVoiceMode] = useStateC(false); // 语音/文字切换
+  const [moreOpen, setMoreOpen] = useStateC(false); // 更多菜单
   const [modelOpen, setModelOpen] = useStateC(false);
   const [modelChoice, setModelChoice] = useStateC(() => {
     try { const s = JSON.parse(localStorage.getItem(`ruobai_model_${roleId}`)); if (s) return s; } catch (e) {}
@@ -811,6 +812,16 @@ function ChatRoom({ agent, onBack }) {
     }
   };
 
+  /* 清空对话 */
+  const clearChat = async () => {
+    if (!window.confirm(`确认清空和${agent.name}的全部聊天记录吗？`)) return;
+    try {
+      await deleteAllMessages(roleId);
+      setMsgs([{ type: "time", text: "今天" }, { who: "her", type: "text", time: now(), text: `嗯，我们重新开始吧。` }]);
+      setMoreOpen(false);
+    } catch (e) { setChatError("清空失败：" + String(e)); }
+  };
+
   const sendSticker = (s) => {
     setStickerOpen(false);
     setMsgs((p) => [...p, { who: "me", type: "sticker", sticker: s.e, label: s.label, time: now() }]);
@@ -886,7 +897,16 @@ function ChatRoom({ agent, onBack }) {
         </div>
         <button className="ct-ic" onClick={() => setSearching(!searching)} style={searching ? { color: "var(--rose)" } : null}><Icon name="search" /></button>
         <button className="ct-ic" onClick={() => setShowFig(!showFig)} style={showFig ? { color: "var(--rose)" } : null}><Icon name="flower" /></button>
+        <button className="ct-ic" onClick={() => setMoreOpen(!moreOpen)} style={moreOpen ? { color: "var(--rose)" } : null}><Icon name="more" /></button>
       </header>
+
+      {moreOpen && (
+        <div className="chat-more-menu" onClick={() => setMoreOpen(false)}>
+          <div className="cmm-inner" onClick={(e) => e.stopPropagation()}>
+            <button className="cmm-item danger" onClick={clearChat}>清空对话</button>
+          </div>
+        </div>
+      )}
 
       {modelOpen && (
         <ModelPanel roleId={roleId} current={modelChoice} onPick={saveModelChoice} onClose={() => setModelOpen(false)} />
