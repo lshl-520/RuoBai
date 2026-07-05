@@ -392,11 +392,15 @@ function VoiceRecorder({ onCancel, onDone }) {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (SR) {
         const r = new SR();
-        r.lang = "zh-CN"; r.continuous = true; r.interimResults = false;
+        r.lang = "zh-CN";
+        r.continuous = true;
+        r.interimResults = true; // 实时拿到中间结果，不等最终确认
         r.onresult = (e) => {
+          // 合并所有结果（含中间结果），取最长的版本
           const t = Array.from(e.results).map((x) => x[0].transcript).join("");
-          transcriptRef.current = t;
+          if (t.length > transcriptRef.current.length) transcriptRef.current = t;
         };
+        r.onerror = () => {}; // 静默处理识别错误，不影响录音
         r.start();
         recognRef.current = r;
       }
