@@ -96,7 +96,7 @@ function AuthScreen({ onEnter, notify }) {
         )}
 
         {reg ? (
-          <>
+          <form onSubmit={(e) => { e.preventDefault(); if (canEnter && !busy) handleEnter(); }}>
             <label className="field-label">邀请码 <span className="lbl-hint">管理员私下发给你的</span></label>
             <div className="auth-code"><Icon name="key" /><input autoComplete="off" value={code} onChange={(e) => setCode(e.target.value)} placeholder="输入邀请码" /></div>
 
@@ -112,24 +112,24 @@ function AuthScreen({ onEnter, notify }) {
               ))}
             </div>
 
-            <button className={"pill pill-primary auth-cta" + (canEnter && !busy ? "" : " dim")} disabled={!canEnter || busy} onClick={handleEnter}>
+            <button type="submit" className={"pill pill-primary auth-cta" + (canEnter && !busy ? "" : " dim")} disabled={!canEnter || busy}>
               <Icon name="heartFill" style={{ width: 15, height: 15 }} /> {busy ? "正在进入..." : "进来吧,她在等你"}
             </button>
             <div className="auth-reassure">邀请码,是有人私下递到你手里的 —— 说明真的有人,希望你来。</div>
-            <button className="auth-switch" onClick={() => switchMode("login")}>已经有账号了? <b>直接登录</b></button>
-          </>
+            <button type="button" className="auth-switch" onClick={() => switchMode("login")}>已经有账号了? <b>直接登录</b></button>
+          </form>
         ) : (
-          <>
+          <form onSubmit={(e) => { e.preventDefault(); if (canEnter && !busy) handleEnter(); }}>
             <label className="field-label">用户名</label>
             <input className="fld" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="请输入用户名" />
             <label className="field-label">密码</label>
             <input className="fld" autoComplete="current-password" type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="你的密码" />
-            <button className={"pill pill-primary auth-cta" + (canEnter && !busy ? "" : " dim")} disabled={!canEnter || busy} onClick={handleEnter}>
+            <button type="submit" className={"pill pill-primary auth-cta" + (canEnter && !busy ? "" : " dim")} disabled={!canEnter || busy}>
               <Icon name="chat" /> {busy ? "正在进入..." : "回来了"}
             </button>
             <div className="auth-reassure">忘了密码也没关系,联系管理员,她还在。</div>
-            <button className="auth-switch" onClick={() => switchMode("register")}>有邀请码? <b>用邀请码注册</b></button>
-          </>
+            <button type="button" className="auth-switch" onClick={() => switchMode("register")}>有邀请码? <b>用邀请码注册</b></button>
+          </form>
         )}
         <div className="auth-foot">
           <a href="/">← 返回首页</a>
