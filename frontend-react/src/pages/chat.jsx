@@ -809,7 +809,21 @@ function ChatRoom({ agent, onBack }) {
           try { await saveUserMessage(roleId, payload); } catch {}
         }
       } else {
-        try { await saveUserMessage(roleId, { role: "user", content: t }); } catch {}
+        try {
+          const saved = await saveUserMessage(roleId, { role: "user", content: t });
+          if (saved?.item?.id) {
+            setMsgs((p) => {
+              const copy = [...p];
+              for (let i = copy.length - 1; i >= 0; i--) {
+                if (copy[i].who === "me" && !copy[i].id) {
+                  copy[i] = { ...copy[i], id: saved.item.id };
+                  break;
+                }
+              }
+              return copy;
+            });
+          }
+        } catch {}
       }
 
       // 2) 流式请求 AI 回复
@@ -842,9 +856,14 @@ function ChatRoom({ agent, onBack }) {
       // 流式结束，更新时间和去掉 streaming 标记
       setMsgs((p) => p.map((m) => m._id === replyId ? { ...m, time: now(), _streaming: false } : m));
 
-      // 3) 把 AI 回复也存进数据库（保存失败不阻断）
+      // 3) 把 AI 回复也存进数据库（保存失败不阻断），并把真实 id 写回 state 供删除使用
       if (fullReply.trim()) {
-        try { await saveMessage(roleId, { role: "assistant", content: fullReply }); } catch (e) { /* 保存回复失败仍继续 */ }
+        try {
+          const saved = await saveMessage(roleId, { role: "assistant", content: fullReply });
+          if (saved?.item?.id) {
+            setMsgs((p) => p.map((m) => m._id === replyId ? { ...m, id: saved.item.id } : m));
+          }
+        } catch (e) { /* 保存回复失败仍继续 */ }
       }
     } catch (err) {
       setChatError(err instanceof Error ? err.message : "发送失败，请检查后端和模型配置。");
