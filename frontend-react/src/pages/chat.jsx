@@ -440,14 +440,18 @@ function Bubble({ m, agent, tts, myAvatar }) {
     return (
       <div className="row me">
         <div className="me-stack">
-          <div className="bubble me-bubble">
-            {m.images && m.images.length > 0 && (
-              <div className={"msg-imgs c" + Math.min(m.images.length, 3)}>
-                {m.images.map((src, i) => <img key={i} src={src} alt="" />)}
-              </div>
-            )}
-            {m.type === "voice" ? <VoiceBubble mine dur={m.dur} src={m.audioUrl} /> : (m.text && <span className="msg-text">{m.text}</span>)}
-          </div>
+          {m.type === "voice" ? (
+            <VoiceBubble mine dur={m.dur} src={m.audioUrl} />
+          ) : (
+            <div className="bubble me-bubble">
+              {m.images && m.images.length > 0 && (
+                <div className={"msg-imgs c" + Math.min(m.images.length, 3)}>
+                  {m.images.map((src, i) => <img key={i} src={src} alt="" />)}
+                </div>
+              )}
+              {m.text && <span className="msg-text">{m.text}</span>}
+            </div>
+          )}
           {m.time && <span className="msg-time">{m.time}</span>}
         </div>
         <div className="row-avatar"><img src={myAvatar} alt="" onError={fallbackToDefaultUserAvatar} /></div>
@@ -802,13 +806,12 @@ function ChatRoom({ agent, onBack }) {
     setMsgs((p) => [...p, { who: "me", type: "voice", audioUrl, dur: durLabel, time: tm }]);
     setTyping(true);
     try {
-      // 2. 存用户语音消息到数据库（content 用识别到的文字，方便搜索；audio_url 保存语音文件）
-      await saveUserMessage({
+      // 2. 存用户语音消息到数据库
+      await saveUserMessage(roleId, {
         role: "user",
         message_type: "voice",
         content: transcript || "[语音消息]",
         media_url: audioUrl,
-        character_id: roleId,
       });
       // 3. 调AI，把识别到的文字（或"用户发了语音"）作为内容
       const userText = transcript || "[用户发送了一条语音消息，请用文字回复]";
@@ -840,7 +843,7 @@ function ChatRoom({ agent, onBack }) {
         window.speechSynthesis.cancel();
         window.speechSynthesis.speak(u);
       }
-      try { await saveMessage({ role: "assistant", content: aiText, character_id: roleId }); } catch {}
+      try { await saveMessage(roleId, { role: "assistant", content: aiText }); } catch {}
     } catch (err) {
       setTyping(false);
       setChatError(String(err));
