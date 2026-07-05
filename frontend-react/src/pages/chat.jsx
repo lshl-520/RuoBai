@@ -328,13 +328,16 @@ function TTSButton({ text }) {
 /* 语音气泡 → 转文字 */
 function VoiceTranscriptButton({ transcript }) {
   const [open, setOpen] = useStateC(false);
-  if (!transcript) return null;
   return (
     <div className="voice-transcript">
       <button className="tts-btn" onClick={() => setOpen(!open)}>
         <Icon name="book" /><span>{open ? "收起" : "转文字"}</span>
       </button>
-      {open && <div className="voice-transcript-text">{transcript}</div>}
+      {open && (
+        <div className="voice-transcript-text">
+          {transcript || "未识别到文字内容（可检查麦克风权限）"}
+        </div>
+      )}
     </div>
   );
 }
@@ -816,35 +819,46 @@ function ChatRoom({ agent, onBack }) {
   const sendVoice = async ({ audioUrl, dur, transcript }) => {
     const durLabel = `${dur}"`;
     setChatError("");
-    // 1. 前端立即显示用户语音气泡（带转文字用的 transcript）
     setMsgs((p) => [...p, { who: "me", type: "voice", audioUrl, dur: durLabel, transcript: transcript || "", time: now() }]);
     setTyping(true);
+
+    // 如果没有识别到文字，告知用户，不发给AI
+    if (!transcript) {
+      setTyping(false);
+      setChatError("未识别到语音内容，请重试或切换文字模式");
+      return;
+    }
+
     try {
-      // 2. 存用户语音消息到数据库
       await saveUserMessage(roleId, {
         role: "user", message_type: "voice",
-        content: transcript || "[语音消息]", media_url: audioUrl,
+        content: transcript, media_url: audioUrl,
       });
-      // 3. 调AI
-      const userText = transcript || "[用户发送了一条语音消息，请用文字回复]";
-      let aiText = "";
+      // 实时流式：先插入空气泡，再用 onToken 逐步填充（和 send() 保持一致）
+      const replyId = "_voice_" + Date.now();
+      let fullReply = "";
+      setMsgs((p) => [...p, { who: "her", type: "text", text: "", time: now(), _id: replyId }]);
       await streamAssistantReply(roleId, {
-        content: userText, role: "user", skip_server_persistence: true,
+        content: transcript,
+        role: "user",
+        skip_server_persistence: true,
         ...(modelChoice.credentialId && modelChoice.modelId ? { credential_id: modelChoice.credentialId, model_id: modelChoice.modelId } : {}),
         ...(modelChoice.thinkLevel && modelChoice.thinkLevel !== "off" ? { thinking_level: modelChoice.thinkLevel } : {}),
       }, {
-        onToken: (token) => { aiText += token; },
+        onToken: (token) => {
+          fullReply += token;
+          setMsgs((p) => p.map((m) => m._id === replyId ? { ...m, text: fullReply } : m));
+        },
         onError: (err) => { setTyping(false); setChatError(String(err)); },
       });
       setTyping(false);
-      setMsgs((p) => [...p, { who: "her", type: "text", text: aiText, time: now() }]);
-      // 4. 语音模式下自动 TTS
-      if (voiceMode && aiText && "speechSynthesis" in window) {
-        const u = new SpeechSynthesisUtterance(aiText.replace(/<[^>]+>/g, ""));
+      // 语音模式下自动 TTS
+      if (voiceMode && fullReply && "speechSynthesis" in window) {
+        const u = new SpeechSynthesisUtterance(fullReply.replace(/<[^>]+>/g, ""));
         u.lang = "zh-CN"; u.rate = 0.95;
         window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
       }
-      try { await saveMessage(roleId, { role: "assistant", content: aiText }); } catch {}
+      try { await saveMessage(roleId, { role: "assistant", content: fullReply }); } catch {}
     } catch (err) { setTyping(false); setChatError(String(err)); }
   };
 
