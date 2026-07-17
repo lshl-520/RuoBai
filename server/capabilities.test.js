@@ -91,12 +91,14 @@ test('GET /api/capabilities returns 5 capabilities with current assignment and a
     assert.equal(payload.items.length, 5);
 
     const chat = payload.items.find(item => item.capability === 'chat');
+    const vision = payload.items.find(item => item.capability === 'vision');
     const tts = payload.items.find(item => item.capability === 'tts');
     const image = payload.items.find(item => item.capability === 'image');
 
     assert.equal(chat.enabled, true);
     assert.equal(chat.current.model_id, 'gpt-5.5');
     assert.equal(chat.options.length, 2);
+    assert.deepEqual(vision.options.map(item => item.model_id), ['gpt-5.5', 'gpt-4o']);
     assert.equal(tts.current.extras.voice_id, 'longwan');
     assert.equal(image.enabled, false);
     assert.equal(image.options.length, 0);
