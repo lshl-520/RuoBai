@@ -277,7 +277,7 @@ test('POST /api/credentials/:id/refresh-models infers capabilities and caches mo
     assert.equal(payload.success, true);
     assert.equal(payload.items.length, 4);
     assert.deepEqual(payload.summary.chat, ['gpt-5.5', 'gpt-4o']);
-    assert.deepEqual(payload.summary.vision, ['gpt-4o']);
+    assert.deepEqual(payload.summary.vision, ['gpt-5.5', 'gpt-4o']);
     assert.deepEqual(payload.summary.tts, ['qwen-tts']);
     assert.deepEqual(payload.summary.image, ['doubao-seed-image']);
     assert.equal(insertedModels.length, 4);

@@ -2,6 +2,7 @@ import express from 'express';
 import { pool as defaultPool, withTransaction as defaultWithTransaction } from './db.js';
 import { asyncHandler, maskSecret, parseInteger } from './helpers.js';
 import { buildChatCompletionsUrl } from './chat.js';
+import { guessModelCapabilities } from './model-capabilities.js';
 
 function buildModelsUrl(apiBase) {
   const base = String(apiBase || '').trim().replace(/\/+$/, '');
@@ -40,71 +41,6 @@ function presentCredential(row) {
     api_key_masked: maskSecret(row.api_key),
     models_count: Number(row.models_count || 0)
   };
-}
-
-function guessCapabilities(modelId) {
-  const name = String(modelId || '').trim().toLowerCase();
-  const result = new Set();
-
-  const pureGeneration =
-    name.includes('tts') ||
-    name.includes('dall-e') ||
-    name.includes('image') ||
-    name.includes('wanx') ||
-    name.includes('万相');
-
-  if (!pureGeneration) {
-    result.add('chat');
-  }
-
-  if (
-    name.includes('vl') ||
-    name.includes('vision') ||
-    name.includes('omni') ||
-    name.includes('multimodal') ||
-    name.includes('4o') ||
-    name.includes('5o') ||
-    name.includes('gpt-4') ||
-    name.includes('claude-3') ||
-    name.includes('claude-4') ||
-    name.includes('claude-opus') ||
-    name.includes('claude-sonnet') ||
-    name.includes('claude-haiku')
-  ) {
-    result.add('vision');
-  }
-
-  if (
-    name.includes('image') ||
-    name.includes('dall-e') ||
-    name.includes('万相') ||
-    name.includes('wanx') ||
-    name.includes('sd') ||
-    name.includes('flux') ||
-    name.includes('midjourney') ||
-    name.includes('doubao-seed-image')
-  ) {
-    result.add('image');
-  }
-
-  if (
-    name.includes('tts') ||
-    name.includes('voice') ||
-    name.includes('speech') ||
-    name.includes('音色')
-  ) {
-    result.add('tts');
-  }
-
-  if (
-    name.includes('realtime') ||
-    name.includes('omni') ||
-    name.includes('live')
-  ) {
-    result.add('realtime');
-  }
-
-  return [...result];
 }
 
 function summarizeCapabilities(items = []) {
@@ -339,7 +275,7 @@ export function createCredentialsRouter({
 
     const items = models.map(modelId => ({
       model_id: modelId,
-      capabilities: guessCapabilities(modelId)
+      capabilities: guessModelCapabilities(modelId)
     }));
 
     await withTransaction(async connection => {

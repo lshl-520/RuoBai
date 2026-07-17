@@ -2,6 +2,7 @@ import express from 'express';
 import { pool as defaultPool, withTransaction as defaultWithTransaction } from './db.js';
 import { asyncHandler } from './helpers.js';
 import { buildChatCompletionsUrl } from './chat.js';
+import { guessModelCapabilities } from './model-capabilities.js';
 
 const CAPABILITIES = ['chat', 'vision', 'image', 'tts', 'realtime'];
 
@@ -40,6 +41,13 @@ function parseCapabilityList(value) {
   }
 
   return [];
+}
+
+function supportedCapabilities(row) {
+  return new Set([
+    ...parseCapabilityList(row.capabilities),
+    ...guessModelCapabilities(row.model_id)
+  ]);
 }
 
 function buildEmptyItem(capability) {
@@ -166,7 +174,7 @@ function buildCapabilityItems(assignments, optionsRows) {
   const byCapability = new Map(items.map(item => [item.capability, item]));
 
   for (const row of optionsRows) {
-    const capabilities = parseCapabilityList(row.capabilities);
+    const capabilities = supportedCapabilities(row);
     for (const capability of capabilities) {
       const item = byCapability.get(capability);
       if (!item) continue;
@@ -233,8 +241,8 @@ export function createCapabilitiesRouter({
         return res.status(404).json({ success: false, error: '模型不存在或不属于当前用户' });
       }
 
-      const supports = parseCapabilityList(match.capabilities);
-      if (!supports.includes(capability)) {
+      const supports = supportedCapabilities(match);
+      if (!supports.has(capability)) {
         return res.status(400).json({ success: false, error: '这个模型不支持该能力' });
       }
     }
