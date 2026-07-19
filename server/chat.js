@@ -11,6 +11,7 @@ import {
   parseInteger,
   requireCharacterForUser as defaultRequireCharacterForUser
 } from './helpers.js';
+import { extractVideoShareContext, buildVideoShareHint } from './link-parser.js';
 
 const NO_MODEL_MESSAGE = '请先在“我的”页面配置 AI 模型。';
 const CHARACTER_NOT_FOUND_ERROR = '角色不存在或不属于当前用户';
@@ -598,6 +599,7 @@ export function createChatRouter({
         }).catch(() => '')
       ]);
       const messages = [];
+      const videoHint = buildVideoShareHint(extractVideoShareContext(content));
       const downgradeHint = isImageMessage && !capabilityModelConfig
         ? '\n\n用户给你看了一张图，但你现在没有看图能力。请自然地告诉她你暂时看不到图，并温柔地请她描述一下图里是什么。'
         : '';
@@ -616,7 +618,7 @@ export function createChatRouter({
       messages.push(buildUpstreamMessage({
         message: {
           role: 'user',
-          content,
+          content: content + videoHint,
           message_type: messageType,
           media_url: mediaUrl
         },
