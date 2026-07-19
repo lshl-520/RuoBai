@@ -8,6 +8,7 @@ import {
   fallbackToDefaultRoleAvatar,
   fallbackToDefaultUserAvatar,
 } from "../lib/default-assets.js";
+import { loadVoiceSettings, speechRecognitionErrorMessage } from "../lib/voice-settings.js";
 /* 聊天列表 + 聊天室(沉浸: 常驻立绘随情绪变化 / 全屏立绘 / 语音 / 表情包 / 思考过程 / 搜索) */
 const { useState: useStateC, useRef: useRefC, useEffect: useEffectC } = React;
 
@@ -302,17 +303,16 @@ function VoiceBubble({ mine, dur, src }) {
 }
 
 /* ---------------- 文字转语音(TTS) ---------------- */
-function TTSButton({ text }) {
+function TTSButton({ text, voice }) {
   const [on, setOn] = useStateC(false);
   const speak = (e) => {
     e.stopPropagation();
     if (!("speechSynthesis" in window)) return;
     if (on) { window.speechSynthesis.cancel(); setOn(false); return; }
-    const rt = window.loadRT ? window.loadRT() : null;
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = "zh-CN"; u.pitch = 1.1; u.rate = (rt && rt.voice && Number(rt.voice.rate)) || 0.95;
-    if (rt && rt.voice && rt.voice.browserVoiceURI) {
-      const v = window.speechSynthesis.getVoices().find((x) => x.voiceURI === rt.voice.browserVoiceURI);
+    u.lang = "zh-CN"; u.pitch = 1.1; u.rate = Number(voice?.rate) || 0.95;
+    if (voice?.browserVoiceURI) {
+      const v = window.speechSynthesis.getVoices().find((x) => x.voiceURI === voice.browserVoiceURI);
       if (v) u.voice = v;
     }
     u.onend = () => setOn(false);
@@ -326,7 +326,7 @@ function TTSButton({ text }) {
 }
 
 /* 语音气泡 → 转文字 */
-function VoiceTranscriptButton({ transcript }) {
+function VoiceTranscriptButton({ transcript, error }) {
   const [open, setOpen] = useStateC(false);
   return (
     <div className="voice-transcript">
@@ -335,7 +335,7 @@ function VoiceTranscriptButton({ transcript }) {
       </button>
       {open && (
         <div className="voice-transcript-text">
-          {transcript || "未识别到文字内容（可检查麦克风权限）"}
+          {transcript || error || "未识别到文字内容"}
         </div>
       )}
     </div>
@@ -352,17 +352,22 @@ function VoiceRecorder({ onCancel, onDone }) {
   const timerRef = useRefC(null);
   const recognRef = useRefC(null);
   const transcriptRef = useRefC("");
+  const recognitionErrorRef = useRefC("");
+  const secondsRef = useRefC(0);
+  const cancelledRef = useRefC(false);
 
   useEffectC(() => {
     return () => {
+      cancelledRef.current = true;
       if (timerRef.current) clearInterval(timerRef.current);
       if (mediaRef.current?.state === "recording") mediaRef.current.stop();
-      if (recognRef.current) recognRef.current.stop();
+      if (recognRef.current) { try { recognRef.current.stop(); } catch {} }
     };
   }, []);
 
   const startRec = async () => {
-    setErrMsg(""); transcriptRef.current = "";
+    setErrMsg(""); transcriptRef.current = ""; recognitionErrorRef.current = "";
+    secondsRef.current = 0; cancelledRef.current = false;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
@@ -371,14 +376,14 @@ function VoiceRecorder({ onCancel, onDone }) {
       mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
+        if (cancelledRef.current) return;
         if (!chunksRef.current.length) { setStatus("idle"); return; }
         setStatus("uploading");
         try {
           const blob = new Blob(chunksRef.current, { type: mimeType });
           const audioUrl = await uploadVoice(blob);
-          const dur = Math.max(1, seconds);
-          // transcript 为空也照常发送，sendVoice 里用自然占位符兜底
-          onDone({ audioUrl, dur, transcript: transcriptRef.current });
+          const dur = Math.max(1, secondsRef.current);
+          onDone({ audioUrl, dur, transcript: transcriptRef.current.trim(), recognitionError: recognitionErrorRef.current });
         } catch {
           setErrMsg("上传失败，请重试"); setStatus("idle");
         }
@@ -387,10 +392,12 @@ function VoiceRecorder({ onCancel, onDone }) {
       mediaRef.current = mr;
       setStatus("recording");
       setSeconds(0);
-      timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
+      timerRef.current = setInterval(() => {
+        secondsRef.current += 1;
+        setSeconds(secondsRef.current);
+      }, 1000);
 
-      // SpeechRecognition 用独立麦克风流（不抢 MediaRecorder 的 stream），
-      // 两者共存可能冲突，改为仅在浏览器原生支持且 MR 未独占时启用
+      // SpeechRecognition 尽力识别；与 MediaRecorder 可能抢麦，失败时静默，不阻断录音
       try {
         const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SR) {
@@ -400,11 +407,17 @@ function VoiceRecorder({ onCancel, onDone }) {
             const t = Array.from(e.results).map((x) => x[0].transcript).join("");
             if (t.length > transcriptRef.current.length) transcriptRef.current = t;
           };
-          r.onerror = () => {};
-          r.start();
-          recognRef.current = r;
+          r.onerror = (event) => {
+            recognitionErrorRef.current = speechRecognitionErrorMessage(event.error);
+            if (recognitionErrorRef.current) setErrMsg(recognitionErrorRef.current);
+          };
+          r.onend = () => { recognRef.current = null; };
+          try {
+            r.start();
+            recognRef.current = r;
+          } catch { /* 识别启动失败不影响录音 */ }
         }
-      } catch { /* 识别启动失败不影响录音 */ }
+      } catch { /* 识别不可用不影响录音 */ }
     } catch {
       setErrMsg("请允许麦克风权限");
     }
@@ -412,7 +425,7 @@ function VoiceRecorder({ onCancel, onDone }) {
 
   const stopRec = () => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-    if (recognRef.current) { recognRef.current.stop(); recognRef.current = null; }
+    if (recognRef.current) { try { recognRef.current.stop(); } catch {} recognRef.current = null; }
     if (mediaRef.current?.state === "recording") mediaRef.current.stop();
   };
 
@@ -429,7 +442,7 @@ function VoiceRecorder({ onCancel, onDone }) {
         </div>
         {errMsg && <div className="vin-partial" style={{ color: "var(--rose)" }}>{errMsg}</div>}
         <div className="vin-actions">
-          <button className="vin-cancel" onClick={() => { stopRec(); onCancel(); }}>取消</button>
+          <button className="vin-cancel" onClick={() => { cancelledRef.current = true; stopRec(); onCancel(); }}>取消</button>
           {status === "idle" && <button className="vin-done" onClick={startRec}><Icon name="mic" /> 开始录音</button>}
           {status === "recording" && <button className="vin-done" onClick={stopRec}><Icon name="check" /> 完成</button>}
           {status === "uploading" && <button className="vin-done" disabled>上传中…</button>}
@@ -441,7 +454,7 @@ function VoiceRecorder({ onCancel, onDone }) {
 }
 
 /* ---------------- 单条消息 ---------------- */
-function Bubble({ m, agent, tts, myAvatar, onDelete }) {
+function Bubble({ m, agent, tts, voice, myAvatar, onDelete }) {
   const [menuPos, setMenuPos] = useStateC(null); // {x, y} 或 null
   const pressRef = useRefC(null);
 
@@ -512,7 +525,7 @@ function Bubble({ m, agent, tts, myAvatar, onDelete }) {
               </div>
             )}
             {m.time && <span className="msg-time">{m.time}</span>}
-            {m.type === "voice" && <VoiceTranscriptButton transcript={m.transcript || ""} />}
+            {m.type === "voice" && <VoiceTranscriptButton transcript={m.transcript || ""} error={m.recognitionError || ""} />}
           </div>
           <div className="row-avatar"><img src={myAvatar} alt="" onError={fallbackToDefaultUserAvatar} /></div>
         </div>
@@ -539,7 +552,7 @@ function Bubble({ m, agent, tts, myAvatar, onDelete }) {
               {m.type === "voice" ? <VoiceBubble dur={m.dur} src={m.audioUrl} /> : (herText && <span className="msg-text">{herText}</span>)}
             </div>
             {m.time && <span className="msg-time">{m.time}</span>}
-            {tts && m.type === "text" && herText && <TTSButton text={herText} />}
+            {tts && m.type === "text" && herText && <TTSButton text={herText} voice={voice} />}
             {(m.think || herThink) && <ThinkCard text={m.think || herThink} />}
           </div>
         </div>
@@ -683,12 +696,26 @@ function ChatRoom({ agent, onBack }) {
   const [atts, setAtts] = useStateC([]);
   const [listening, setListening] = useStateC(false);
   const [voiceMode, setVoiceMode] = useStateC(false); // 语音/文字切换
+  const [voiceSettings, setVoiceSettings] = useStateC(loadVoiceSettings);
   const [moreOpen, setMoreOpen] = useStateC(false); // 更多菜单
   const [modelOpen, setModelOpen] = useStateC(false);
   const [modelChoice, setModelChoice] = useStateC(() => {
     try { const s = JSON.parse(localStorage.getItem(`ruobai_model_${roleId}`)); if (s) return s; } catch (e) {}
     return { credentialId: null, modelId: null, thinkLevel: "off" };
   });
+
+  useEffectC(() => {
+    const syncVoiceSettings = (event) => setVoiceSettings(event?.detail || loadVoiceSettings());
+    const syncStorage = (event) => {
+      if (event.key === "ruobai_voice_v2") setVoiceSettings(loadVoiceSettings());
+    };
+    window.addEventListener("ruobai:voice-settings", syncVoiceSettings);
+    window.addEventListener("storage", syncStorage);
+    return () => {
+      window.removeEventListener("ruobai:voice-settings", syncVoiceSettings);
+      window.removeEventListener("storage", syncStorage);
+    };
+  }, []);
 
   // 进入聊天室时从后端同步最新的能力配置（"我的"页可能改过）
   useEffectC(() => {
@@ -901,10 +928,13 @@ function ChatRoom({ agent, onBack }) {
   };
 
   /* 发语音消息 */
-  const sendVoice = async ({ audioUrl, dur, transcript }) => {
+  const sendVoice = async ({ audioUrl, dur, transcript, recognitionError }) => {
     const durLabel = `${dur}"`;
     setChatError("");
-    setMsgs((p) => [...p, { who: "me", type: "voice", audioUrl, dur: durLabel, transcript: transcript || "", time: now() }]);
+    setMsgs((p) => [...p, {
+      who: "me", type: "voice", audioUrl, dur: durLabel,
+      transcript: transcript || "", recognitionError: recognitionError || "", time: now()
+    }]);
     setTyping(true);
 
     // 无论识别成功与否都发送；无识别时用自然中文告知AI
@@ -933,9 +963,13 @@ function ChatRoom({ agent, onBack }) {
       });
       setTyping(false);
       // 语音模式下自动 TTS
-      if (voiceMode && fullReply && "speechSynthesis" in window) {
+      if (voiceMode && voiceSettings.enabled && fullReply && "speechSynthesis" in window) {
         const u = new SpeechSynthesisUtterance(fullReply.replace(/<[^>]+>/g, ""));
-        u.lang = "zh-CN"; u.rate = 0.95;
+        u.lang = "zh-CN"; u.rate = Number(voiceSettings.rate) || 0.95;
+        if (voiceSettings.browserVoiceURI) {
+          const selectedVoice = window.speechSynthesis.getVoices().find((item) => item.voiceURI === voiceSettings.browserVoiceURI);
+          if (selectedVoice) u.voice = selectedVoice;
+        }
         window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
       }
       try { await saveMessage(roleId, { role: "assistant", content: fullReply }); } catch {}
@@ -991,7 +1025,7 @@ function ChatRoom({ agent, onBack }) {
 
       <div className="msg-area" ref={areaRef}>
         {q.trim() && <div className="search-note">找到 {shown.filter((m) => m.type !== "time").length} 条包含"{q.trim()}"的记录</div>}
-        {shown.map((m, i) => (m.type === "time" && q.trim()) ? null : <Bubble key={i} m={m} agent={agent} tts={!q.trim()} myAvatar={myAvatar} onDelete={deleteMsg} />)}
+        {shown.map((m, i) => (m.type === "time" && q.trim()) ? null : <Bubble key={i} m={m} agent={agent} tts={voiceSettings.enabled && !q.trim()} voice={voiceSettings} myAvatar={myAvatar} onDelete={deleteMsg} />)}
         {typing && !q.trim() && <Typing agent={agent} />}
         {chatError && <div className="chat-error" onClick={() => setChatError("")}>{chatError}<span style={{marginLeft:8,opacity:0.6}}>点击关闭</span></div>}
         <div style={{ height: 8 }} />
@@ -1066,10 +1100,10 @@ function ChatRoom({ agent, onBack }) {
       {listening && (
         <VoiceRecorder
           onCancel={() => setListening(false)}
-          onDone={({ audioUrl, dur, transcript }) => {
+          onDone={({ audioUrl, dur, transcript, recognitionError }) => {
             setListening(false);
             if (voiceMode) {
-              sendVoice({ audioUrl, dur, transcript });
+              sendVoice({ audioUrl, dur, transcript, recognitionError });
             } else {
               if (transcript) setDraft((d) => (d ? d + " " : "") + transcript);
             }
