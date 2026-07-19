@@ -289,11 +289,12 @@ function PrivacySheet({ agents, onClose }) {
 }
 
 /* ====== 编辑我的资料 — 改头像 + 改昵称 ====== */
-function EditProfileSheet({ name, avatar, onClose, onSave }) {
+function EditProfileSheet({ name, avatar, city: initCity, onClose, onSave }) {
   useLockBody();
   const [nick, setNick] = useStateP(name || "");
-  const [pic, setPic] = useStateP(avatar || null);     // 预览用的图（可能是本地 dataURL）
-  const [picUrl, setPicUrl] = useStateP(null);          // 上传成功后的服务器地址
+  const [city, setCity] = useStateP(initCity || "");
+  const [pic, setPic] = useStateP(avatar || null);
+  const [picUrl, setPicUrl] = useStateP(null);
   const [saving, setSaving] = useStateP(false);
   const [err, setErr] = useStateP("");
 
@@ -316,17 +317,20 @@ function EditProfileSheet({ name, avatar, onClose, onSave }) {
 
   const save = async () => {
     const trimmed = nick.trim();
+    const cityTrimmed = city.trim();
     if (trimmed.length > 20) { setErr("名字最多 20 个字"); return; }
+    if (cityTrimmed.length > 50) { setErr("城市最多 50 个字"); return; }
     setSaving(true);
     setErr("");
     const payload = {};
     if (trimmed && trimmed !== name) payload.nickname = trimmed;
     if (picUrl) payload.avatar_url = picUrl;
-    if (!payload.nickname && !payload.avatar_url) { onClose(); return; }
+    if (cityTrimmed !== (initCity || "")) payload.city = cityTrimmed;
+    if (!payload.nickname && !payload.avatar_url && payload.city === undefined) { onClose(); return; }
     try {
       const res = await updateNickname(payload);
       if (res?.success && res.user) {
-        onSave?.({ name: res.user.nickname, avatar: res.user.avatar });
+        onSave?.({ name: res.user.nickname, avatar: res.user.avatar, city: res.user.city });
         onClose();
       } else {
         setErr(res?.error || "保存失败，再试一次");
@@ -361,6 +365,9 @@ function EditProfileSheet({ name, avatar, onClose, onSave }) {
           <label className="field-label">你的名字</label>
           <input className="fld" value={nick} maxLength={20} onChange={(e) => setNick(e.target.value)} placeholder="你想让她怎么叫你" />
           <div className="ob-hint" style={{ textAlign: "right", marginTop: 4 }}>{nick.trim().length}/20</div>
+          <label className="field-label" style={{ marginTop: 12 }}>所在城市</label>
+          <input className="fld" value={city} maxLength={50} onChange={(e) => setCity(e.target.value)} placeholder="如：驻马店，让她知道你那里的天气" />
+          <div className="ob-hint" style={{ marginTop: 4 }}>设置后她聊天时能提醒你天气，比如"明天有雨记得带伞"</div>
           {err && <div className="ob-hint" style={{ color: "var(--rose-deep)", marginTop: 6 }}>{err}</div>}
         </div>
         <div className="sheet-foot">
@@ -650,7 +657,7 @@ function ProfileScreen({ user: userProp, onOnboard, onGoMemory, onLogout }) {
       </div>
       <div style={{ height: 20 }} />
 
-      {sheet === "editme" && <EditProfileSheet name={displayName} avatar={avatar} onClose={() => setSheet(null)} onSave={({ name, avatar: av }) => { if (name) setNameOverride(name); if (av) setAvatar(av); }} />}
+      {sheet === "editme" && <EditProfileSheet name={displayName} avatar={avatar} city={realUser?.city || ""} onClose={() => setSheet(null)} onSave={({ name, avatar: av, city: ct }) => { if (name) setNameOverride(name); if (av) setAvatar(av); if (ct !== undefined && realUser) setRealUser(r => ({ ...r, city: ct })); }} />}
       {sheet === "export" && <ExportSheet agents={visibleAgents} onClose={() => setSheet(null)} />}
       {sheet === "privacy" && <PrivacySheet agents={visibleAgents} onClose={() => setSheet(null)} />}
       {sheet === "theme" && <ThemeSheet current={theme} onClose={() => setSheet(null)} onPick={(t) => { setThemeState(t); try { if (t) { document.documentElement.dataset.theme = t; localStorage.setItem("ruobai_theme", t); } else { delete document.documentElement.dataset.theme; localStorage.removeItem("ruobai_theme"); } } catch (e) {} }} />}

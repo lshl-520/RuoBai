@@ -289,6 +289,7 @@ const schemaFixups = [
   { table: 'users', column: 'status', definition: "VARCHAR(20) DEFAULT 'active'", after: 'role' },
   { table: 'users', column: 'nickname', definition: "VARCHAR(50) DEFAULT ''", after: 'username' },
   { table: 'users', column: 'avatar', definition: "VARCHAR(500) DEFAULT ''", after: 'nickname' },
+  { table: 'users', column: 'city', definition: "VARCHAR(100) DEFAULT ''", after: 'avatar' },
   {
     sql: `
       UPDATE users
