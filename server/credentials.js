@@ -122,16 +122,15 @@ export function createCredentialsRouter({
       return res.status(400).json({ success: false, error: '凭证字段不完整' });
     }
 
+    const [existingRows] = await pool.query(
+      'SELECT id FROM credentials WHERE user_id = ? AND api_base = ? AND api_key = ? LIMIT 1',
+      [req.userId, payload.api_base, payload.api_key]
+    );
+    if (existingRows.length > 0) {
+      return res.status(400).json({ success: false, error: '这个地址和密钥已经加过了，换个名字无法绕过重复检查。如需使用同一接口的不同模型，直接编辑已有渠道即可。' });
+    }
+
     const item = await withTransaction(async connection => {
-      const [existingRows] = await connection.query(
-        'SELECT id FROM credentials WHERE user_id = ? AND api_base = ? AND api_key = ? LIMIT 1',
-        [req.userId, payload.api_base, payload.api_key]
-      );
-
-      if (existingRows.length > 0) {
-        throw new Error('这个凭证已经加过了');
-      }
-
       const [result] = await connection.query(
         `
           INSERT INTO credentials (user_id, name, provider_type, api_base, api_key, created_at)

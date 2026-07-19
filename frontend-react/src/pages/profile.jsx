@@ -657,7 +657,7 @@ function ProfileScreen({ user: userProp, onOnboard, onGoMemory, onLogout }) {
       </div>
       <div style={{ height: 20 }} />
 
-      {sheet === "editme" && <EditProfileSheet name={displayName} avatar={avatar} city={realUser?.city || ""} onClose={() => setSheet(null)} onSave={({ name, avatar: av, city: ct }) => { if (name) setNameOverride(name); if (av) setAvatar(av); if (ct !== undefined && realUser) setRealUser(r => ({ ...r, city: ct })); }} />}
+      {sheet === "editme" && <EditProfileSheet name={displayName} avatar={avatar} city={realUser?.city || ""} onClose={() => setSheet(null)} onSave={({ name, avatar: av, city: ct }) => { if (name) setNameOverride(name); if (av) setAvatar(av); if (ct !== undefined) setRealUser(r => r ? { ...r, city: ct } : { city: ct }); }} />}
       {sheet === "export" && <ExportSheet agents={visibleAgents} onClose={() => setSheet(null)} />}
       {sheet === "privacy" && <PrivacySheet agents={visibleAgents} onClose={() => setSheet(null)} />}
       {sheet === "theme" && <ThemeSheet current={theme} onClose={() => setSheet(null)} onPick={(t) => { setThemeState(t); try { if (t) { document.documentElement.dataset.theme = t; localStorage.setItem("ruobai_theme", t); } else { delete document.documentElement.dataset.theme; localStorage.removeItem("ruobai_theme"); } } catch (e) {} }} />}
