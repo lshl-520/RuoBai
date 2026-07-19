@@ -13,6 +13,7 @@ import {
 } from './helpers.js';
 import { extractVideoShareContext, buildVideoShareHint } from './link-parser.js';
 import { getCityWeatherText } from './weather.js';
+import { detectDrawIntent, generateImage } from './image-gen.js';
 
 const NO_MODEL_MESSAGE = '请先在“我的”页面配置 AI 模型。';
 const CHARACTER_NOT_FOUND_ERROR = '角色不存在或不属于当前用户';
@@ -502,6 +503,44 @@ export function createChatRouter({
       const filePath = path.join(userVoiceDir, filename);
       await fileStorage.writeFile(filePath, buffer);
       return res.json({ success: true, audio_url: `/user_assets/voice/${filename}` });
+    } catch (error) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
+  /* -------- 画图发图 -------- */
+  router.post('/draw', async (req, res) => {
+    try {
+      const characterId = getRequestCharacterId(req);
+      if (!characterId) return res.status(400).json({ success: false, error: '缺少 character_id' });
+      await requireCharacterForUser(req.userId, characterId, pool);
+
+      const content = String(req.body?.content || '').trim();
+      const subject = detectDrawIntent(content) || content;
+      if (!subject) return res.status(400).json({ success: false, error: '请告诉我你想画什么' });
+
+      // 1. 保存用户消息
+      const userMsg = await saveMessage({ userId: req.userId, characterId, role: 'user', content, messageType: 'text', mediaUrl: null });
+
+      // 2. 生成图片
+      const mediaUrl = await generateImage(subject, fetchImpl);
+
+      // 3. 保存 AI 图片消息
+      const aiMsg = await saveMessage({
+        userId: req.userId,
+        characterId,
+        role: 'assistant',
+        content: `[画了一张图：${subject}]`,
+        messageType: 'image',
+        mediaUrl,
+      });
+
+      return res.json({
+        success: true,
+        user_message: userMsg,
+        ai_message: aiMsg,
+        media_url: mediaUrl,
+      });
     } catch (error) {
       return res.status(400).json({ success: false, error: error.message });
     }

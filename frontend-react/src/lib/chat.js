@@ -104,6 +104,21 @@ export function deleteAllMessages(roleId) {
   return request(`/api/chat?character_id=${encodeURIComponent(roleId)}`, { method: "DELETE" });
 }
 
+// 检测绘画关键词（与后端 detectDrawIntent 保持一致）
+export function detectDrawKeywords(text) {
+  if (!text) return false;
+  return /帮我画|给我画|画[个张幅一]|画张|生成.*图片|画幅|画一下/.test(text);
+}
+
+export async function drawImage(roleId, content) {
+  const data = await request(`/api/chat/draw?character_id=${encodeURIComponent(roleId)}`, {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  });
+  if (!data?.success) throw new Error(data?.error || "图片生成失败");
+  return data;
+}
+
 export async function streamAssistantReply(roleId, payload, handlers = {}) {
   const response = await fetch("/api/chat", {
     method: "POST",

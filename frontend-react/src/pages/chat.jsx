@@ -1,7 +1,7 @@
 import React from "react";
 import { Icon, Bars, greetByHour, STICKERS } from "../store.jsx";
 import { getRoles, getRolePortraitSrc, getRoleFullPortrait, clampIntimacy } from "../lib/roles.js";
-import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage, uploadVoice, deleteAllMessages, deleteMessage } from "../lib/chat.js";
+import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage, uploadVoice, deleteAllMessages, deleteMessage, detectDrawKeywords, drawImage } from "../lib/chat.js";
 import { getSessionProfile, getCapabilities, updateCapability } from "../lib/profile.js";
 import {
   DEFAULT_USER_AVATAR,
@@ -836,6 +836,36 @@ function ChatRoom({ agent, onBack }) {
           try { await saveUserMessage(roleId, payload); } catch {}
         }
       } else {
+        // 检测绘画意图，走画图流程
+        if (images.length === 0 && detectDrawKeywords(t)) {
+          try {
+            const result = await drawImage(roleId, t);
+            const aiMsg = result?.ai_message;
+            setMsgs((p) => {
+              const copy = [...p];
+              // 更新用户消息 id
+              for (let i = copy.length - 1; i >= 0; i--) {
+                if (copy[i].who === "me" && !copy[i].id) {
+                  if (result?.user_message?.id) copy[i] = { ...copy[i], id: result.user_message.id };
+                  break;
+                }
+              }
+              // 追加 AI 图片消息
+              return [...copy, {
+                who: "her", type: "image",
+                images: [result.media_url],
+                text: `[画了：${t}]`,
+                id: aiMsg?.id,
+                time: now(),
+              }];
+            });
+          } catch (err) {
+            setChatError("画图失败：" + (err instanceof Error ? err.message : String(err)));
+          }
+          setTyping(false);
+          return;
+        }
+
         try {
           const saved = await saveUserMessage(roleId, { role: "user", content: t });
           if (saved?.item?.id) {
