@@ -147,6 +147,7 @@ export function createAuthRouter({
         username: user.username,
         nickname: user.nickname || user.username,
         avatar: user.avatar || '',
+        city: user.city || '',
         role: user.role,
         status: getUserStatus(user),
         created_at: user.created_at,

@@ -123,11 +123,11 @@ export function createCredentialsRouter({
     }
 
     const [existingRows] = await pool.query(
-      'SELECT id FROM credentials WHERE user_id = ? AND api_base = ? AND api_key = ? LIMIT 1',
-      [req.userId, payload.api_base, payload.api_key]
+      'SELECT id FROM credentials WHERE user_id = ? AND name = ? LIMIT 1',
+      [req.userId, payload.name]
     );
     if (existingRows.length > 0) {
-      return res.status(400).json({ success: false, error: '这个地址和密钥已经加过了，换个名字无法绕过重复检查。如需使用同一接口的不同模型，直接编辑已有渠道即可。' });
+      return res.status(400).json({ success: false, error: `渠道名"${payload.name}"已存在，换个名字试试` });
     }
 
     const item = await withTransaction(async connection => {
