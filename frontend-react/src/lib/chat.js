@@ -119,6 +119,15 @@ export async function drawImage(roleId, content) {
   return data;
 }
 
+export async function callReply(roleId, text) {
+  const data = await request(`/api/chat/call-reply?character_id=${encodeURIComponent(roleId)}`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+  if (!data?.success) throw new Error(data?.error || "通话失败");
+  return data; // { reply, audio_url }
+}
+
 export async function streamAssistantReply(roleId, payload, handlers = {}) {
   const response = await fetch("/api/chat", {
     method: "POST",

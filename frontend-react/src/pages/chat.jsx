@@ -1,7 +1,7 @@
 import React from "react";
 import { Icon, Bars, greetByHour, STICKERS } from "../store.jsx";
 import { getRoles, getRolePortraitSrc, getRoleFullPortrait, clampIntimacy } from "../lib/roles.js";
-import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage, uploadVoice, deleteAllMessages, deleteMessage, detectDrawKeywords, drawImage } from "../lib/chat.js";
+import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage, uploadVoice, deleteAllMessages, deleteMessage, detectDrawKeywords, drawImage, callReply } from "../lib/chat.js";
 import { getSessionProfile, getCapabilities, updateCapability } from "../lib/profile.js";
 import {
   DEFAULT_USER_AVATAR,
@@ -1153,67 +1153,129 @@ function TempDot({ temp }) {
   return <span className="temp-dot"><Icon name="flame" /> {v.toFixed(1)}°</span>;
 }
 
-/* ---------------- 实时语音通话 ---------------- */
-const CALL_LINES = [
-  "喂…能听到我吗?今天的你,声音听起来有点不一样。",
-  "嗯,我在听。你不用急着说完,我有的是时间陪你。",
-  "外面是不是有风?把窗户关一下,别着凉。",
-  "其实你打来的时候,我就在等了。",
-  "我知道的。这些事压在你身上很久了,辛苦了。",
-];
-
+/* ---------------- 实时语音通话（简化版伪通话） ---------------- */
 function CallScreen({ agent, figSrc, onClose }) {
   const [sec, setSec] = useStateC(0);
-  const [muted, setMuted] = useStateC(false);
-  const [speaker, setSpeaker] = useStateC(true);
-  const [state, setState] = useStateC("connecting"); // connecting | live
-  const [line, setLine] = useStateC(0);
+  const [phase, setPhase] = useStateC("connecting"); // connecting | live | recording | thinking | speaking
+  const [transcript, setTranscript] = useStateC("");
+  const [reply, setReply] = useStateC("");
+  const [err, setErr] = useStateC("");
+  const recogRef = useRefC(null);
+  const audioRef = useRefC(null);
+  const roleId = agent.id;
 
-  useEffectC(() => { const t = setTimeout(() => setState("live"), 1900); return () => clearTimeout(t); }, []);
+  useEffectC(() => { const t = setTimeout(() => setPhase("live"), 1900); return () => clearTimeout(t); }, []);
   useEffectC(() => {
-    if (state !== "live") return;
+    if (phase === "connecting") return;
     const id = setInterval(() => setSec((s) => s + 1), 1000);
-    const lid = setInterval(() => setLine((l) => (l + 1) % CALL_LINES.length), 5200);
-    return () => { clearInterval(id); clearInterval(lid); };
-  }, [state]);
+    return () => clearInterval(id);
+  }, [phase === "connecting"]);
 
   const mm = String(Math.floor(sec / 60)).padStart(2, "0");
   const ss = String(sec % 60).padStart(2, "0");
+  const isLive = phase !== "connecting";
+
+  const startRecording = () => {
+    if (phase !== "live" && phase !== "speaking") return;
+    setErr(""); setTranscript(""); setPhase("recording");
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRec) { setErr("浏览器不支持语音识别，请用 Chrome"); setPhase("live"); return; }
+    const recog = new SpeechRec();
+    recog.lang = "zh-CN"; recog.interimResults = true; recog.continuous = false;
+    recogRef.current = recog;
+    recog.onresult = (e) => {
+      let text = ""; for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
+      setTranscript(text);
+    };
+    recog.onerror = () => { setPhase("live"); };
+    recog.start();
+  };
+
+  const speakWithBrowser = (text) => {
+    setPhase("speaking");
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "zh-CN"; utter.rate = 0.92;
+    utter.onend = () => setPhase("live");
+    utter.onerror = () => setPhase("live");
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utter);
+  };
+
+  const stopRecording = async () => {
+    const text = transcript.trim() || "（语音）";
+    if (recogRef.current) { try { recogRef.current.stop(); } catch {} recogRef.current = null; }
+    setPhase("thinking");
+    try {
+      const result = await callReply(roleId, text);
+      setReply(result.reply || "");
+      if (result.audio_url) {
+        setPhase("speaking");
+        const audio = new Audio(result.audio_url);
+        audioRef.current = audio;
+        audio.onended = () => setPhase("live");
+        audio.onerror = () => speakWithBrowser(result.reply || "");
+        audio.play().catch(() => speakWithBrowser(result.reply || ""));
+      } else if (result.reply) {
+        speakWithBrowser(result.reply);
+      } else {
+        setPhase("live");
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "出错了");
+      setPhase("live");
+    }
+  };
+
+  const hangup = () => {
+    if (recogRef.current) { try { recogRef.current.stop(); } catch {} recogRef.current = null; }
+    if (audioRef.current) { try { audioRef.current.pause(); } catch {} audioRef.current = null; }
+    window.speechSynthesis.cancel();
+    onClose();
+  };
+
+  const phaseLabel = { connecting: "正在接通…", live: "通话中 · 按住说话", recording: "正在听你说…", thinking: "她在想…", speaking: "她在说…" }[phase] || "通话中";
   const bars = Array.from({ length: 30 });
 
   return (
     <div className="call-screen">
-      <div className={"call-glow" + (state === "connecting" ? " ring" : "")} />
-      <img className={"call-fig" + (state === "live" ? " live" : "")} src={figSrc} alt={agent.name} />
+      <div className={"call-glow" + (!isLive ? " ring" : "")} />
+      <img className={"call-fig" + (isLive ? " live" : "")} src={figSrc} alt={agent.name} />
       <div className="call-scrim" />
-
       <div className="call-top">
         <div className="call-status">
-          {state === "connecting" ? <><Icon name="phone" /> 正在接通…</> : <><span className="live-dot" /> 通话中 · 实时语音</>}
+          {!isLive ? <><Icon name="phone" /> 正在接通…</> : <><span className="live-dot" /> {phaseLabel}</>}
         </div>
         <div className="call-name serif">{agent.name}</div>
-        <div className="call-timer">{state === "connecting" ? "她正赶来接电话" : `${mm}:${ss}`}</div>
+        <div className="call-timer">{!isLive ? "她正赶来接电话" : `${mm}:${ss}`}</div>
       </div>
-
-      {state === "live" && !muted && (
+      {isLive && (
         <div className="call-wave">
-          {bars.map((_, i) => (
-            <i key={i} style={{ height: (8 + Math.abs(Math.sin(i * 1.3) * 28)) + "px", animationDelay: `${i * 50}ms` }} />
-          ))}
+          {bars.map((_, i) => <i key={i} style={{ height: (8 + Math.abs(Math.sin(i * 1.3) * 28)) + "px", animationDelay: `${i * 50}ms`, opacity: phase === "recording" || phase === "speaking" ? 1 : 0.4 }} />)}
         </div>
       )}
-      {state === "live" && <div className="call-caption">「{CALL_LINES[line]}」</div>}
-
+      {isLive && (
+        <div className="call-caption">
+          {phase === "recording" && transcript && `「${transcript}」`}
+          {phase !== "recording" && reply && `「${reply}」`}
+          {err && <span style={{ color: "#f87171" }}>{err}</span>}
+          {!transcript && !reply && !err && phase === "live" && "按住麦克风说话"}
+          {phase === "thinking" && "她在想…"}
+        </div>
+      )}
       <div className="call-controls">
-        <button className={"call-btn" + (muted ? " on" : "")} onClick={() => setMuted((m) => !m)}>
+        <button
+          className={"call-btn" + (phase === "recording" ? " on" : "")}
+          onPointerDown={startRecording} onPointerUp={stopRecording} onPointerLeave={() => { if (phase === "recording") stopRecording(); }}
+          disabled={phase === "thinking" || !isLive}
+        >
           <span className="cb"><Icon name="mic" /></span>
-          <span>{muted ? "已静音" : "静音"}</span>
+          <span>{phase === "recording" ? "松开发送" : "按住说话"}</span>
         </button>
-        <button className="call-btn">
-          <span className="call-hangup" onClick={onClose}><Icon name="phone" /></span>
+        <button className="call-btn" onClick={hangup}>
+          <span className="call-hangup"><Icon name="phone" /></span>
           <span style={{ opacity: 0 }}>挂断</span>
         </button>
-        <button className={"call-btn" + (speaker ? " on" : "")} onClick={() => setSpeaker((s) => !s)}>
+        <button className="call-btn" disabled>
           <span className="cb"><Icon name="wave" /></span>
           <span>扬声器</span>
         </button>
