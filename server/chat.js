@@ -546,6 +546,72 @@ export function createChatRouter({
     }
   });
 
+  /* -------- 通话专用：AI文字回复 + 千问TTS合并 -------- */
+  router.post('/call-reply', async (req, res) => {
+    try {
+      const characterId = getRequestCharacterId(req);
+      if (!characterId) return res.status(400).json({ success: false, error: '缺少 character_id' });
+
+      const character = await requireCharacterForUser(req.userId, characterId, pool);
+      const userText = String(req.body?.text || '').trim();
+      if (!userText) return res.status(400).json({ success: false, error: '请说点什么' });
+
+      // 1) 获取 AI 配置
+      const modelConfig = await getActiveModelConfig(req.userId);
+      if (!modelConfig) return res.json({ success: true, reply: '还没配置模型，先去设置一下吧', audio_url: null });
+
+      const systemPrompt = buildSystemPrompt(character) + '\n\n【通话模式】用户通过语音跟你说话，请用1-2句口语化短句回复，不加标点符号之外的特殊字符。';
+
+      // 2) 调AI获取回复
+      const chatUrl = buildChatCompletionsUrl(modelConfig.api_base);
+      const chatRes = await fetchImpl(chatUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${modelConfig.api_key}` },
+        body: JSON.stringify({ model: modelConfig.model, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userText }], max_tokens: 120, stream: false }),
+      });
+      if (!chatRes.ok) return res.json({ success: true, reply: '她现在不方便说话，稍后再试', audio_url: null });
+      const chatPayload = await chatRes.json().catch(() => null);
+      const reply = String(chatPayload?.choices?.[0]?.message?.content || '').trim() || '嗯';
+
+      // 3) 千问TTS：从 QWEN_TTS_KEY 直接调（通话专用）
+      const qwenKey = process.env.QWEN_TTS_KEY || '';
+      const voiceId = process.env.QWEN_VOICE_ID || 'longfeifei_v3';
+      let audioUrl = null;
+
+      if (qwenKey) {
+        try {
+          const ttsRes = await fetchImpl('https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${qwenKey}` },
+            body: JSON.stringify({ model: 'qwen-tts', input: { text: reply, voice: voiceId }, parameters: { format: 'mp3' } }),
+          });
+          if (ttsRes.ok) {
+            const ttsPayload = await ttsRes.json().catch(() => null);
+            const audio = ttsPayload?.output?.audio || {};
+            const url = audio.url || null;
+            if (url) {
+              // 下载并缓存到本地
+              const audioRes = await fetchImpl(url);
+              if (audioRes.ok) {
+                const buffer = Buffer.from(await audioRes.arrayBuffer());
+                const filename = `call-${req.userId}-${Date.now()}.mp3`;
+                const filePath = path.join(projectRoot, 'user_assets', 'tts', filename);
+                const { mkdir, writeFile } = await import('node:fs/promises');
+                await mkdir(path.dirname(filePath), { recursive: true });
+                await writeFile(filePath, buffer);
+                audioUrl = `/user_assets/tts/${filename}`;
+              }
+            }
+          }
+        } catch { /* TTS 失败不阻断，返回纯文字 */ }
+      }
+
+      return res.json({ success: true, reply, audio_url: audioUrl });
+    } catch (error) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+  });
+
   router.post('/', async (req, res) => {
     try {
       const characterId = getRequestCharacterId(req);
