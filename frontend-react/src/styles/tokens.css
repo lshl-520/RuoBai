@@ -76,12 +76,40 @@
 
 /* 经典主题（可选） */
 :root[data-theme="classic"] {
+  /* 底色 */
   --paper: #fdf7f6;
   --paper-2: #fbeaf0;
   --card: rgba(255, 250, 246, 0.92);
+  --card-warm: #fffaf6;
+
+  /* 文字 */
   --ink: #4b1528;
   --ink-soft: #993556;
+  --ink-faint: #c06080;
+  --ink-ghost: #e8a5b8;
+
+  /* 线 */
   --line: rgba(244, 192, 209, 0.55);
+  --line-strong: rgba(244, 192, 209, 0.85);
+
+  /* 玫瑰主色 */
   --rose: #d4537e;
   --rose-deep: #b73d67;
+  --rose-tint: #fbeaf0;
+  --rose-soft: #f4c0d1;
+
+  /* 陶土 → 映射到粉色 */
+  --clay: #d4537e;
+  --clay-tint: #fbeaf0;
+
+  /* 薰衣草 → 紫色 */
+  --lav: #9b72ff;
+  --lav-deep: #7a50e0;
+  --lav-tint: #f0ebff;
+
+  /* 阴影（粉色调） */
+  --shadow-sm: 0 1px 3px rgba(212, 83, 126, 0.05);
+  --shadow: 0 6px 24px rgba(212, 83, 126, 0.08);
+  --shadow-lg: 0 18px 50px rgba(212, 83, 126, 0.14);
+  --shadow-rose: 0 10px 28px rgba(212, 83, 126, 0.22);
 }
