@@ -326,8 +326,27 @@ function ModelsSection() {
   };
 
   const toggleCap = async (capKey, currentEnabled) => {
-    setCaps((prev) => prev.map((c) => c.capability === capKey ? { ...c, enabled: !currentEnabled } : c));
-    try { await updateCapability(capKey, { enabled: !currentEnabled }); } catch (e) { refreshCaps(); }
+    if (!currentEnabled) {
+      // 开启时：必须带上已有的 credential_id + model_id，否则后端400
+      const cap = caps.find((c) => c.capability === capKey);
+      if (!cap?.current?.credential_id || !cap?.current?.model_id) {
+        // 还没选过模型，直接打开选择器
+        setCapPicker(capKey);
+        return;
+      }
+      setCaps((prev) => prev.map((c) => c.capability === capKey ? { ...c, enabled: true } : c));
+      try {
+        await updateCapability(capKey, {
+          enabled: true,
+          credential_id: cap.current.credential_id,
+          model_id: cap.current.model_id,
+        });
+      } catch (e) { refreshCaps(); }
+    } else {
+      // 关闭时不需要带 credential_id/model_id
+      setCaps((prev) => prev.map((c) => c.capability === capKey ? { ...c, enabled: false } : c));
+      try { await updateCapability(capKey, { enabled: false }); } catch (e) { refreshCaps(); }
+    }
   };
 
   const pickCapModel = async (capKey, credentialId, modelId) => {
