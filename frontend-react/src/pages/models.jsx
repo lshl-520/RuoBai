@@ -1,6 +1,7 @@
 import React from "react";
 import { Icon, CHANNEL_TYPES, VOICE_ENGINES, useLockBody } from "../store.jsx";
 import { getCredentials, createCredential, updateCredential, deleteCredential, refreshCredentialModels, discoverModelConfigs, getCapabilities, updateCapability } from "../lib/profile.js";
+import { loadVoiceSettings, saveVoiceSettings } from "../lib/voice-settings.js";
 import { Toggle, StatusDot, Row } from "./profile.jsx";
 
 const { useState: useStateMo } = React;
@@ -305,10 +306,7 @@ function ModelsSection() {
   const [channels, setChannels] = useStateMo(loadCH);
   const [chSheet, setChSheet] = useStateMo(undefined);
   const [voiceSheet, setVoiceSheet] = useStateMo(false);
-  const [voiceConfig, setVoiceConfig] = useStateMo(() => {
-    try { const s = JSON.parse(localStorage.getItem("ruobai_voice_v2")); if (s) return s; } catch (e) {}
-    return { engine: "browser", rate: 0.9, voiceId: "", browserVoiceURI: "", volcVoice: "zh_female_wennuan" };
-  });
+  const [voiceConfig, setVoiceConfig] = useStateMo(loadVoiceSettings);
 
   // 能力面板（真实数据）
   const [capabilities, setCaps] = useStateMo([]);
@@ -415,9 +413,14 @@ function ModelsSection() {
   };
 
   const saveVoice = (v) => {
-    setVoiceConfig(v);
-    try { localStorage.setItem("ruobai_voice_v2", JSON.stringify(v)); } catch (e) {}
+    const saved = saveVoiceSettings({ ...voiceConfig, ...v });
+    setVoiceConfig(saved);
     setVoiceSheet(false);
+  };
+
+  const toggleVoice = () => {
+    const saved = saveVoiceSettings({ ...voiceConfig, enabled: !voiceConfig.enabled });
+    setVoiceConfig(saved);
   };
 
   const engineName = (id) => VOICE_ENGINES.find((e) => e.id === id)?.name || id;
@@ -437,12 +440,12 @@ function ModelsSection() {
             if (isTts) {
               return (
                 <button key={cap.capability} className="prow" onClick={() => setVoiceSheet(true)}>
-                  <span className={"prow-ic " + info.tint}><Icon name={info.icon} /></span>
+                  <span className={"prow-ic " + (voiceConfig.enabled ? info.tint : "")}><Icon name={info.icon} /></span>
                   <span className="prow-main">
                     <span className="prow-t">{info.name}</span>
                     <span className="prow-s">{engineName(voiceConfig.engine)}{voiceConfig.engine === "browser" ? " · 免费" : ""}</span>
                   </span>
-                  <Toggle on={cap.enabled} onClick={(e) => { e.stopPropagation(); toggleCap(cap.capability, cap.enabled); }} />
+                  <Toggle on={voiceConfig.enabled} onClick={(e) => { e.stopPropagation(); toggleVoice(); }} />
                 </button>
               );
             }
