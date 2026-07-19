@@ -102,6 +102,7 @@ export function createAuthRouter({
           u.username,
           COALESCE(u.nickname, u.username) AS nickname,
           COALESCE(u.avatar, '') AS avatar,
+          COALESCE(u.city, '') AS city,
           u.role,
           u.is_enabled,
           u.created_at,
@@ -353,6 +354,7 @@ export function createAuthRouter({
 
     const nickname = String(req.body?.nickname || '').trim();
     const avatarUrl = String(req.body?.avatar_url || '').trim();
+    const city = String(req.body?.city ?? '').trim();
 
     const nextFields = [];
     const nextParams = [];
@@ -379,8 +381,14 @@ export function createAuthRouter({
       nextParams.push(avatarUrl);
     }
 
+    if (city !== undefined) {
+      if (city.length > 50) return res.status(400).json({ success: false, error: '城市名最多 50 个字' });
+      nextFields.push('city = ?');
+      nextParams.push(city);
+    }
+
     if (!nextFields.length) {
-      return res.status(400).json({ success: false, error: '昵称和头像至少改一个' });
+      return res.status(400).json({ success: false, error: '没有需要更新的内容' });
     }
 
     await db.query(
@@ -389,7 +397,7 @@ export function createAuthRouter({
     );
 
     const [rows] = await db.query(
-      'SELECT id, username, nickname, avatar FROM users WHERE id = ? LIMIT 1',
+      'SELECT id, username, nickname, avatar, city FROM users WHERE id = ? LIMIT 1',
       [req.session.userId]
     );
     const user = rows[0];
