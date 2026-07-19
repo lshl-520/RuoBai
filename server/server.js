@@ -13,6 +13,7 @@ import { createAdminRouter } from './admin.js';
 import { createUpdateService, startDailyBackupScheduler } from './admin-update.js';
 import { createFcmSender, startProactiveScheduler } from './proactive.js';
 import { createPushRouter } from './push.js';
+import { startAutoMomentsScheduler } from './auto-moments.js';
 import authRoutes from './auth.js';
 import chatRoutes from './chat.js';
 import memoryRoutes from './memory.js';
@@ -209,6 +210,7 @@ async function start() {
         console.log(`  ─────────────────────────────────\n`);
         startDailyBackupScheduler(updateService);
         startProactiveScheduler({ pool, sendPush: fcmSender });
+        startAutoMomentsScheduler();
         return;
       } catch (error) {
         lastError = error;
