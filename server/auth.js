@@ -353,9 +353,13 @@ export function createAuthRouter({
       return res.status(401).json({ success: false, error: '请先登录' });
     }
 
-    const nickname = String(req.body?.nickname || '').trim();
-    const avatarUrl = String(req.body?.avatar_url || '').trim();
-    const city = String(req.body?.city ?? '').trim();
+    const body = req.body || {};
+    const hasNickname = Object.prototype.hasOwnProperty.call(body, 'nickname');
+    const hasAvatarUrl = Object.prototype.hasOwnProperty.call(body, 'avatar_url');
+    const hasCity = Object.prototype.hasOwnProperty.call(body, 'city');
+    const nickname = hasNickname ? String(body.nickname ?? '').trim() : '';
+    const avatarUrl = hasAvatarUrl ? String(body.avatar_url ?? '').trim() : '';
+    const city = hasCity ? String(body.city ?? '').trim() : '';
 
     const nextFields = [];
     const nextParams = [];
@@ -382,7 +386,7 @@ export function createAuthRouter({
       nextParams.push(avatarUrl);
     }
 
-    if (city !== undefined) {
+    if (hasCity) {
       if (city.length > 50) return res.status(400).json({ success: false, error: '城市名最多 50 个字' });
       nextFields.push('city = ?');
       nextParams.push(city);
@@ -409,7 +413,8 @@ export function createAuthRouter({
         id: user.id,
         username: user.username,
         nickname: user.nickname || user.username,
-        avatar: user.avatar || ''
+        avatar: user.avatar || '',
+        city: user.city || ''
       }
     });
   }));
