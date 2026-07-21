@@ -319,6 +319,10 @@ test('POST /api/chat prefers capability_assignments chat model and falls back to
           return [[{ column_name: 'is_deleted' }]];
         }
 
+        if (sql.includes('SELECT city FROM users')) {
+          return [[{ city: '' }]];
+        }
+
         if (sql.includes('FROM messages') && sql.includes('ORDER BY id DESC')) {
           return [[
             { role: 'user', content: '你好', is_active: 1, created_at: '2026-05-24 10:00:00' }
@@ -411,6 +415,10 @@ test('POST /api/chat falls back to legacy model_configs when chat capability is 
           return [[{ column_name: 'is_deleted' }]];
         }
 
+        if (sql.includes('SELECT city FROM users')) {
+          return [[{ city: '' }]];
+        }
+
         if (sql.includes('FROM messages') && sql.includes('ORDER BY id DESC')) {
           return [[]];
         }
@@ -494,6 +502,10 @@ test('POST /api/chat includes active memories and anti-roleplay rules in the sys
 
         if (sql.includes('INFORMATION_SCHEMA.COLUMNS')) {
           return [[{ column_name: 'is_deleted' }]];
+        }
+
+        if (sql.includes('SELECT city FROM users')) {
+          return [[{ city: '' }]];
         }
 
         if (sql.includes('FROM messages') && sql.includes('ORDER BY id DESC')) {
@@ -593,6 +605,10 @@ test('POST /api/chat sends a friendly SSE error when upstream stream breaks', as
 
         if (sql.includes('INFORMATION_SCHEMA.COLUMNS')) {
           return [[{ column_name: 'is_deleted' }]];
+        }
+
+        if (sql.includes('SELECT city FROM users')) {
+          return [[{ city: '' }]];
         }
 
         if (sql.includes('FROM messages') && sql.includes('ORDER BY id DESC')) {
