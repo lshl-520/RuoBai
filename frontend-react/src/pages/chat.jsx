@@ -8,6 +8,7 @@ import {
   fallbackToDefaultRoleAvatar,
   fallbackToDefaultUserAvatar,
 } from "../lib/default-assets.js";
+import { publishGeneratedSelfieMoment, shouldPublishGeneratedSelfie } from "../lib/moments.js";
 import { loadVoiceSettings, speechRecognitionErrorMessage } from "../lib/voice-settings.js";
 /* 聊天列表 + 聊天室(沉浸: 常驻立绘随情绪变化 / 全屏立绘 / 语音 / 表情包 / 思考过程 / 搜索) */
 const { useState: useStateC, useRef: useRefC, useEffect: useEffectC } = React;
@@ -822,6 +823,7 @@ function ChatRoom({ agent, onBack }) {
   };
   const modelLabel = modelChoice.modelId || "对话模型";
   const [chatError, setChatError] = useStateC("");
+  const [momentNotice, setMomentNotice] = useStateC("");
   const [uploading, setUploading] = useStateC(false);
   const areaRef = useRefC(null);
   const fileRef = useRefC(null);
@@ -905,6 +907,7 @@ function ChatRoom({ agent, onBack }) {
     if ((!t && images.length === 0) || typing || uploading) return;
     const tm = now();
     setChatError("");
+    setMomentNotice("");
 
     // UI 显示用户消息（多图显示在一条里）
     setMsgs((p) => [...p, { who: "me", type: images.length > 0 ? "image" : "text", text: t, images, time: tm }]);
@@ -943,10 +946,23 @@ function ChatRoom({ agent, onBack }) {
                 time: now(),
               }];
             });
+            setTyping(false);
+
+            if (shouldPublishGeneratedSelfie(t)) {
+              try {
+                const published = await publishGeneratedSelfieMoment({
+                  characterId: roleId,
+                  mediaUrl: result.media_url,
+                });
+                setMomentNotice(`已发布到动态：${published.content}`);
+              } catch (momentError) {
+                setChatError("图片已经生成，但发布动态失败：" + (momentError instanceof Error ? momentError.message : String(momentError)));
+              }
+            }
           } catch (err) {
             setChatError("画图失败：" + (err instanceof Error ? err.message : String(err)));
+            setTyping(false);
           }
-          setTyping(false);
           return;
         }
 
@@ -1141,6 +1157,7 @@ function ChatRoom({ agent, onBack }) {
         {q.trim() && <div className="search-note">找到 {shown.filter((m) => m.type !== "time").length} 条包含"{q.trim()}"的记录</div>}
         {shown.map((m, i) => (m.type === "time" && q.trim()) ? null : <Bubble key={i} m={m} agent={agent} tts={voiceSettings.enabled && !q.trim()} voice={voiceSettings} myAvatar={myAvatar} onDelete={deleteMsg} onOpenImage={setPreviewImage} />)}
         {typing && !q.trim() && <Typing agent={agent} />}
+        {momentNotice && <div className="chat-notice" onClick={() => setMomentNotice("")}>{momentNotice}<span style={{marginLeft:8,opacity:0.6}}>点击关闭</span></div>}
         {chatError && <div className="chat-error" onClick={() => setChatError("")}>{chatError}<span style={{marginLeft:8,opacity:0.6}}>点击关闭</span></div>}
         <div style={{ height: 8 }} />
       </div>
