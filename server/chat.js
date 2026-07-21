@@ -531,6 +531,7 @@ export function createChatRouter({
       // 1. 使用“她的能力”里当前选中的图片渠道和模型生成图片
       // 先生成成功再落库，避免接口失败时留下只有请求、没有图片的残缺消息。
       const mediaUrl = await generateImageImpl(subject, {
+        providerType: imageConfig.provider_type,
         apiBase: imageConfig.api_base,
         apiKey: imageConfig.api_key,
         model: imageConfig.model,

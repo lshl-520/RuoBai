@@ -75,8 +75,12 @@ test('POST /api/credentials creates a credential and PATCH updates only the curr
 
   const router = createCredentialsRouter({
     pool: {
-      query: async () => {
-        throw new Error('pool should not be called directly in this test');
+      query: async (sql, params) => {
+        if (sql.includes('SELECT id FROM credentials WHERE user_id = ? AND name = ?')) {
+          assert.deepEqual(params, [7, '千问官方']);
+          return [[]];
+        }
+        throw new Error(`Unexpected pool query: ${sql}`);
       }
     },
     withTransaction: async work => work({
@@ -320,5 +324,122 @@ test('POST /api/credentials/:id/test checks /v1/models connectivity for the curr
     assert.equal(response.status, 200);
     assert.equal(payload.success, true);
     assert.match(payload.message, /连通正常/);
+  });
+});
+
+
+test('Z-Image credential can be created without a key and registers its fixed image model', async () => {
+  const insertedModels = [];
+  const created = {
+    id: 12,
+    user_id: 7,
+    name: '群友 Z-Image',
+    provider_type: 'z-image-comfy',
+    api_base: 'https://zit-web.qixunmm.xyz',
+    api_key: '',
+    created_at: '2026-07-21 23:50:00'
+  };
+  const router = createCredentialsRouter({
+    pool: {
+      query: async (sql, params) => {
+        if (sql.includes('SELECT id FROM credentials WHERE user_id = ? AND name = ?')) {
+          assert.deepEqual(params, [7, '群友 Z-Image']);
+          return [[]];
+        }
+        throw new Error(`Unexpected pool query: ${sql}`);
+      }
+    },
+    withTransaction: async work => work({
+      query: async (sql, params) => {
+        if (sql.includes('INSERT INTO credentials')) {
+          assert.deepEqual(params.slice(0, 5), [7, '群友 Z-Image', 'z-image-comfy', 'https://zit-web.qixunmm.xyz', '']);
+          return [{ insertId: 12 }];
+        }
+        if (sql.includes('INSERT INTO credential_models')) {
+          insertedModels.push({ model: params[1], capabilities: JSON.parse(params[2]) });
+          return [{ insertId: 1 }];
+        }
+        if (sql.includes('FROM credentials') && sql.includes('WHERE id = ? AND user_id = ?')) {
+          return [[created]];
+        }
+        throw new Error(`Unexpected tx query: ${sql}`);
+      }
+    })
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: '群友 Z-Image',
+        provider_type: 'z-image-comfy',
+        api_base: 'https://zit-web.qixunmm.xyz',
+        api_key: ''
+      })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 201);
+    assert.equal(payload.success, true);
+    assert.deepEqual(insertedModels, [{ model: 'z-image-initial', capabilities: ['image'] }]);
+  });
+});
+
+test('ordinary credentials still require an API key', async () => {
+  const router = createCredentialsRouter({ pool: { query: async () => { throw new Error('should not query'); } } });
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: '普通中转', provider_type: 'openai-compatible', api_base: 'https://example.com', api_key: '' })
+    });
+    assert.equal(response.status, 400);
+  });
+});
+
+test('Z-Image refresh uses a fixed model and connectivity test uses system_stats', async () => {
+  const requestedUrls = [];
+  const insertedModels = [];
+  const credential = {
+    id: 13,
+    user_id: 7,
+    name: '群友 Z-Image',
+    provider_type: 'z-image-comfy',
+    api_base: 'https://zit-web.qixunmm.xyz',
+    api_key: ''
+  };
+  const router = createCredentialsRouter({
+    fetchImpl: async url => {
+      requestedUrls.push(url);
+      return { ok: true, status: 200, text: async () => JSON.stringify({ system: { os: 'linux' } }) };
+    },
+    pool: {
+      query: async (sql) => {
+        if (sql.includes('FROM credentials') && sql.includes('WHERE id = ? AND user_id = ?')) return [[credential]];
+        throw new Error(`Unexpected pool query: ${sql}`);
+      }
+    },
+    withTransaction: async work => work({
+      query: async (sql, params) => {
+        if (sql.includes('DELETE FROM credential_models')) return [{ affectedRows: 0 }];
+        if (sql.includes('INSERT INTO credential_models')) {
+          insertedModels.push({ model: params[1], capabilities: JSON.parse(params[2]) });
+          return [{ insertId: 1 }];
+        }
+        throw new Error(`Unexpected tx query: ${sql}`);
+      }
+    })
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const refreshResponse = await fetch(`${baseUrl}/api/credentials/13/refresh-models`, { method: 'POST' });
+    const refreshPayload = await refreshResponse.json();
+    assert.equal(refreshResponse.status, 200);
+    assert.deepEqual(refreshPayload.summary.image, ['z-image-initial']);
+    assert.deepEqual(insertedModels, [{ model: 'z-image-initial', capabilities: ['image'] }]);
+
+    const testResponse = await fetch(`${baseUrl}/api/credentials/13/test`, { method: 'POST' });
+    assert.equal(testResponse.status, 200);
+    assert.deepEqual(requestedUrls, ['https://zit-api.qixunmm.xyz/system_stats']);
   });
 });

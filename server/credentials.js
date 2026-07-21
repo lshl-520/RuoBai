@@ -4,6 +4,9 @@ import { asyncHandler, maskSecret, parseInteger } from './helpers.js';
 import { buildChatCompletionsUrl } from './chat.js';
 import { guessModelCapabilities } from './model-capabilities.js';
 
+const Z_IMAGE_PROVIDER = 'z-image-comfy';
+const Z_IMAGE_MODEL = 'z-image-initial';
+
 function buildModelsUrl(apiBase) {
   const base = String(apiBase || '').trim().replace(/\/+$/, '');
   if (!base) {
@@ -19,6 +22,18 @@ function buildModelsUrl(apiBase) {
   }
 
   return `${base}/v1/models`;
+}
+
+function isZImageProvider(providerType) {
+  return String(providerType || '').trim() === Z_IMAGE_PROVIDER;
+}
+
+function buildZImageTaskBase(apiBase) {
+  return String(apiBase || '').trim().replace(/\/+$/, '').replace(/:\/\/zit-web\./i, '://zit-api.');
+}
+
+function fixedZImageModels() {
+  return [{ model_id: Z_IMAGE_MODEL, capabilities: ['image'] }];
 }
 
 function sanitizeCredential(body = {}) {
@@ -118,7 +133,7 @@ export function createCredentialsRouter({
 
   router.post('/', asyncHandler(async (req, res) => {
     const payload = sanitizeCredential(req.body);
-    if (!payload.name || !payload.api_base || !payload.api_key) {
+    if (!payload.name || !payload.api_base || (!payload.api_key && !isZImageProvider(payload.provider_type))) {
       return res.status(400).json({ success: false, error: '凭证字段不完整' });
     }
 
@@ -138,6 +153,14 @@ export function createCredentialsRouter({
         `,
         [req.userId, payload.name, payload.provider_type, payload.api_base, payload.api_key]
       );
+
+      if (isZImageProvider(payload.provider_type)) {
+        await connection.query(
+          `INSERT INTO credential_models (credential_id, model_id, capabilities, discovered_at)
+           VALUES (?, ?, ?, NOW())`,
+          [result.insertId, Z_IMAGE_MODEL, JSON.stringify(['image'])]
+        );
+      }
 
       const row = await loadCredentialRow(connection, result.insertId, req.userId);
       return row;
@@ -234,48 +257,52 @@ export function createCredentialsRouter({
       return res.status(404).json({ success: false, error: '凭证不存在' });
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-
-    let models = [];
-    try {
-      const response = await fetchImpl(buildModelsUrl(credential.api_base), {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${credential.api_key}`
-        },
-        signal: controller.signal
-      });
-
-      const raw = await response.text();
-      if (!response.ok) {
-        return res.status(400).json({
-          success: false,
-          error: `刷新模型失败：${response.status} ${raw.slice(0, 200)}`
-        });
-      }
-
-      let payload = {};
+    let items = [];
+    if (isZImageProvider(credential.provider_type)) {
+      items = fixedZImageModels();
+    } else {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      let models = [];
       try {
-        payload = raw ? JSON.parse(raw) : {};
-      } catch {
-        return res.status(400).json({
-          success: false,
-          error: '对方回的不是正常模型列表'
+        const response = await fetchImpl(buildModelsUrl(credential.api_base), {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${credential.api_key}`
+          },
+          signal: controller.signal
         });
+
+        const raw = await response.text();
+        if (!response.ok) {
+          return res.status(400).json({
+            success: false,
+            error: `刷新模型失败：${response.status} ${raw.slice(0, 200)}`
+          });
+        }
+
+        let payload = {};
+        try {
+          payload = raw ? JSON.parse(raw) : {};
+        } catch {
+          return res.status(400).json({
+            success: false,
+            error: '对方回的不是正常模型列表'
+          });
+        }
+
+        models = Array.isArray(payload?.data)
+          ? payload.data.map(item => String(item?.id || '').trim()).filter(Boolean)
+          : [];
+      } finally {
+        clearTimeout(timeout);
       }
 
-      models = Array.isArray(payload?.data)
-        ? payload.data.map(item => String(item?.id || '').trim()).filter(Boolean)
-        : [];
-    } finally {
-      clearTimeout(timeout);
+      items = models.map(modelId => ({
+        model_id: modelId,
+        capabilities: guessModelCapabilities(modelId)
+      }));
     }
-
-    const items = models.map(modelId => ({
-      model_id: modelId,
-      capabilities: guessModelCapabilities(modelId)
-    }));
 
     await withTransaction(async connection => {
       await connection.query(
@@ -316,11 +343,15 @@ export function createCredentialsRouter({
     const timeout = setTimeout(() => controller.abort(), 10000);
 
     try {
-      const response = await fetchImpl(buildModelsUrl(credential.api_base), {
+      const testUrl = isZImageProvider(credential.provider_type)
+        ? `${buildZImageTaskBase(credential.api_base)}/system_stats`
+        : buildModelsUrl(credential.api_base);
+      const headers = isZImageProvider(credential.provider_type)
+        ? { Accept: 'application/json' }
+        : { Authorization: `Bearer ${credential.api_key}` };
+      const response = await fetchImpl(testUrl, {
         method: 'GET',
-        headers: {
-          Authorization: `Bearer ${credential.api_key}`
-        },
+        headers,
         signal: controller.signal
       });
 

@@ -198,3 +198,86 @@ test('generateImage retries transient connection failures', async () => {
   assert.match(imagePath, /^\/user_assets\/chat\/draw-/);
   assert.equal(generationCalls, 2);
 });
+
+
+test('generateImage supports Z-Image task polling without an API key', async () => {
+  const calls = [];
+  const writes = [];
+  let historyCalls = 0;
+  const imagePath = await generateImage('请生成一张真实生活随手照片', {
+    providerType: 'z-image-comfy',
+    apiBase: 'https://zit-web.qixunmm.xyz',
+    model: 'z-image-initial',
+    extras: { width: 768, height: 1280, poll_interval_ms: 1 },
+    sleepImpl: async () => {},
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url === 'https://zit-web.qixunmm.xyz/api/prompt/initial') {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ prompt_id: 'task-1', output_node: '9' })
+        };
+      }
+      if (url === 'https://zit-api.qixunmm.xyz/history/task-1') {
+        historyCalls += 1;
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(historyCalls === 1 ? {} : {
+            'task-1': {
+              status: { completed: true },
+              outputs: { '9': { images: [{ filename: 'result.png', subfolder: '', type: 'output' }] } }
+            }
+          })
+        };
+      }
+      if (url.startsWith('https://zit-api.qixunmm.xyz/view?')) {
+        return {
+          ok: true,
+          status: 200,
+          arrayBuffer: async () => Buffer.from('z-image-result')
+        };
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+    fileStorage: {
+      mkdir: async () => {},
+      writeFile: async (filePath, buffer) => writes.push({ filePath, buffer })
+    }
+  });
+
+  assert.match(imagePath, /^\/user_assets\/chat\/draw-/);
+  const submitBody = JSON.parse(calls[0].options.body);
+  assert.match(submitBody.prompt, /请生成一张真实生活随手照片/);
+  assert.match(submitBody.prompt, /不要改成动漫/);
+  assert.equal(submitBody.width, 768);
+  assert.equal(submitBody.height, 1280);
+  assert.ok(submitBody.client_id);
+  assert.equal(historyCalls, 2);
+  assert.equal(writes[0].buffer.toString(), 'z-image-result');
+});
+
+test('generateImage reports Z-Image completed tasks that contain no image', async () => {
+  await assert.rejects(generateImage('画一张风景图', {
+    providerType: 'z-image-comfy',
+    apiBase: 'https://zit-web.qixunmm.xyz',
+    model: 'z-image-initial',
+    sleepImpl: async () => {},
+    fetchImpl: async url => {
+      if (url.endsWith('/api/prompt/initial')) {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ prompt_id: 'bad-task', output_node: '9' }) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({
+          'bad-task': {
+            status: { completed: true, messages: [['execution_error', { exception_message: '显存不足' }]] },
+            outputs: {}
+          }
+        })
+      };
+    }
+  }), /Z-Image 生成失败：显存不足/);
+});

@@ -6,6 +6,8 @@ const DEFAULT_DAILY_MAX = 4;
 const DEFAULT_MIN_INTERVAL_HOURS = 6;
 const FIRST_SCAN_DELAY_MS = 15 * 1000;
 const SCAN_INTERVAL_MS = 10 * 60 * 1000;
+const AUTO_IMAGE_MAX_ROUNDS = 2;
+const AUTO_IMAGE_RETRY_DELAYS_MS = [30 * 1000];
 
 function stripGeneratedText(value) {
   return String(value || '')
@@ -104,6 +106,9 @@ export function createAutoMomentsService({
   db = pool,
   fetchImpl = fetch,
   generateImageImpl = generateImage,
+  sleepImpl = ms => new Promise(resolve => setTimeout(resolve, ms)),
+  imageRetryRounds = AUTO_IMAGE_MAX_ROUNDS,
+  imageRetryDelaysMs = AUTO_IMAGE_RETRY_DELAYS_MS,
   now = () => new Date(),
   logger = console
 } = {}) {
@@ -228,20 +233,34 @@ export function createAutoMomentsService({
     let images = null;
     const imageConfig = await getCapability(userId, 'image');
     if (imageConfig) {
-      try {
-        const imageUrl = await generateImageImpl(
-          `请生成一张适合这条个人动态的真实生活随手照片。画面自然，不要添加文字、水印或界面。动态内容：${content}`,
-          {
-            apiBase: imageConfig.api_base,
-            apiKey: imageConfig.api_key,
-            model: imageConfig.model,
-            extras: imageConfig.extras,
-            fetchImpl
+      const rounds = Math.max(1, Math.min(3, Number(imageRetryRounds) || AUTO_IMAGE_MAX_ROUNDS));
+      let lastImageError = null;
+      for (let round = 1; round <= rounds; round += 1) {
+        try {
+          const imageUrl = await generateImageImpl(
+            `请生成一张适合这条个人动态的真实生活随手照片。画面自然，不要添加文字、水印或界面。动态内容：${content}`,
+            {
+              providerType: imageConfig.provider_type,
+              apiBase: imageConfig.api_base,
+              apiKey: imageConfig.api_key,
+              model: imageConfig.model,
+              extras: imageConfig.extras,
+              fetchImpl
+            }
+          );
+          if (imageUrl) images = JSON.stringify([imageUrl]);
+          break;
+        } catch (error) {
+          lastImageError = error;
+          if (round < rounds) {
+            const delay = Number(imageRetryDelaysMs[round - 1]) || 30_000;
+            logger.warn?.(`[auto-moments] ${character.name} 第 ${round} 轮配图失败，${Math.round(delay / 1000)} 秒后继续尝试：${error.message}`);
+            await sleepImpl(delay);
           }
-        );
-        if (imageUrl) images = JSON.stringify([imageUrl]);
-      } catch (error) {
-        logger.warn?.(`[auto-moments] ${character.name} 配图失败，已继续发布纯文字动态：${error.message}`);
+        }
+      }
+      if (!images && lastImageError) {
+        logger.warn?.(`[auto-moments] ${character.name} 配图连续尝试 ${rounds} 轮仍失败，已继续发布纯文字动态：${lastImageError.message}`);
       }
     }
 
