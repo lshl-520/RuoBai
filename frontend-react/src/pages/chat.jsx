@@ -453,8 +453,96 @@ function VoiceRecorder({ onCancel, onDone }) {
   );
 }
 
+async function saveChatImage(src) {
+  const response = await fetch(src, { credentials: "same-origin" });
+  if (!response.ok) throw new Error(`图片下载失败：${response.status}`);
+  const blob = await response.blob();
+  const typeExt = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+  }[blob.type];
+  const pathExt = String(src).split("?")[0].match(/\.([a-z0-9]{2,5})$/i)?.[1];
+  const ext = typeExt || pathExt || "png";
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = `ruobai-${new Date().toISOString().replace(/[:.]/g, "-")}.${ext}`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
+function ChatImagePreview({ src, onClose }) {
+  const [saving, setSaving] = useStateC(false);
+  const [saveError, setSaveError] = useStateC("");
+
+  useEffectC(() => {
+    const oldOverflow = document.body.style.overflow;
+    const onKeyDown = (event) => { if (event.key === "Escape") onClose(); };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = oldOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
+
+  const save = async () => {
+    if (saving) return;
+    setSaving(true);
+    setSaveError("");
+    try {
+      await saveChatImage(src);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "保存失败，请打开原图后长按保存");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="chat-image-preview" onClick={onClose}>
+      <button className="cip-close" onClick={onClose} aria-label="关闭图片预览">×</button>
+      <div className="cip-stage" onClick={(event) => event.stopPropagation()}>
+        <img src={src} alt="聊天图片原图" />
+      </div>
+      <div className="cip-actions" onClick={(event) => event.stopPropagation()}>
+        <button className="cip-save" onClick={save} disabled={saving}>{saving ? "正在保存…" : "保存图片"}</button>
+        <a className="cip-original" href={src} target="_blank" rel="noreferrer">打开原图</a>
+      </div>
+      {saveError && <div className="cip-error" onClick={(event) => event.stopPropagation()}>{saveError}</div>}
+      <div className="cip-hint">手机也可以长按大图保存</div>
+    </div>
+  );
+}
+
+function MessageImages({ images, onOpenImage }) {
+  if (!images?.length) return null;
+  return (
+    <div className={"msg-imgs c" + Math.min(images.length, 3)}>
+      {images.map((src, index) => (
+        <button
+          type="button"
+          className="msg-img-button"
+          key={`${src}-${index}`}
+          onClick={(event) => { event.stopPropagation(); onOpenImage?.(src); }}
+          onMouseDown={(event) => event.stopPropagation()}
+          onTouchStart={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.stopPropagation()}
+          aria-label="打开图片预览"
+        >
+          <img src={src} alt="聊天图片" />
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /* ---------------- 单条消息 ---------------- */
-function Bubble({ m, agent, tts, voice, myAvatar, onDelete }) {
+function Bubble({ m, agent, tts, voice, myAvatar, onDelete, onOpenImage }) {
   const [menuPos, setMenuPos] = useStateC(null); // {x, y} 或 null
   const pressRef = useRefC(null);
 
@@ -516,11 +604,7 @@ function Bubble({ m, agent, tts, voice, myAvatar, onDelete }) {
               <VoiceBubble mine dur={m.dur} src={m.audioUrl} />
             ) : (
               <div className="bubble me-bubble">
-                {m.images && m.images.length > 0 && (
-                  <div className={"msg-imgs c" + Math.min(m.images.length, 3)}>
-                    {m.images.map((src, i) => <img key={i} src={src} alt="" />)}
-                  </div>
-                )}
+                <MessageImages images={m.images} onOpenImage={onOpenImage} />
                 {m.text && <span className="msg-text">{m.text}</span>}
               </div>
             )}
@@ -544,11 +628,7 @@ function Bubble({ m, agent, tts, voice, myAvatar, onDelete }) {
           <div className="row-avatar"><img src={agent.avatar} alt="" onError={fallbackToDefaultRoleAvatar} /></div>
           <div className="her-stack">
             <div className={"bubble her-bubble" + (m.type === "proactive" ? " proactive" : "")}>
-              {m.images && m.images.length > 0 && (
-                <div className={"msg-imgs c" + Math.min(m.images.length, 3)}>
-                  {m.images.map((src, i) => <img key={i} src={src} alt="" />)}
-                </div>
-              )}
+              <MessageImages images={m.images} onOpenImage={onOpenImage} />
               {m.type === "voice" ? <VoiceBubble dur={m.dur} src={m.audioUrl} /> : (herText && <span className="msg-text">{herText}</span>)}
             </div>
             {m.time && <span className="msg-time">{m.time}</span>}
@@ -600,11 +680,14 @@ function toMsg(m) {
   if (d.toDateString() === today.toDateString()) _date = "今天";
   else if (d.toDateString() === yesterday.toDateString()) _date = "昨天";
   else _date = `${d.getMonth() + 1}月${d.getDate()}日`;
+  // AI 生成图的旧记录里可能存着完整提示词或“生成了一张…”技术说明；
+  // 这些都不属于聊天正文，统一只显示图片。用户自己发图时附带的文字仍保留。
+  const isGeneratedImageCaption = m.role !== "user" && m.message_type === "image";
   return {
     id: m.id,
     who: m.role === "user" ? "me" : "her",
     type: m.message_type || "text",
-    text: m.content || "",
+    text: isGeneratedImageCaption ? "" : (m.content || ""),
     images: (m.message_type === "image" && m.media_url) ? [m.media_url] : [],
     audioUrl: m.message_type === "voice" ? (m.media_url || m.audio_url || "") : "",
     dur: m.dur || "",
@@ -699,6 +782,7 @@ function ChatRoom({ agent, onBack }) {
   const [voiceSettings, setVoiceSettings] = useStateC(loadVoiceSettings);
   const [moreOpen, setMoreOpen] = useStateC(false); // 更多菜单
   const [modelOpen, setModelOpen] = useStateC(false);
+  const [previewImage, setPreviewImage] = useStateC("");
   const [modelChoice, setModelChoice] = useStateC(() => {
     try { const s = JSON.parse(localStorage.getItem(`ruobai_model_${roleId}`)); if (s) return s; } catch (e) {}
     return { credentialId: null, modelId: null, thinkLevel: "off" };
@@ -854,7 +938,7 @@ function ChatRoom({ agent, onBack }) {
               return [...copy, {
                 who: "her", type: "image",
                 images: [result.media_url],
-                text: `[画了：${t}]`,
+                text: "",
                 id: aiMsg?.id,
                 time: now(),
               }];
@@ -1055,7 +1139,7 @@ function ChatRoom({ agent, onBack }) {
 
       <div className="msg-area" ref={areaRef}>
         {q.trim() && <div className="search-note">找到 {shown.filter((m) => m.type !== "time").length} 条包含"{q.trim()}"的记录</div>}
-        {shown.map((m, i) => (m.type === "time" && q.trim()) ? null : <Bubble key={i} m={m} agent={agent} tts={voiceSettings.enabled && !q.trim()} voice={voiceSettings} myAvatar={myAvatar} onDelete={deleteMsg} />)}
+        {shown.map((m, i) => (m.type === "time" && q.trim()) ? null : <Bubble key={i} m={m} agent={agent} tts={voiceSettings.enabled && !q.trim()} voice={voiceSettings} myAvatar={myAvatar} onDelete={deleteMsg} onOpenImage={setPreviewImage} />)}
         {typing && !q.trim() && <Typing agent={agent} />}
         {chatError && <div className="chat-error" onClick={() => setChatError("")}>{chatError}<span style={{marginLeft:8,opacity:0.6}}>点击关闭</span></div>}
         <div style={{ height: 8 }} />
@@ -1068,6 +1152,8 @@ function ChatRoom({ agent, onBack }) {
       )}
 
       {big && <BigView agent={agent} figSrc={figSrc} onClose={() => setBig(false)} />}
+
+      {previewImage && <ChatImagePreview src={previewImage} onClose={() => setPreviewImage("")} />}
 
       {calling && <CallScreen agent={agent} figSrc={figSrc} onClose={() => setCalling(false)} />}
 
