@@ -762,6 +762,7 @@ test('POST /api/chat/draw uses the enabled image capability and keeps the full s
     assert.equal(generated.options.model, 'agnes-image-2.0-flash');
     assert.deepEqual(generated.options.character, character);
     assert.equal(inserted.length, 2);
+    assert.equal(inserted[1].params[3], '');
   });
 });
 

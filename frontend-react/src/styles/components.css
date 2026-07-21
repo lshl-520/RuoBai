@@ -286,6 +286,25 @@
 .msg-imgs img { width: 100%; aspect-ratio: 1; object-fit: cover; }
 .bubble .msg-text { display: block; }
 .me-bubble .msg-imgs { margin-left: -3px; margin-right: -3px; }
+.bubble .msg-imgs:last-child { margin-bottom: 0; }
+
+.msg-img-button { display: block; width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; overflow: hidden; cursor: zoom-in; line-height: 0; }
+.msg-img-button:focus-visible { outline: 2px solid var(--rose); outline-offset: -2px; border-radius: 12px; }
+.msg-imgs.c1 .msg-img-button { border-radius: 12px; }
+.msg-imgs.c1 .msg-img-button img { width: 100%; max-height: 200px; aspect-ratio: auto; object-fit: cover; border-radius: 12px; }
+
+.chat-image-preview { position: fixed; inset: 0; z-index: 1600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: max(22px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); background: rgba(13, 10, 17, 0.94); backdrop-filter: blur(12px); animation: fadeIn 0.18s ease; }
+.cip-stage { display: flex; align-items: center; justify-content: center; width: min(100%, 920px); min-height: 0; flex: 1; }
+.cip-stage img { display: block; max-width: 100%; max-height: calc(100vh - 160px); object-fit: contain; border-radius: 10px; box-shadow: 0 16px 50px rgba(0,0,0,0.34); user-select: none; -webkit-user-drag: none; }
+.cip-close { position: fixed; top: max(14px, env(safe-area-inset-top)); right: 16px; z-index: 2; width: 42px; height: 42px; border: 1px solid rgba(255,255,255,0.22); border-radius: 50%; background: rgba(0,0,0,0.36); color: #fff; font-size: 28px; line-height: 1; cursor: pointer; }
+.cip-actions { display: flex; align-items: center; justify-content: center; gap: 10px; flex-shrink: 0; }
+.cip-save, .cip-original { min-width: 112px; padding: 11px 18px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.24); font-size: 14px; font-weight: 650; text-align: center; text-decoration: none; cursor: pointer; }
+.cip-save { background: #fff; color: #28212b; }
+.cip-save:disabled { opacity: 0.65; cursor: wait; }
+.cip-original { background: rgba(255,255,255,0.1); color: #fff; }
+.cip-hint { color: rgba(255,255,255,0.62); font-size: 12px; flex-shrink: 0; }
+.cip-error { max-width: min(90vw, 440px); padding: 8px 12px; border-radius: 10px; background: rgba(190,58,79,0.3); color: #fff; font-size: 12px; text-align: center; }
+
 
 /* 待发送附件托盘 */
 .att-tray { display: flex; align-items: center; gap: 8px; padding: 4px 2px 10px; flex-wrap: wrap; }

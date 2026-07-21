@@ -548,7 +548,7 @@ export function createChatRouter({
         userId: req.userId,
         characterId,
         role: 'assistant',
-        content: `[画了一张图：${subject}]`,
+        content: '',
         messageType: 'image',
         mediaUrl,
       });
