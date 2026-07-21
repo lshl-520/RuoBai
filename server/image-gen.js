@@ -14,6 +14,11 @@ const MAX_PROMPT_LENGTH = 4000;
 const GENERATION_TIMEOUT_MS = 180000;
 const GENERATION_MAX_ATTEMPTS = 3;
 const RETRYABLE_GENERATION_STATUSES = new Set([429, 500, 502, 503, 504]);
+const Z_IMAGE_PROVIDER = 'z-image-comfy';
+const Z_IMAGE_DEFAULT_MODEL = 'z-image-initial';
+const Z_IMAGE_DEFAULT_WIDTH = 768;
+const Z_IMAGE_DEFAULT_HEIGHT = 1280;
+const Z_IMAGE_POLL_INTERVAL_MS = 1000;
 
 const DRAW_INTENT_PATTERNS = [
   /(?:帮我|给我|替我|为我|请)画/i,
@@ -205,25 +210,148 @@ function readImageResult(payload) {
   return null;
 }
 
+
+function buildZImageBases(apiBase, extras = {}) {
+  const submitBase = String(apiBase || '').trim().replace(/\/+$/, '');
+  let taskBase = String(extras.task_api_base || extras.taskApiBase || '').trim().replace(/\/+$/, '');
+  if (!taskBase) {
+    taskBase = submitBase.replace(/:\/\/zit-web\./i, '://zit-api.');
+  }
+  return { submitBase, taskBase };
+}
+
+function readZImageExecutionError(entry) {
+  const messages = Array.isArray(entry?.status?.messages) ? entry.status.messages : [];
+  for (const item of messages) {
+    if (!Array.isArray(item) || item[0] !== 'execution_error') continue;
+    const detail = item[1] || {};
+    return String(detail.exception_message || detail.exception_type || detail.node_type || '任务执行失败').trim();
+  }
+  return '';
+}
+
+function readZImageOutput(entry, outputNode) {
+  const expected = entry?.outputs?.[outputNode]?.images;
+  if (Array.isArray(expected) && expected[0]) return expected[0];
+  const outputs = Object.values(entry?.outputs || {});
+  const fallback = outputs.flatMap(output => Array.isArray(output?.images) ? output.images : [])
+    .filter(image => image?.type === 'output');
+  return fallback.at(-1) || null;
+}
+
+async function generateZImage({
+  prompt,
+  apiBase,
+  extras,
+  fetchImpl,
+  fileStorage,
+  sleepImpl,
+  timeoutMs
+}) {
+  const { submitBase, taskBase } = buildZImageBases(apiBase, extras);
+  if (!submitBase || !taskBase) throw new Error('Z-Image 渠道地址不完整');
+
+  const width = Number(extras.width) || Z_IMAGE_DEFAULT_WIDTH;
+  const height = Number(extras.height) || Z_IMAGE_DEFAULT_HEIGHT;
+  const clientId = String(extras.client_id || extras.clientId || globalThis.crypto?.randomUUID?.()
+    || `ruobai-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
+  const submitResponse = await fetchImpl(`${submitBase}/api/prompt/initial`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ prompt, width, height, client_id: clientId }),
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+  const submitRaw = await submitResponse.text().catch(() => '');
+  if (!submitResponse.ok) {
+    throw new Error(`Z-Image 提交失败（${submitResponse.status}）：${parseProviderError(submitRaw, submitResponse.status)}`);
+  }
+
+  let submitted;
+  try {
+    submitted = submitRaw ? JSON.parse(submitRaw) : {};
+  } catch {
+    throw new Error('Z-Image 提交接口返回的内容无法识别');
+  }
+  const promptId = String(submitted?.prompt_id || '').trim();
+  const outputNode = String(submitted?.output_node || '').trim();
+  if (!promptId) throw new Error('Z-Image 没有返回任务编号');
+
+  const pollIntervalMs = Math.max(100, Number(extras.poll_interval_ms || extras.pollIntervalMs) || Z_IMAGE_POLL_INTERVAL_MS);
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const historyResponse = await fetchImpl(`${taskBase}/history/${encodeURIComponent(promptId)}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(Math.min(60000, timeoutMs))
+    });
+    const historyRaw = await historyResponse.text().catch(() => '');
+    if (!historyResponse.ok) {
+      throw new Error(`Z-Image 查询任务失败（${historyResponse.status}）：${parseProviderError(historyRaw, historyResponse.status)}`);
+    }
+
+    let history;
+    try {
+      history = historyRaw ? JSON.parse(historyRaw) : {};
+    } catch {
+      throw new Error('Z-Image 任务状态返回的内容无法识别');
+    }
+    const entry = history?.[promptId];
+    if (entry) {
+      const image = readZImageOutput(entry, outputNode);
+      if (image?.filename) {
+        const query = new URLSearchParams({
+          filename: String(image.filename),
+          subfolder: String(image.subfolder || ''),
+          type: String(image.type || 'output')
+        });
+        const imageUrl = `${taskBase}/view?${query.toString()}&t=${Date.now()}`;
+        const filename = `draw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
+        return downloadAndSaveImage(imageUrl, filename, fetchImpl, fileStorage);
+      }
+      if (entry?.status?.completed) {
+        const error = readZImageExecutionError(entry);
+        throw new Error(error ? `Z-Image 生成失败：${error}` : 'Z-Image 任务已结束，但没有返回图片');
+      }
+    }
+    await sleepImpl(pollIntervalMs);
+  }
+
+  throw new Error(`Z-Image 生成等待超过 ${Math.round(timeoutMs / 60000)} 分钟，请稍后再试`);
+}
+
 export async function generateImage(subject, options = {}) {
   const normalizedOptions = typeof options === 'function'
     ? { fetchImpl: options }
     : (options || {});
-  const apiKey = String(normalizedOptions.apiKey || LEGACY_IMAGE_KEY || '').trim();
+  const providerType = String(normalizedOptions.providerType || normalizedOptions.provider_type || 'openai-compatible').trim();
+  const apiKey = String(normalizedOptions.apiKey || (providerType === Z_IMAGE_PROVIDER ? '' : LEGACY_IMAGE_KEY) || '').trim();
   const apiBase = String(normalizedOptions.apiBase || LEGACY_IMAGE_BASE || '').trim();
-  const model = String(normalizedOptions.model || LEGACY_IMAGE_MODEL || '').trim();
+  const model = String(normalizedOptions.model || (providerType === Z_IMAGE_PROVIDER ? Z_IMAGE_DEFAULT_MODEL : LEGACY_IMAGE_MODEL) || '').trim();
   const fetchImpl = normalizedOptions.fetchImpl || fetch;
   const fileStorage = normalizedOptions.fileStorage || fs;
   const sleepImpl = normalizedOptions.sleepImpl || (ms => new Promise(resolve => setTimeout(resolve, ms)));
   const generationTimeoutMs = Number(normalizedOptions.generationTimeoutMs) || GENERATION_TIMEOUT_MS;
   const extras = normalizeExtras(normalizedOptions.extras);
 
-  if (!apiKey || !apiBase || !model) {
+  const needsApiKey = providerType !== Z_IMAGE_PROVIDER;
+  if ((needsApiKey && !apiKey) || !apiBase || !model) {
     throw new Error('请先在“我的 → 她的能力”里启用并选择“画图发图”模型');
   }
 
   const prompt = buildImagePrompt(subject, normalizedOptions.character);
   if (!prompt) throw new Error('请告诉我你想画什么');
+
+  if (providerType === Z_IMAGE_PROVIDER) {
+    return generateZImage({
+      prompt,
+      apiBase,
+      extras,
+      fetchImpl,
+      fileStorage,
+      sleepImpl,
+      timeoutMs: generationTimeoutMs
+    });
+  }
 
   const requestBody = {
     model,

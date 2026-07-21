@@ -45,6 +45,7 @@ function createFixture({
         return [imageEnabled ? [{
           id: 2,
           capability: 'image',
+          provider_type: 'openai-compatible',
           api_base: 'https://image.example.com/v1',
           api_key: 'IMAGE_TOKEN',
           model: 'gpt-image-selected',
@@ -151,6 +152,7 @@ test('enabled image capability uses exactly the model selected in her capabiliti
   assert.equal(result.status, 'posted');
   assert.deepEqual(result.images, ['/user_assets/chat/auto-moment.png']);
   assert.equal(fixture.imageCalls.length, 1);
+  assert.equal(fixture.imageCalls[0].options.providerType, 'openai-compatible');
   assert.equal(fixture.imageCalls[0].options.apiBase, 'https://image.example.com/v1');
   assert.equal(fixture.imageCalls[0].options.apiKey, 'IMAGE_TOKEN');
   assert.equal(fixture.imageCalls[0].options.model, 'gpt-image-selected');
@@ -162,12 +164,14 @@ test('image generation failure still publishes the text moment', async () => {
     db: fixture.db,
     fetchImpl: fixture.fetchImpl,
     generateImageImpl: fixture.generateImageImpl,
+    sleepImpl: async () => {},
     logger: { log() {}, warn() {}, error() {} }
   });
 
   const [result] = await service.runScan({ characterId: 61, ignoreLimits: true });
   assert.equal(result.status, 'posted');
   assert.deepEqual(result.images, []);
+  assert.equal(fixture.imageCalls.length, 2);
   assert.equal(fixture.inserted[0].params[3], null);
 });
 
@@ -192,4 +196,29 @@ test('daily limit and minimum interval prevent duplicate automatic moments', asy
   const [intervalResult] = await intervalService.runScan({ characterId: 61 });
   assert.equal(intervalResult.status, 'skipped_interval');
   assert.equal(intervalFixture.inserted.length, 0);
+});
+
+
+test('automatic moment retries a failed image round and stops after success', async () => {
+  const fixture = createFixture({ imageEnabled: true });
+  let attempts = 0;
+  const waits = [];
+  const service = createAutoMomentsService({
+    db: fixture.db,
+    fetchImpl: fixture.fetchImpl,
+    generateImageImpl: async (_subject, options) => {
+      attempts += 1;
+      assert.equal(options.providerType, 'openai-compatible');
+      if (attempts === 1) throw new Error('中转临时 502');
+      return '/user_assets/chat/retry-success.png';
+    },
+    sleepImpl: async ms => waits.push(ms),
+    logger: { log() {}, warn() {}, error() {} }
+  });
+
+  const [result] = await service.runScan({ characterId: 61, ignoreLimits: true });
+  assert.equal(result.status, 'posted');
+  assert.equal(attempts, 2);
+  assert.deepEqual(waits, [30_000]);
+  assert.deepEqual(result.images, ['/user_assets/chat/retry-success.png']);
 });

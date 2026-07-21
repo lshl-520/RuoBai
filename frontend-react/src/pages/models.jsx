@@ -72,6 +72,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
   useLockBody();
   const [type, setType] = useStateMo(channel?.type || "openai");
   const preset = CHANNEL_TYPES[type] || CHANNEL_TYPES.custom;
+  const noKeyRequired = Boolean(preset.noKey);
   const [name, setName] = useStateMo(channel?.name || "");
   const [base, setBase] = useStateMo(channel?.base || preset.base);
   const [apiKey, setApiKey] = useStateMo(channel?.apiKey || "");
@@ -92,13 +93,22 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
   const pickType = (t) => {
     setType(t);
     const p = CHANNEL_TYPES[t] || CHANNEL_TYPES.custom;
-    if (!channel) { setBase(p.base); setModels([]); setModel(""); }
+    if (!channel) {
+      setBase(p.base);
+      setModels(p.models || []);
+      setModel(p.models?.[0] || "");
+      if (p.noKey) setPurposes(["image"]);
+    }
   };
 
   const fetchModels = async () => {
     setFetchState("loading");
     try {
-      if (channel?._backendId) {
+      if (type === "z-image-comfy" && !channel?._backendId) {
+        setModels(["z-image-initial"]);
+        setModel("z-image-initial");
+        setFetchState("done");
+      } else if (channel?._backendId) {
         const result = await refreshCredentialModels(channel._backendId);
         if (result.success && result.items?.length) {
           const ids = result.items.map((m) => m.model_id);
@@ -125,11 +135,12 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
     }
   };
 
-  const canSave = (isNew ? name.trim() : true) && (apiKey.trim() || type === "custom" || !!channel?._backendId);
+  const canSave = (isNew ? name.trim() : true) && base.trim() && (noKeyRequired || apiKey.trim() || type === "custom" || !!channel?._backendId);
 
   const PURPOSE_OPTS = [
     { key: "chat", icon: "chat", label: "聊天" },
-    { key: "vision", icon: "image", label: "图片" },
+    { key: "vision", icon: "image", label: "看图" },
+    { key: "image", icon: "image", label: "画图" },
     { key: "tts", icon: "wave", label: "语音" },
     { key: "realtime", icon: "phone", label: "实时通话" },
   ];
@@ -158,12 +169,16 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
           <label className="field-label">中转地址 / Base URL</label>
           <input className="fld" value={base} onChange={(e) => setBase(e.target.value)} placeholder="https://api.example.com/v1" />
 
-          <label className="field-label">API 密钥 <span className="lbl-hint">只存你本地</span></label>
-          <div className="key-field">
-            <input className="fld" type={showKey ? "text" : "password"} value={apiKey}
-              onChange={(e) => { setApiKey(e.target.value); setFetchState("idle"); }} placeholder={preset.keyHint} />
-            <button className="key-eye" onClick={() => setShowKey(!showKey)}><Icon name={showKey ? "eyeOff" : "eye"} /></button>
-          </div>
+          <label className="field-label">API 密钥 <span className="lbl-hint">{noKeyRequired ? "这个渠道无需填写" : "只存你本地"}</span></label>
+          {noKeyRequired ? (
+            <div className="model-empty" style={{ marginTop: 0 }}>无需密钥，保存后即可在「画图发图」里选择。</div>
+          ) : (
+            <div className="key-field">
+              <input className="fld" type={showKey ? "text" : "password"} value={apiKey}
+                onChange={(e) => { setApiKey(e.target.value); setFetchState("idle"); }} placeholder={preset.keyHint} />
+              <button className="key-eye" onClick={() => setShowKey(!showKey)}><Icon name={showKey ? "eyeOff" : "eye"} /></button>
+            </div>
+          )}
 
           <label className="field-label">这个渠道用来做什么 <span className="lbl-hint">可多选</span></label>
           <div className="type-grid">
@@ -183,7 +198,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
                 : <><Icon name="refresh" /> 获取模型列表</>}
             </button>
           </div>
-          {models.length === 0 && <div className="model-empty">点「获取模型列表」拉取，或手动输入</div>}
+          {models.length === 0 && <div className="model-empty">{noKeyRequired ? "这个渠道会自动使用固定生图模型" : "点「获取模型列表」拉取，或手动输入"}</div>}
           {models.length > 0 && models.length <= 10 && (
             <div className="model-chips" style={{ marginTop: 8 }}>
               {models.map((m) => (
