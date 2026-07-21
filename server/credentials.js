@@ -4,8 +4,8 @@ import { asyncHandler, maskSecret, parseInteger } from './helpers.js';
 import { buildChatCompletionsUrl } from './chat.js';
 import { guessModelCapabilities } from './model-capabilities.js';
 
-const Z_IMAGE_PROVIDER = 'z-image-comfy';
-const Z_IMAGE_MODEL = 'z-image-initial';
+const TASK_IMAGE_PROVIDER = 'image-task-no-key';
+const TASK_IMAGE_MODEL = 'task-image-default';
 
 function buildModelsUrl(apiBase) {
   const base = String(apiBase || '').trim().replace(/\/+$/, '');
@@ -24,16 +24,12 @@ function buildModelsUrl(apiBase) {
   return `${base}/v1/models`;
 }
 
-function isZImageProvider(providerType) {
-  return String(providerType || '').trim() === Z_IMAGE_PROVIDER;
+function isTaskImageProvider(providerType) {
+  return String(providerType || '').trim() === TASK_IMAGE_PROVIDER;
 }
 
-function buildZImageTaskBase(apiBase) {
-  return String(apiBase || '').trim().replace(/\/+$/, '').replace(/:\/\/zit-web\./i, '://zit-api.');
-}
-
-function fixedZImageModels() {
-  return [{ model_id: Z_IMAGE_MODEL, capabilities: ['image'] }];
+function fixedTaskImageModels() {
+  return [{ model_id: TASK_IMAGE_MODEL, capabilities: ['image'] }];
 }
 
 function sanitizeCredential(body = {}) {
@@ -41,6 +37,7 @@ function sanitizeCredential(body = {}) {
     name: String(body.name || '').trim(),
     provider_type: String(body.provider_type || 'openai-compatible').trim() || 'openai-compatible',
     api_base: String(body.api_base || '').trim().replace(/\/+$/, ''),
+    api_aux_base: String(body.api_aux_base || '').trim().replace(/\/+$/, ''),
     api_key: String(body.api_key || '').trim()
   };
 }
@@ -52,6 +49,7 @@ function presentCredential(row) {
     name: row.name,
     provider_type: row.provider_type,
     api_base: row.api_base,
+    api_aux_base: row.api_aux_base || '',
     created_at: row.created_at,
     api_key_masked: maskSecret(row.api_key),
     models_count: Number(row.models_count || 0)
@@ -81,7 +79,7 @@ function summarizeCapabilities(items = []) {
 async function loadCredentialRow(queryable, credentialId, userId) {
   const [rows] = await queryable.query(
     `
-      SELECT id, user_id, name, provider_type, api_base, api_key, created_at
+      SELECT id, user_id, name, provider_type, api_base, api_aux_base, api_key, created_at
       FROM credentials
       WHERE id = ? AND user_id = ?
       LIMIT 1
@@ -101,13 +99,14 @@ async function loadCredentials(queryable, userId) {
         c.name,
         c.provider_type,
         c.api_base,
+        c.api_aux_base,
         c.api_key,
         c.created_at,
         COUNT(cm.id) AS models_count
       FROM credentials c
       LEFT JOIN credential_models cm ON cm.credential_id = c.id
       WHERE c.user_id = ?
-      GROUP BY c.id, c.user_id, c.name, c.provider_type, c.api_base, c.api_key, c.created_at
+      GROUP BY c.id, c.user_id, c.name, c.provider_type, c.api_base, c.api_aux_base, c.api_key, c.created_at
       ORDER BY c.id DESC
     `,
     [userId]
@@ -133,8 +132,12 @@ export function createCredentialsRouter({
 
   router.post('/', asyncHandler(async (req, res) => {
     const payload = sanitizeCredential(req.body);
-    if (!payload.name || !payload.api_base || (!payload.api_key && !isZImageProvider(payload.provider_type))) {
-      return res.status(400).json({ success: false, error: '凭证字段不完整' });
+    const taskImageProvider = isTaskImageProvider(payload.provider_type);
+    if (!payload.name || !payload.api_base || (!payload.api_key && !taskImageProvider)) {
+      return res.status(400).json({ success: false, error: '渠道名称、地址或密钥没有填完整' });
+    }
+    if (taskImageProvider && !payload.api_aux_base) {
+      return res.status(400).json({ success: false, error: '任务式图片接口还需要填写“任务查询 / 图片地址”' });
     }
 
     const [existingRows] = await pool.query(
@@ -148,17 +151,17 @@ export function createCredentialsRouter({
     const item = await withTransaction(async connection => {
       const [result] = await connection.query(
         `
-          INSERT INTO credentials (user_id, name, provider_type, api_base, api_key, created_at)
-          VALUES (?, ?, ?, ?, ?, NOW())
+          INSERT INTO credentials (user_id, name, provider_type, api_base, api_aux_base, api_key, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, NOW())
         `,
-        [req.userId, payload.name, payload.provider_type, payload.api_base, payload.api_key]
+        [req.userId, payload.name, payload.provider_type, payload.api_base, payload.api_aux_base, payload.api_key]
       );
 
-      if (isZImageProvider(payload.provider_type)) {
+      if (isTaskImageProvider(payload.provider_type)) {
         await connection.query(
           `INSERT INTO credential_models (credential_id, model_id, capabilities, discovered_at)
            VALUES (?, ?, ?, NOW())`,
-          [result.insertId, Z_IMAGE_MODEL, JSON.stringify(['image'])]
+          [result.insertId, TASK_IMAGE_MODEL, JSON.stringify(['image'])]
         );
       }
 
@@ -191,6 +194,7 @@ export function createCredentialsRouter({
             name = COALESCE(?, name),
             provider_type = COALESCE(?, provider_type),
             api_base = COALESCE(?, api_base),
+            api_aux_base = COALESCE(?, api_aux_base),
             api_key = COALESCE(?, api_key)
           WHERE id = ? AND user_id = ?
         `,
@@ -198,6 +202,7 @@ export function createCredentialsRouter({
           req.body?.name !== undefined ? payload.name : null,
           req.body?.provider_type !== undefined ? payload.provider_type : null,
           req.body?.api_base !== undefined ? payload.api_base : null,
+          req.body?.api_aux_base !== undefined ? payload.api_aux_base : null,
           req.body?.api_key !== undefined ? payload.api_key : null,
           credentialId,
           req.userId
@@ -258,8 +263,8 @@ export function createCredentialsRouter({
     }
 
     let items = [];
-    if (isZImageProvider(credential.provider_type)) {
-      items = fixedZImageModels();
+    if (isTaskImageProvider(credential.provider_type)) {
+      items = fixedTaskImageModels();
     } else {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15000);
@@ -343,10 +348,10 @@ export function createCredentialsRouter({
     const timeout = setTimeout(() => controller.abort(), 10000);
 
     try {
-      const testUrl = isZImageProvider(credential.provider_type)
-        ? `${buildZImageTaskBase(credential.api_base)}/system_stats`
+      const testUrl = isTaskImageProvider(credential.provider_type)
+        ? `${String(credential.api_aux_base || '').replace(/\/+$/, '')}/system_stats`
         : buildModelsUrl(credential.api_base);
-      const headers = isZImageProvider(credential.provider_type)
+      const headers = isTaskImageProvider(credential.provider_type)
         ? { Accept: 'application/json' }
         : { Authorization: `Bearer ${credential.api_key}` };
       const response = await fetchImpl(testUrl, {

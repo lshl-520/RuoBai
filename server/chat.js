@@ -356,6 +356,7 @@ export function createChatRouter({
           c.name,
           c.provider_type,
           c.api_base,
+          c.api_aux_base,
           c.api_key,
           ca.model_id AS model
         FROM capability_assignments ca
@@ -396,6 +397,7 @@ export function createChatRouter({
           c.name,
           c.provider_type,
           c.api_base,
+          c.api_aux_base,
           c.api_key,
           ca.model_id AS model
         FROM capability_assignments ca
@@ -533,6 +535,7 @@ export function createChatRouter({
       const mediaUrl = await generateImageImpl(subject, {
         providerType: imageConfig.provider_type,
         apiBase: imageConfig.api_base,
+        taskApiBase: imageConfig.api_aux_base,
         apiKey: imageConfig.api_key,
         model: imageConfig.model,
         extras: imageConfig.extras,

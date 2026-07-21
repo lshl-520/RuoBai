@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ensureCharacterRuntimeColumns, ensurePushRuntimeTables } from './schema.js';
+import { ensureCharacterRuntimeColumns, ensureCredentialRuntimeColumns, ensurePushRuntimeTables } from './schema.js';
 
 test('ensureCharacterRuntimeColumns adds missing role-page columns once', async () => {
   const calls = [];
@@ -21,6 +21,23 @@ test('ensureCharacterRuntimeColumns adds missing role-page columns once', async 
   const alterCalls = calls.filter(call => /^ALTER TABLE characters/i.test(call.sql));
   assert.equal(alterCalls.length, 1);
   assert.match(alterCalls[0].sql, /ADD COLUMN portrait_id INT DEFAULT NULL AFTER avatar/i);
+});
+
+test('ensureCredentialRuntimeColumns adds the auxiliary task address once', async () => {
+  const calls = [];
+  const db = {
+    query: async (sql, params = []) => {
+      calls.push({ sql, params });
+      if (sql.includes('information_schema.COLUMNS')) return [[]];
+      return [{ affectedRows: 0 }];
+    }
+  };
+
+  await ensureCredentialRuntimeColumns(db);
+
+  const alterCalls = calls.filter(call => /^ALTER TABLE credentials/i.test(call.sql));
+  assert.equal(alterCalls.length, 1);
+  assert.match(alterCalls[0].sql, /ADD COLUMN api_aux_base VARCHAR\(500\) DEFAULT '' AFTER api_base/i);
 });
 
 test('ensurePushRuntimeTables creates FCM and proactive-message tables', async () => {

@@ -39,6 +39,7 @@ test('GET /api/credentials returns current user credentials with masked key', as
           name: '饼干姐姐',
           provider_type: 'openai',
           api_base: 'https://ai98pro.xyz',
+          api_aux_base: '',
           api_key: 'sk-1234567890abcd',
           created_at: '2026-05-24 10:00:00',
           models_count: 12
@@ -68,6 +69,7 @@ test('POST /api/credentials creates a credential and PATCH updates only the curr
     name: '千问官方',
     provider_type: 'openai-compatible',
     api_base: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    api_aux_base: '',
     api_key: 'sk-created',
     created_at: '2026-05-24 11:00:00',
     models_count: 0
@@ -242,6 +244,7 @@ test('POST /api/credentials/:id/refresh-models infers capabilities and caches mo
             name: '测试中转',
             provider_type: 'openai',
             api_base: 'https://api.x.ai',
+            api_aux_base: '',
             api_key: 'sk-refresh',
             created_at: '2026-05-24 10:00:00'
           }]];
@@ -308,6 +311,7 @@ test('POST /api/credentials/:id/test checks /v1/models connectivity for the curr
           name: '千问',
           provider_type: 'openai-compatible',
           api_base: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+          api_aux_base: '',
           api_key: 'sk-test',
           created_at: '2026-05-24 10:00:00'
         }]];
@@ -328,22 +332,23 @@ test('POST /api/credentials/:id/test checks /v1/models connectivity for the curr
 });
 
 
-test('Z-Image credential can be created without a key and registers its fixed image model', async () => {
+test('task image credential can be created without a key and stores both addresses', async () => {
   const insertedModels = [];
   const created = {
     id: 12,
     user_id: 7,
-    name: '群友 Z-Image',
-    provider_type: 'z-image-comfy',
-    api_base: 'https://zit-web.qixunmm.xyz',
+    name: '私人任务式图片',
+    provider_type: 'image-task-no-key',
+    api_base: 'https://submit.example.com',
     api_key: '',
+    api_aux_base: 'https://tasks.example.com',
     created_at: '2026-07-21 23:50:00'
   };
   const router = createCredentialsRouter({
     pool: {
       query: async (sql, params) => {
         if (sql.includes('SELECT id FROM credentials WHERE user_id = ? AND name = ?')) {
-          assert.deepEqual(params, [7, '群友 Z-Image']);
+          assert.deepEqual(params, [7, '私人任务式图片']);
           return [[]];
         }
         throw new Error(`Unexpected pool query: ${sql}`);
@@ -352,7 +357,7 @@ test('Z-Image credential can be created without a key and registers its fixed im
     withTransaction: async work => work({
       query: async (sql, params) => {
         if (sql.includes('INSERT INTO credentials')) {
-          assert.deepEqual(params.slice(0, 5), [7, '群友 Z-Image', 'z-image-comfy', 'https://zit-web.qixunmm.xyz', '']);
+          assert.deepEqual(params.slice(0, 6), [7, '私人任务式图片', 'image-task-no-key', 'https://submit.example.com', 'https://tasks.example.com', '']);
           return [{ insertId: 12 }];
         }
         if (sql.includes('INSERT INTO credential_models')) {
@@ -372,16 +377,36 @@ test('Z-Image credential can be created without a key and registers its fixed im
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: '群友 Z-Image',
-        provider_type: 'z-image-comfy',
-        api_base: 'https://zit-web.qixunmm.xyz',
+        name: '私人任务式图片',
+        provider_type: 'image-task-no-key',
+        api_base: 'https://submit.example.com',
+        api_aux_base: 'https://tasks.example.com',
         api_key: ''
       })
     });
     const payload = await response.json();
     assert.equal(response.status, 201);
     assert.equal(payload.success, true);
-    assert.deepEqual(insertedModels, [{ model: 'z-image-initial', capabilities: ['image'] }]);
+    assert.deepEqual(insertedModels, [{ model: 'task-image-default', capabilities: ['image'] }]);
+  });
+});
+
+test('task image credentials require the task query address', async () => {
+  const router = createCredentialsRouter({ pool: { query: async () => { throw new Error('should not query'); } } });
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: '缺少查询地址',
+        provider_type: 'image-task-no-key',
+        api_base: 'https://submit.example.com',
+        api_key: ''
+      })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 400);
+    assert.match(payload.error, /任务查询/);
   });
 });
 
@@ -397,15 +422,16 @@ test('ordinary credentials still require an API key', async () => {
   });
 });
 
-test('Z-Image refresh uses a fixed model and connectivity test uses system_stats', async () => {
+test('task image refresh uses a fixed model and connectivity test uses the auxiliary base', async () => {
   const requestedUrls = [];
   const insertedModels = [];
   const credential = {
     id: 13,
     user_id: 7,
-    name: '群友 Z-Image',
-    provider_type: 'z-image-comfy',
-    api_base: 'https://zit-web.qixunmm.xyz',
+    name: '私人任务式图片',
+    provider_type: 'image-task-no-key',
+    api_base: 'https://submit.example.com',
+    api_aux_base: 'https://tasks.example.com',
     api_key: ''
   };
   const router = createCredentialsRouter({
@@ -435,11 +461,11 @@ test('Z-Image refresh uses a fixed model and connectivity test uses system_stats
     const refreshResponse = await fetch(`${baseUrl}/api/credentials/13/refresh-models`, { method: 'POST' });
     const refreshPayload = await refreshResponse.json();
     assert.equal(refreshResponse.status, 200);
-    assert.deepEqual(refreshPayload.summary.image, ['z-image-initial']);
-    assert.deepEqual(insertedModels, [{ model: 'z-image-initial', capabilities: ['image'] }]);
+    assert.deepEqual(refreshPayload.summary.image, ['task-image-default']);
+    assert.deepEqual(insertedModels, [{ model: 'task-image-default', capabilities: ['image'] }]);
 
     const testResponse = await fetch(`${baseUrl}/api/credentials/13/test`, { method: 'POST' });
     assert.equal(testResponse.status, 200);
-    assert.deepEqual(requestedUrls, ['https://zit-api.qixunmm.xyz/system_stats']);
+    assert.deepEqual(requestedUrls, ['https://tasks.example.com/system_stats']);
   });
 });
