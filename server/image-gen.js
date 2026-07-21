@@ -11,6 +11,9 @@ const LEGACY_IMAGE_KEY = process.env.AGNES_AI_KEY || '';
 const LEGACY_IMAGE_BASE = process.env.AGNES_AI_BASE || 'https://apihub.agnes-ai.com/v1';
 const LEGACY_IMAGE_MODEL = process.env.AGNES_IMAGE_MODEL || 'agnes-image-2.0-flash';
 const MAX_PROMPT_LENGTH = 4000;
+const GENERATION_TIMEOUT_MS = 180000;
+const GENERATION_MAX_ATTEMPTS = 3;
+const RETRYABLE_GENERATION_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 const DRAW_INTENT_PATTERNS = [
   /(?:帮我|给我|替我|为我|请)画/i,
@@ -111,6 +114,82 @@ async function downloadAndSaveImage(imageUrl, filename, fetchImpl, fileStorage) 
   throw new Error(`图片已经生成，但下载到本地失败：${detail}`);
 }
 
+function parseProviderError(detail, status) {
+  let message = `图片生成失败 (${status})`;
+  try {
+    const parsed = JSON.parse(detail);
+    const error = parsed?.error;
+    message = (typeof error === 'string' ? error : error?.message)
+      || parsed?.message
+      || parsed?.detail
+      || message;
+  } catch {}
+  return String(message || `图片生成失败 (${status})`).trim().slice(0, 500);
+}
+
+function presentGenerationError(status, message, attempts) {
+  if (status === 429) {
+    return `图片渠道请求太频繁，已自动重试 ${attempts} 次，请稍后再试`;
+  }
+  if (RETRYABLE_GENERATION_STATUSES.has(status)
+    || /service\s*(?:busy|unavailable)|temporarily unavailable|服务繁忙|上游.*不可用/i.test(message)) {
+    return `图片渠道上游暂时繁忙，已自动重试 ${attempts} 次，请稍后再试（中转站返回 ${status}）`;
+  }
+  return message;
+}
+
+async function requestImageGeneration({
+  url,
+  apiKey,
+  requestBody,
+  fetchImpl,
+  sleepImpl,
+  timeoutMs
+}) {
+  let lastNetworkError = null;
+
+  for (let attempt = 1; attempt <= GENERATION_MAX_ATTEMPTS; attempt += 1) {
+    let response;
+    try {
+      response = await fetchImpl(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify(requestBody),
+        signal: AbortSignal.timeout(timeoutMs)
+      });
+    } catch (error) {
+      lastNetworkError = error;
+      if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
+        throw new Error(`图片生成等待超过 ${Math.round(timeoutMs / 60000)} 分钟，中转站一直没有返回结果，请稍后再试`);
+      }
+      if (attempt < GENERATION_MAX_ATTEMPTS) {
+        await sleepImpl(attempt === 1 ? 5000 : 15000);
+        continue;
+      }
+
+      const detail = error?.cause?.message || error?.message || '未知网络错误';
+      throw new Error(`图片渠道连接中断，已自动重试 ${GENERATION_MAX_ATTEMPTS} 次：${detail}`);
+    }
+
+    const detail = await response.text().catch(() => '');
+    if (response.ok) return detail;
+
+    const message = parseProviderError(detail, response.status);
+    if (RETRYABLE_GENERATION_STATUSES.has(response.status) && attempt < GENERATION_MAX_ATTEMPTS) {
+      await sleepImpl(attempt === 1 ? 5000 : 15000);
+      continue;
+    }
+
+    throw new Error(presentGenerationError(response.status, message, attempt));
+  }
+
+  const detail = lastNetworkError?.cause?.message || lastNetworkError?.message || '未知网络错误';
+  throw new Error(`图片渠道连接中断：${detail}`);
+}
+
 function readImageResult(payload) {
   const first = payload?.data?.[0] || payload?.images?.[0] || payload?.output?.[0] || null;
   if (typeof first === 'string') {
@@ -135,6 +214,8 @@ export async function generateImage(subject, options = {}) {
   const model = String(normalizedOptions.model || LEGACY_IMAGE_MODEL || '').trim();
   const fetchImpl = normalizedOptions.fetchImpl || fetch;
   const fileStorage = normalizedOptions.fileStorage || fs;
+  const sleepImpl = normalizedOptions.sleepImpl || (ms => new Promise(resolve => setTimeout(resolve, ms)));
+  const generationTimeoutMs = Number(normalizedOptions.generationTimeoutMs) || GENERATION_TIMEOUT_MS;
   const extras = normalizeExtras(normalizedOptions.extras);
 
   if (!apiKey || !apiBase || !model) {
@@ -154,24 +235,14 @@ export async function generateImage(subject, options = {}) {
     requestBody.response_format = String(extras.response_format);
   }
 
-  const response = await fetchImpl(buildImageGenerationsUrl(apiBase), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify(requestBody)
+  const detail = await requestImageGeneration({
+    url: buildImageGenerationsUrl(apiBase),
+    apiKey,
+    requestBody,
+    fetchImpl,
+    sleepImpl,
+    timeoutMs: generationTimeoutMs
   });
-
-  const detail = await response.text().catch(() => '');
-  if (!response.ok) {
-    let message = `图片生成失败 (${response.status})`;
-    try {
-      const parsed = JSON.parse(detail);
-      message = parsed?.error?.message || parsed?.message || message;
-    } catch {}
-    throw new Error(message);
-  }
 
   let payload;
   try {

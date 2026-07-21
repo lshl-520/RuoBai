@@ -560,7 +560,9 @@ export function createChatRouter({
         media_url: mediaUrl,
       });
     } catch (error) {
-      return res.status(400).json({ success: false, error: error.message });
+      const message = error?.message || '图片生成失败';
+      const temporaryFailure = /上游暂时繁忙|连接中断|等待超过/.test(message);
+      return res.status(temporaryFailure ? 503 : 400).json({ success: false, error: message });
     }
   });
 
