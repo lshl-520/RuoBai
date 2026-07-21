@@ -29,6 +29,7 @@ function toAgent(role) {
     online: Boolean(role.is_active),
     isDefault: Boolean(role.is_active),
     autoMoments: Boolean(role.auto_moments_enabled),
+    momentFreq: [2, 4, 6].includes(Number(role.auto_moments_daily_max)) ? Number(role.auto_moments_daily_max) : 4,
     handle: role.tag || "角色",
     voice: "默认",
     lastMsg: "",
@@ -326,6 +327,7 @@ function AgentEditor({ agent, onClose, onSave }) {
   const [tagsStr, setTagsStr] = useStateA((agent?.tags || []).join(" "));
   const [auto, setAuto] = useStateA(agent?.autoMoments ?? true);
   const [freq, setFreq] = useStateA(agent?.momentFreq ?? 4);
+  const momentIntervalHours = Math.max(4, Math.round(24 / freq));
   const [compact, setCompact] = useStateA((agent?._raw?.speech_style || "") === "compact");
   const [busy, setBusy] = useStateA(false);
   const [error, setError] = useStateA("");
@@ -433,6 +435,9 @@ function AgentEditor({ agent, onClose, onSave }) {
                 portrait_id: portraitId,
                 portrait_custom_url: portraitCustomUrl,
                 auto_moments_enabled: auto,
+                auto_moments_daily_min: auto ? freq : 0,
+                auto_moments_daily_max: auto ? freq : 0,
+                auto_moments_min_interval_hours: momentIntervalHours,
                 speech_style: compact ? "compact" : "natural",
               };
               if (editing && agent._raw?.id) {
@@ -440,7 +445,7 @@ function AgentEditor({ agent, onClose, onSave }) {
               } else {
                 await createRole(payload);
               }
-              onSave({ id: agent?.id, name, persona, tagline, avatar: portrait, tags: tagsStr.split(/\s+/).filter(Boolean), autoMoments: auto });
+              onSave({ id: agent?.id, name, persona, tagline, avatar: portrait, tags: tagsStr.split(/\s+/).filter(Boolean), autoMoments: auto, momentFreq: freq });
             } catch (err) {
               setError(err instanceof Error ? err.message : "保存失败");
             } finally { setBusy(false); }
