@@ -111,3 +111,90 @@ test('generateImage retries a transient image download failure', async () => {
   assert.equal(fetchCount, 3);
   assert.equal(writes[0].buffer.toString(), 'downloaded-image');
 });
+
+
+test('generateImage retries temporary upstream 503 responses before succeeding', async () => {
+  let generationCalls = 0;
+  const waits = [];
+  const imagePath = await generateImage('请生成一张真实自拍照片', {
+    apiBase: 'https://middle.example.com',
+    apiKey: 'image-key',
+    model: 'gpt-image-1',
+    sleepImpl: async ms => waits.push(ms),
+    fetchImpl: async url => {
+      generationCalls += 1;
+      if (generationCalls < 3) {
+        return {
+          ok: false,
+          status: 503,
+          text: async () => JSON.stringify({ error: { message: 'Service busy' } })
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ data: [{ b64_json: Buffer.from('retry-success').toString('base64') }] })
+      };
+    },
+    fileStorage: {
+      mkdir: async () => {},
+      writeFile: async () => {}
+    }
+  });
+
+  assert.match(imagePath, /^\/user_assets\/chat\/draw-/);
+  assert.equal(generationCalls, 3);
+  assert.deepEqual(waits, [5000, 15000]);
+});
+
+test('generateImage reports a friendly error after repeated upstream failures', async () => {
+  let generationCalls = 0;
+  await assert.rejects(
+    generateImage('请生成一张真实自拍照片', {
+      apiBase: 'https://middle.example.com',
+      apiKey: 'image-key',
+      model: 'grok-imagine-image-lite',
+      sleepImpl: async () => {},
+      fetchImpl: async () => {
+        generationCalls += 1;
+        return {
+          ok: false,
+          status: 503,
+          text: async () => JSON.stringify({
+            error: { message: 'ServiceUnavailableError: Service busy (request id: hidden)' }
+          })
+        };
+      }
+    }),
+    /图片渠道上游暂时繁忙，已自动重试 3 次/
+  );
+  assert.equal(generationCalls, 3);
+});
+
+test('generateImage retries transient connection failures', async () => {
+  let generationCalls = 0;
+  const imagePath = await generateImage('请生成一张真实自拍照片', {
+    apiBase: 'https://middle.example.com',
+    apiKey: 'image-key',
+    model: 'gpt-image-2',
+    sleepImpl: async () => {},
+    fetchImpl: async () => {
+      generationCalls += 1;
+      if (generationCalls === 1) {
+        throw new TypeError('fetch failed', { cause: new Error('Connect Timeout Error') });
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ data: [{ b64_json: Buffer.from('network-retry-success').toString('base64') }] })
+      };
+    },
+    fileStorage: {
+      mkdir: async () => {},
+      writeFile: async () => {}
+    }
+  });
+
+  assert.match(imagePath, /^\/user_assets\/chat\/draw-/);
+  assert.equal(generationCalls, 2);
+});

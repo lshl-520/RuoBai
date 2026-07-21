@@ -764,3 +764,43 @@ test('POST /api/chat/draw uses the enabled image capability and keeps the full s
     assert.equal(inserted.length, 2);
   });
 });
+
+
+test('POST /api/chat/draw returns 503 for temporary image upstream failures', async () => {
+  const router = createChatRouter({
+    requireCharacterForUser: async () => ({ id: 7, user_id: 1, name: '林夏', persona: '', is_deleted: 0 }),
+    generateImageImpl: async () => {
+      throw new Error('图片渠道上游暂时繁忙，已自动重试 3 次，请稍后再试（中转站返回 503）');
+    },
+    pool: {
+      query: async (sql, params) => {
+        if (sql.includes('FROM capability_assignments ca') && params?.[1] === 'image') {
+          return [[{
+            id: 9,
+            capability: 'image',
+            enabled: 1,
+            extras: null,
+            name: 'grok',
+            provider_type: 'custom',
+            api_base: 'https://middle.example.com',
+            api_key: 'selected-key',
+            model: 'grok-imagine-image-lite'
+          }]];
+        }
+        throw new Error(`Unexpected query: ${sql}`);
+      }
+    }
+  });
+
+  await withServer(createApp({ router }), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/chat/draw?character_id=7`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: '请生成一张自拍照片' })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 503);
+    assert.equal(payload.success, false);
+    assert.match(payload.error, /上游暂时繁忙/);
+  });
+});
