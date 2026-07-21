@@ -8,6 +8,7 @@ const createTableStatements = [
       name VARCHAR(100) NOT NULL,
       provider_type VARCHAR(50) DEFAULT 'openai-compatible',
       api_base VARCHAR(500) NOT NULL,
+      api_aux_base VARCHAR(500) DEFAULT '',
       api_key VARCHAR(500) NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,

@@ -320,6 +320,7 @@ const schemaFixups = [
   { table: 'moments', column: 'images', definition: 'JSON', after: 'content' },
   { table: 'moments', column: 'likes_count', definition: 'INT DEFAULT 0', after: 'images' },
   { table: 'moments', column: 'is_deleted', definition: 'TINYINT(1) DEFAULT 0', after: 'created_at' },
+  { table: 'credentials', column: 'api_aux_base', definition: "VARCHAR(500) DEFAULT ''", after: 'api_base' },
   { table: 'model_configs', column: 'provider_type', definition: "VARCHAR(50) DEFAULT 'openai-compatible'", after: 'name' },
   { table: 'model_configs', column: 'api_base', definition: "VARCHAR(500) DEFAULT ''", after: 'provider_type' },
   { table: 'model_configs', column: 'model', definition: "VARCHAR(100) DEFAULT ''", after: 'api_key' },

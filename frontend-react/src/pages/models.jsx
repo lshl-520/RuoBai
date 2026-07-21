@@ -7,6 +7,8 @@ import { Toggle, StatusDot, Row } from "./profile.jsx";
 const { useState: useStateMo } = React;
 
 const LS_CH = "ruobai_channels_v2";
+const TASK_IMAGE_PROVIDER = "image-task-no-key";
+const TASK_IMAGE_MODEL = "task-image-default";
 const loadCH = () => { try { const s = JSON.parse(localStorage.getItem(LS_CH)); if (Array.isArray(s)) return s; } catch (e) {} return []; };
 
 const CAP_INFO = {
@@ -72,9 +74,11 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
   useLockBody();
   const [type, setType] = useStateMo(channel?.type || "openai");
   const preset = CHANNEL_TYPES[type] || CHANNEL_TYPES.custom;
-  const noKeyRequired = Boolean(preset.noKey);
+  const [taskImageMode, setTaskImageMode] = useStateMo(channel?.providerType === TASK_IMAGE_PROVIDER);
+  const noKeyRequired = taskImageMode;
   const [name, setName] = useStateMo(channel?.name || "");
   const [base, setBase] = useStateMo(channel?.base || preset.base);
+  const [taskBase, setTaskBase] = useStateMo(channel?.apiAuxBase || "");
   const [apiKey, setApiKey] = useStateMo(channel?.apiKey || "");
   const [enabled, setEnabled] = useStateMo(channel?.enabled ?? true);
   const [showKey, setShowKey] = useStateMo(false);
@@ -83,7 +87,24 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
   const [fetchState, setFetchState] = useStateMo("idle");
   const [purposes, setPurposes] = useStateMo(channel?.purposes?.length ? channel.purposes : ["chat"]);
 
-  const togglePurpose = (p) => setPurposes((prev) => prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]);
+  const togglePurpose = (p) => {
+    if (taskImageMode) return;
+    setPurposes((prev) => prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]);
+  };
+
+  const toggleTaskImageMode = () => {
+    const next = !taskImageMode;
+    setTaskImageMode(next);
+    setFetchState("idle");
+    if (next) {
+      setPurposes(["image"]);
+      setModels([TASK_IMAGE_MODEL]);
+      setModel(TASK_IMAGE_MODEL);
+    } else {
+      setModels([]);
+      setModel("");
+    }
+  };
 
   React.useEffect(() => {
     const body = document.querySelector('.sheet-body');
@@ -93,20 +114,20 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
   const pickType = (t) => {
     setType(t);
     const p = CHANNEL_TYPES[t] || CHANNEL_TYPES.custom;
+    if (t !== "custom") setTaskImageMode(false);
     if (!channel) {
       setBase(p.base);
       setModels(p.models || []);
       setModel(p.models?.[0] || "");
-      if (p.noKey) setPurposes(["image"]);
     }
   };
 
   const fetchModels = async () => {
     setFetchState("loading");
     try {
-      if (type === "z-image-comfy" && !channel?._backendId) {
-        setModels(["z-image-initial"]);
-        setModel("z-image-initial");
+      if (taskImageMode) {
+        setModels([TASK_IMAGE_MODEL]);
+        setModel(TASK_IMAGE_MODEL);
         setFetchState("done");
       } else if (channel?._backendId) {
         const result = await refreshCredentialModels(channel._backendId);
@@ -119,7 +140,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
           setModels([]);
         }
       } else {
-        if (!apiKey.trim() && type !== "custom") { setFetchState("fail"); return; }
+        if (!apiKey.trim()) { setFetchState("fail"); return; }
         const result = await discoverModelConfigs({ api_base: base, api_key: apiKey });
         if (result.success && result.items?.length) {
           setModels(result.items);
@@ -135,7 +156,10 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
     }
   };
 
-  const canSave = (isNew ? name.trim() : true) && base.trim() && (noKeyRequired || apiKey.trim() || type === "custom" || !!channel?._backendId);
+  const canSave = (isNew ? name.trim() : true)
+    && base.trim()
+    && (!taskImageMode || taskBase.trim())
+    && (noKeyRequired || apiKey.trim() || (!!channel?._backendId && channel?.providerType !== TASK_IMAGE_PROVIDER));
 
   const PURPOSE_OPTS = [
     { key: "chat", icon: "chat", label: "聊天" },
@@ -163,11 +187,26 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
             ))}
           </div>
 
+          {type === "custom" && (
+            <div className="switch-row" style={{ marginTop: 14 }}>
+              <div>
+                <div className="sr-t">无需密钥的任务式生图接口</div>
+                <div className="sr-s">适合提交任务后，再到另一个地址查询图片的私人接口</div>
+              </div>
+              <Toggle on={taskImageMode} onClick={toggleTaskImageMode} />
+            </div>
+          )}
+
           <label className="field-label">渠道名称 <span className="lbl-hint">给这个接口起个好认的名</span></label>
           <input className="fld" value={name} onChange={(e) => setName(e.target.value)} placeholder="例如:OpenAI 中转·贵 / 千问·语音" />
 
-          <label className="field-label">中转地址 / Base URL</label>
-          <input className="fld" value={base} onChange={(e) => setBase(e.target.value)} placeholder="https://api.example.com/v1" />
+          <label className="field-label">{taskImageMode ? "任务提交地址" : "中转地址 / Base URL"}</label>
+          <input className="fld" value={base} onChange={(e) => setBase(e.target.value)} placeholder={taskImageMode ? "https://submit.example.com" : "https://api.example.com/v1"} />
+
+          {taskImageMode && (<>
+            <label className="field-label">任务查询 / 图片地址</label>
+            <input className="fld" value={taskBase} onChange={(e) => setTaskBase(e.target.value)} placeholder="https://tasks.example.com" />
+          </>)}
 
           <label className="field-label">API 密钥 <span className="lbl-hint">{noKeyRequired ? "这个渠道无需填写" : "只存你本地"}</span></label>
           {noKeyRequired ? (
@@ -182,7 +221,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
 
           <label className="field-label">这个渠道用来做什么 <span className="lbl-hint">可多选</span></label>
           <div className="type-grid">
-            {PURPOSE_OPTS.map((p) => (
+            {(taskImageMode ? PURPOSE_OPTS.filter((p) => p.key === "image") : PURPOSE_OPTS).map((p) => (
               <button key={p.key} className={"type-chip" + (purposes.includes(p.key) ? " on" : "")} onClick={() => togglePurpose(p.key)}>
                 {p.label}
               </button>
@@ -212,7 +251,11 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
               {models.map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
           )}
-          <input className="fld" style={{ marginTop: 8 }} value={model} onChange={(e) => setModel(e.target.value)} placeholder="模型名,例如 gpt-5.5" />
+          {taskImageMode ? (
+            <div className="model-empty" style={{ marginTop: 8 }}>固定模型：{TASK_IMAGE_MODEL}</div>
+          ) : (
+            <input className="fld" style={{ marginTop: 8 }} value={model} onChange={(e) => setModel(e.target.value)} placeholder="模型名,例如 gpt-5.5" />
+          )}
 
           <div className="switch-row">
             <div><div className="sr-t">启用此渠道</div><div className="sr-s">停用后所有用途不会再选到它</div></div>
@@ -222,7 +265,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
         <div className="sheet-foot">
           {!isNew && <button className="icon-btn det-del" onClick={() => onDelete(channel.id)}><Icon name="trash" /></button>}
           <button className="pill pill-primary grow" disabled={!canSave} style={!canSave ? { opacity: 0.5 } : null}
-            onClick={() => onSave({ id: channel?.id, type, name, base, apiKey, enabled, model, fetched: models, purposes })}>
+            onClick={() => onSave({ id: channel?.id, type, providerType: taskImageMode ? TASK_IMAGE_PROVIDER : type, name, base, taskBase, apiKey: taskImageMode ? "" : apiKey, enabled, model: taskImageMode ? TASK_IMAGE_MODEL : model, fetched: models, purposes: taskImageMode ? ["image"] : purposes })}>
             {isNew ? "添加渠道" : "保存"}
           </button>
         </div>
@@ -381,9 +424,11 @@ function ModelsSection() {
       if (raw.length === 0) return;
       const converted = raw.map((cfg) => ({
         id: String(cfg.id),
-        type: cfg.provider_type || "custom",
+        type: cfg.provider_type === TASK_IMAGE_PROVIDER ? "custom" : (cfg.provider_type || "custom"),
+        providerType: cfg.provider_type || "openai-compatible",
         name: cfg.name || "未命名渠道",
         base: cfg.api_base || "",
+        apiAuxBase: cfg.api_aux_base || "",
         apiKey: "",
         apiKeyMasked: cfg.api_key_masked || "",
         model: "",
@@ -402,9 +447,11 @@ function ModelsSection() {
       const raw = Array.isArray(payload?.items) ? payload.items : [];
       const converted = raw.map((cfg) => ({
         id: String(cfg.id),
-        type: cfg.provider_type || "custom",
+        type: cfg.provider_type === TASK_IMAGE_PROVIDER ? "custom" : (cfg.provider_type || "custom"),
+        providerType: cfg.provider_type || "openai-compatible",
         name: cfg.name || "未命名渠道",
         base: cfg.api_base || "",
+        apiAuxBase: cfg.api_aux_base || "",
         apiKey: "",
         apiKeyMasked: cfg.api_key_masked || "",
         model: "",
@@ -418,7 +465,15 @@ function ModelsSection() {
   };
 
   const saveChannel = async (d) => {
-    const payload = { name: d.name, provider_type: d.type, api_base: d.base, api_key: d.apiKey };
+    const payload = {
+      name: d.name,
+      provider_type: d.providerType,
+      api_base: d.base,
+      api_aux_base: d.taskBase || "",
+    };
+    if (d.providerType === TASK_IMAGE_PROVIDER || d.apiKey) {
+      payload.api_key = d.apiKey;
+    }
     try {
       if (d.id && channels.find((c) => c.id === d.id)?._backendId) {
         const backendId = channels.find((c) => c.id === d.id)._backendId;

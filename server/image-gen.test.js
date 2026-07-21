@@ -200,26 +200,27 @@ test('generateImage retries transient connection failures', async () => {
 });
 
 
-test('generateImage supports Z-Image task polling without an API key', async () => {
+test('generateImage supports a no-key task image provider', async () => {
   const calls = [];
   const writes = [];
   let historyCalls = 0;
   const imagePath = await generateImage('请生成一张真实生活随手照片', {
-    providerType: 'z-image-comfy',
-    apiBase: 'https://zit-web.qixunmm.xyz',
-    model: 'z-image-initial',
+    providerType: 'image-task-no-key',
+    apiBase: 'https://submit.example.com',
+    model: 'task-image-default',
+    taskApiBase: 'https://tasks.example.com',
     extras: { width: 768, height: 1280, poll_interval_ms: 1 },
     sleepImpl: async () => {},
     fetchImpl: async (url, options = {}) => {
       calls.push({ url, options });
-      if (url === 'https://zit-web.qixunmm.xyz/api/prompt/initial') {
+      if (url === 'https://submit.example.com/api/prompt/initial') {
         return {
           ok: true,
           status: 200,
           text: async () => JSON.stringify({ prompt_id: 'task-1', output_node: '9' })
         };
       }
-      if (url === 'https://zit-api.qixunmm.xyz/history/task-1') {
+      if (url === 'https://tasks.example.com/history/task-1') {
         historyCalls += 1;
         return {
           ok: true,
@@ -232,11 +233,11 @@ test('generateImage supports Z-Image task polling without an API key', async () 
           })
         };
       }
-      if (url.startsWith('https://zit-api.qixunmm.xyz/view?')) {
+      if (url.startsWith('https://tasks.example.com/view?')) {
         return {
           ok: true,
           status: 200,
-          arrayBuffer: async () => Buffer.from('z-image-result')
+          arrayBuffer: async () => Buffer.from('task-image-result')
         };
       }
       throw new Error(`Unexpected URL: ${url}`);
@@ -255,14 +256,15 @@ test('generateImage supports Z-Image task polling without an API key', async () 
   assert.equal(submitBody.height, 1280);
   assert.ok(submitBody.client_id);
   assert.equal(historyCalls, 2);
-  assert.equal(writes[0].buffer.toString(), 'z-image-result');
+  assert.equal(writes[0].buffer.toString(), 'task-image-result');
 });
 
-test('generateImage reports Z-Image completed tasks that contain no image', async () => {
+test('generateImage reports task-image execution errors', async () => {
   await assert.rejects(generateImage('画一张风景图', {
-    providerType: 'z-image-comfy',
-    apiBase: 'https://zit-web.qixunmm.xyz',
-    model: 'z-image-initial',
+    providerType: 'image-task-no-key',
+    apiBase: 'https://submit.example.com',
+    taskApiBase: 'https://tasks.example.com',
+    model: 'task-image-default',
     sleepImpl: async () => {},
     fetchImpl: async url => {
       if (url.endsWith('/api/prompt/initial')) {
@@ -279,5 +281,5 @@ test('generateImage reports Z-Image completed tasks that contain no image', asyn
         })
       };
     }
-  }), /Z-Image 生成失败：显存不足/);
+  }), /任务式图片生成失败：显存不足/);
 });

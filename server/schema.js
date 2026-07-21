@@ -46,6 +46,14 @@ const CHARACTER_RUNTIME_COLUMNS = [
   }
 ];
 
+const CREDENTIAL_RUNTIME_COLUMNS = [
+  {
+    name: 'api_aux_base',
+    definition: "VARCHAR(500) DEFAULT ''",
+    after: 'api_base'
+  }
+];
+
 const PUSH_RUNTIME_TABLES = [
   `
     CREATE TABLE IF NOT EXISTS push_devices (
@@ -125,6 +133,15 @@ export async function ensureCharacterRuntimeColumns(db) {
   }
 }
 
+export async function ensureCredentialRuntimeColumns(db) {
+  for (const column of CREDENTIAL_RUNTIME_COLUMNS) {
+    if (await columnExists(db, 'credentials', column.name)) continue;
+    await db.query(
+      `ALTER TABLE credentials ADD COLUMN ${column.name} ${column.definition} AFTER ${column.after}`
+    );
+  }
+}
+
 export async function ensurePushRuntimeTables(db) {
   for (const statement of PUSH_RUNTIME_TABLES) {
     await db.query(statement);
@@ -133,5 +150,6 @@ export async function ensurePushRuntimeTables(db) {
 
 export async function ensureRuntimeSchema(db) {
   await ensureCharacterRuntimeColumns(db);
+  await ensureCredentialRuntimeColumns(db);
   await ensurePushRuntimeTables(db);
 }
