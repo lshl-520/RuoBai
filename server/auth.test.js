@@ -142,6 +142,7 @@ test('GET /api/auth/session returns profile and stats for logged-in user', async
             username: 'jianghu_xiaobai',
             nickname: '江湖小白',
             avatar: '/assets/avatar-squares/3.png',
+            city: '驻马店',
             role: 'user',
             is_enabled: 1,
             created_at: '2026-05-01 08:00:00',
@@ -174,6 +175,7 @@ test('GET /api/auth/session returns profile and stats for logged-in user', async
       username: 'jianghu_xiaobai',
       nickname: '江湖小白',
       avatar: '/assets/avatar-squares/3.png',
+      city: '驻马店',
       role: 'user',
       status: 'active',
       created_at: '2026-05-01 08:00:00',
@@ -313,13 +315,14 @@ test('PATCH /api/users/me updates nickname and avatar for logged-in user', async
           return [{ affectedRows: 1 }];
         }
 
-        if (sql.includes('SELECT id, username, nickname, avatar FROM users WHERE id = ?')) {
+        if (sql.includes('SELECT id, username, nickname, avatar, city FROM users WHERE id = ?')) {
           assert.deepEqual(params, [13]);
           return [[{
             id: 13,
             username: 'jianghu_xiaobai',
             nickname: '新昵称',
-            avatar: '/assets/avatar-squares/5.png'
+            avatar: '/assets/avatar-squares/5.png',
+            city: '驻马店'
           }]];
         }
 
@@ -350,7 +353,8 @@ test('PATCH /api/users/me updates nickname and avatar for logged-in user', async
       id: 13,
       username: 'jianghu_xiaobai',
       nickname: '新昵称',
-      avatar: '/assets/avatar-squares/5.png'
+      avatar: '/assets/avatar-squares/5.png',
+      city: '驻马店'
     });
   });
 });
@@ -359,13 +363,14 @@ test('PATCH /api/users/me allows updating only nickname', async () => {
   const router = createAuthRouter({
     pool: {
       query: async (sql, params) => {
-        if (sql.startsWith('SELECT id, username, nickname, avatar FROM users WHERE id = ?')) {
+        if (sql.startsWith('SELECT id, username, nickname, avatar, city FROM users WHERE id = ?')) {
           if (params[0] === 15) {
             return [[{
               id: 15,
               username: 'jianghu_xiaobai',
               nickname: '旧昵称',
-              avatar: '/assets/avatar-squares/2.png'
+              avatar: '/assets/avatar-squares/2.png',
+              city: '驻马店'
             }]];
           }
         }
@@ -398,6 +403,7 @@ test('PATCH /api/users/me allows updating only nickname', async () => {
     assert.equal(response.status, 200);
     assert.equal(payload.success, true);
     assert.equal(payload.user.nickname, '旧昵称');
+    assert.equal(payload.user.city, '驻马店');
   });
 });
 
@@ -405,13 +411,14 @@ test('PATCH /api/users/me allows updating only avatar', async () => {
   const router = createAuthRouter({
     pool: {
       query: async (sql, params) => {
-        if (sql.startsWith('SELECT id, username, nickname, avatar FROM users WHERE id = ?')) {
+        if (sql.startsWith('SELECT id, username, nickname, avatar, city FROM users WHERE id = ?')) {
           if (params[0] === 17) {
             return [[{
               id: 17,
               username: 'jianghu_xiaobai',
               nickname: '原昵称',
-              avatar: '/assets/avatar-squares/2.png'
+              avatar: '/assets/avatar-squares/2.png',
+              city: '驻马店'
             }]];
           }
         }
@@ -444,6 +451,7 @@ test('PATCH /api/users/me allows updating only avatar', async () => {
     assert.equal(response.status, 200);
     assert.equal(payload.success, true);
     assert.equal(payload.user.avatar, '/assets/avatar-squares/2.png');
+    assert.equal(payload.user.city, '驻马店');
   });
 });
 
@@ -456,13 +464,14 @@ test('PATCH /api/users/me accepts uploaded avatar paths under user_assets', asyn
           return [{ affectedRows: 1 }];
         }
 
-        if (sql.startsWith('SELECT id, username, nickname, avatar FROM users WHERE id = ?')) {
+        if (sql.startsWith('SELECT id, username, nickname, avatar, city FROM users WHERE id = ?')) {
           assert.deepEqual(params, [19]);
           return [[{
             id: 19,
             username: 'jianghu_xiaobai',
             nickname: '原昵称',
-            avatar: '/user_assets/avatars/17-1234567890.png'
+            avatar: '/user_assets/avatars/17-1234567890.png',
+            city: '驻马店'
           }]];
         }
 
@@ -489,6 +498,94 @@ test('PATCH /api/users/me accepts uploaded avatar paths under user_assets', asyn
     assert.equal(response.status, 200);
     assert.equal(payload.success, true);
     assert.equal(payload.user.avatar, '/user_assets/avatars/17-1234567890.png');
+  });
+});
+
+test('PATCH /api/users/me allows explicitly clearing city', async () => {
+  const router = createAuthRouter({
+    pool: {
+      query: async (sql, params) => {
+        if (sql.startsWith('UPDATE users SET city = ? WHERE id = ?')) {
+          assert.deepEqual(params, ['', 23]);
+          return [{ affectedRows: 1 }];
+        }
+
+        if (sql.startsWith('SELECT id, username, nickname, avatar, city FROM users WHERE id = ?')) {
+          assert.deepEqual(params, [23]);
+          return [[{
+            id: 23,
+            username: 'jianghu_xiaobai',
+            nickname: '原昵称',
+            avatar: '/assets/avatar-squares/2.png',
+            city: ''
+          }]];
+        }
+
+        throw new Error(`Unexpected query: ${sql}`);
+      }
+    }
+  });
+
+  const sessionState = createSessionState();
+  sessionState.userId = 23;
+  sessionState.username = 'jianghu_xiaobai';
+  sessionState.role = 'user';
+
+  await withServer(createApp(router, sessionState), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/users/me`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ city: '' })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.success, true);
+    assert.equal(payload.user.city, '');
+  });
+});
+
+test('PATCH /api/users/me updates city when it is explicitly submitted', async () => {
+  const router = createAuthRouter({
+    pool: {
+      query: async (sql, params) => {
+        if (sql.startsWith('UPDATE users SET city = ? WHERE id = ?')) {
+          assert.deepEqual(params, ['驻马店', 25]);
+          return [{ affectedRows: 1 }];
+        }
+
+        if (sql.startsWith('SELECT id, username, nickname, avatar, city FROM users WHERE id = ?')) {
+          assert.deepEqual(params, [25]);
+          return [[{
+            id: 25,
+            username: 'jianghu_xiaobai',
+            nickname: '原昵称',
+            avatar: '/assets/avatar-squares/2.png',
+            city: '驻马店'
+          }]];
+        }
+
+        throw new Error(`Unexpected query: ${sql}`);
+      }
+    }
+  });
+
+  const sessionState = createSessionState();
+  sessionState.userId = 25;
+  sessionState.username = 'jianghu_xiaobai';
+  sessionState.role = 'user';
+
+  await withServer(createApp(router, sessionState), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/users/me`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ city: ' 驻马店 ' })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.success, true);
+    assert.equal(payload.user.city, '驻马店');
   });
 });
 
@@ -540,7 +637,7 @@ test('PATCH /api/users/me accepts uploaded jpg and webp avatar paths under user_
           return [{ affectedRows: 1 }];
         }
 
-        if (sql.startsWith('SELECT id, username, nickname, avatar FROM users WHERE id = ?')) {
+        if (sql.startsWith('SELECT id, username, nickname, avatar, city FROM users WHERE id = ?')) {
           return [[{
             id: 31,
             username: 'jianghu_xiaobai',
