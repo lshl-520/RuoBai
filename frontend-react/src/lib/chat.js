@@ -107,7 +107,7 @@ export function deleteAllMessages(roleId) {
 // 检测绘画关键词（与后端 detectDrawIntent 保持一致）
 export function detectDrawKeywords(text) {
   if (!text) return false;
-  return /帮我画|给我画|画[个张幅一]|画张|生成.*图片|画幅|画一下/.test(text);
+  return /(?:帮我|给我|替我|为我|请)画|画(?:一|1)?(?:个|张|幅)(?:图|画|图片|照片|自拍|画像)?|画(?:图|画|图片|照片|自拍|画像|一下)|(?:请|帮我|给我|替我|为我)?生成(?:一|1)?[个张幅]?[\s\S]{0,120}?(?:图片|图像|照片|自拍|画像)|(?:做|制作|创作)(?:一|1)?[个张幅]?[\s\S]{0,80}?(?:图片|图像|照片|自拍|画像)|(?:来|拍)(?:一|1)?[个张幅]?(?:自拍|照片)/i.test(text);
 }
 
 export async function drawImage(roleId, content) {

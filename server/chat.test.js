@@ -669,3 +669,98 @@ test('POST /api/chat sends a friendly SSE error when upstream stream breaks', as
     assert.match(body, /她暂时没反应，稍后再试好吗/);
   });
 });
+
+
+test('POST /api/chat/draw uses the enabled image capability and keeps the full selfie prompt', async () => {
+  const inserted = [];
+  let generated = null;
+  const character = {
+    id: 7,
+    user_id: 1,
+    name: '林夏',
+    persona: '温柔中带点小傲娇的恋人',
+    is_deleted: 0
+  };
+  const prompt = '林夏，你陪我一段时间了，我想看看你的样子。请生成一张类似你自己用iPhone随手自拍的照片：没有明确主题，没有刻意构图，照片略带运动模糊，光线不均，轻微曝光过度，角度尴尬，构图混乱。';
+
+  const router = createChatRouter({
+    requireCharacterForUser: async (userId, characterId) => {
+      assert.equal(userId, 1);
+      assert.equal(characterId, 7);
+      return character;
+    },
+    generateImageImpl: async (subject, options) => {
+      generated = { subject, options };
+      return '/user_assets/chat/generated-selfie.png';
+    },
+    pool: {
+      query: async (sql, params) => {
+        if (sql.includes('FROM capability_assignments ca') && params?.[1] === 'image') {
+          assert.deepEqual(params, [1, 'image']);
+          return [[{
+            id: 9,
+            capability: 'image',
+            enabled: 1,
+            extras: '{"size":"1024x1024"}',
+            name: '免费',
+            provider_type: 'custom',
+            api_base: 'https://apihub.agnes-ai.com/v1',
+            api_key: 'selected-key',
+            model: 'agnes-image-2.0-flash'
+          }]];
+        }
+
+        if (sql.includes('INFORMATION_SCHEMA.COLUMNS')) {
+          return [[]];
+        }
+
+        if (sql.includes('INSERT INTO messages')) {
+          const id = inserted.length + 101;
+          inserted.push({ id, params });
+          return [{ insertId: id }];
+        }
+
+        if (sql.includes('UPDATE characters')) {
+          assert.deepEqual(params, [7, 1]);
+          return [{ affectedRows: 1 }];
+        }
+
+        if (sql.includes('FROM messages') && sql.includes('WHERE id = ?')) {
+          const row = inserted.find(item => item.id === params[0]);
+          return [[{
+            id: row.id,
+            user_id: 1,
+            character_id: 7,
+            role: row.params[2],
+            content: row.params[3],
+            message_type: row.params[4],
+            media_url: row.params[5],
+            is_active: 1,
+            created_at: '2026-07-21 18:00:00'
+          }]];
+        }
+
+        throw new Error(`Unexpected query: ${sql}`);
+      }
+    }
+  });
+
+  await withServer(createApp({ router }), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/chat/draw?character_id=7`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: prompt })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.success, true);
+    assert.equal(payload.media_url, '/user_assets/chat/generated-selfie.png');
+    assert.equal(generated.subject, prompt);
+    assert.equal(generated.options.apiBase, 'https://apihub.agnes-ai.com/v1');
+    assert.equal(generated.options.apiKey, 'selected-key');
+    assert.equal(generated.options.model, 'agnes-image-2.0-flash');
+    assert.deepEqual(generated.options.character, character);
+    assert.equal(inserted.length, 2);
+  });
+});
