@@ -567,6 +567,19 @@
   animation: emptyFadeIn 0.3s ease;
 }
 
+.chat-notice {
+  margin: 12px 16px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: #effaf5;
+  color: #35745b;
+  font-size: 13px;
+  line-height: 1.6;
+  border: 1px solid #ccebdd;
+  cursor: pointer;
+  animation: emptyFadeIn 0.3s ease;
+}
+
 /* 立绘选择布局：左侧预览+上传，右侧3列网格 */
 .portrait-left {
   display: flex;
