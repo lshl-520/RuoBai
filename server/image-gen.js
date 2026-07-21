@@ -7,96 +7,185 @@ const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
 const userChatImageDir = path.join(projectRoot, 'user_assets', 'chat');
 
-const AGNES_AI_KEY = process.env.AGNES_AI_KEY || '';
-const AGNES_AI_BASE = (process.env.AGNES_AI_BASE || 'https://apihub.agnes-ai.com/v1').replace(/\/+$/, '');
+const LEGACY_IMAGE_KEY = process.env.AGNES_AI_KEY || '';
+const LEGACY_IMAGE_BASE = process.env.AGNES_AI_BASE || 'https://apihub.agnes-ai.com/v1';
+const LEGACY_IMAGE_MODEL = process.env.AGNES_IMAGE_MODEL || 'agnes-image-2.0-flash';
+const MAX_PROMPT_LENGTH = 4000;
 
-// 检测消息是否包含绘画意图
-export function detectDrawIntent(text) {
-  if (!text) return null;
-  const drawKeywords = [
-    /帮我画(一?[个张幅]?.{1,30})/,
-    /画(一?[个张幅]?.{1,30})/,
-    /给我画(一?[个张幅]?.{1,30})/,
-    /画张(.{1,30})/,
-    /生成.{0,4}图片[：:]?(.{0,30})/,
-    /画幅(.{1,30})/,
-    /画一下(.{1,30})/,
-  ];
-  for (const re of drawKeywords) {
-    const m = text.match(re);
-    if (m) {
-      return (m[1] || text).trim().slice(0, 100);
-    }
+const DRAW_INTENT_PATTERNS = [
+  /(?:帮我|给我|替我|为我|请)画/i,
+  /画(?:一|1)?(?:个|张|幅)(?:图|画|图片|照片|自拍|画像)?/i,
+  /画(?:图|画|图片|照片|自拍|画像|一下)/i,
+  /(?:请|帮我|给我|替我|为我)?生成(?:一|1)?[个张幅]?[\s\S]{0,120}?(?:图片|图像|照片|自拍|画像)/i,
+  /(?:做|制作|创作)(?:一|1)?[个张幅]?[\s\S]{0,80}?(?:图片|图像|照片|自拍|画像)/i,
+  /(?:来|拍)(?:一|1)?[个张幅]?(?:自拍|照片)/i
+];
+
+function normalizeExtras(value) {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
   }
-  return null;
 }
 
-// 把用户描述翻译成适合图片生成的英文提示词
-function buildImagePrompt(subject) {
-  // 如果已经是英文就直接用
-  if (/^[\x00-\x7F]+$/.test(subject)) return subject;
-  // 中文描述加上风格词
-  return `anime style illustration of ${subject}, soft colors, high quality`;
+export function detectDrawIntent(text) {
+  const content = String(text || '').trim();
+  if (!content) return null;
+  return DRAW_INTENT_PATTERNS.some(pattern => pattern.test(content))
+    ? content.slice(0, MAX_PROMPT_LENGTH)
+    : null;
 }
 
-// 下载远程图片并保存到本地，返回本地 URL 路径
-async function downloadAndSaveImage(imageUrl, filename) {
-  const response = await fetch(imageUrl);
-  if (!response.ok) throw new Error(`图片下载失败: ${response.status}`);
-  const buffer = Buffer.from(await response.arrayBuffer());
-  await fs.mkdir(userChatImageDir, { recursive: true });
-  const filepath = path.join(userChatImageDir, filename);
-  await fs.writeFile(filepath, buffer);
+export function buildImagePrompt(subject, character = null) {
+  const content = String(subject || '').trim().slice(0, MAX_PROMPT_LENGTH);
+  if (!content) return '';
+
+  const name = String(character?.name || '').trim();
+  const persona = String(character?.persona || '').trim();
+  const context = [];
+
+  if (name) {
+    context.push(`图片中的人物是角色“${name}”本人。`);
+  }
+  if (persona) {
+    context.push(`她给人的气质是：${persona.slice(0, 300)}。`);
+  }
+  if (/(自拍|照片|写实|真实|iPhone|手机|快照)/i.test(content)) {
+    context.push('严格按真实摄影照片处理，保留随手拍、运动模糊、曝光和构图等要求，不要改成动漫、插画或二次元风格。');
+  }
+
+  return [...context, content].join('\n').slice(0, MAX_PROMPT_LENGTH);
+}
+
+export function buildImageGenerationsUrl(apiBase) {
+  const base = String(apiBase || '').trim().replace(/\/+$/, '');
+  if (!base) return '/v1/images/generations';
+  if (/\/images\/generations$/i.test(base)) return base;
+  if (/\/v\d+(?:\/[^/]+)*$/i.test(base)) return `${base}/images/generations`;
+  return `${base}/v1/images/generations`;
+}
+
+async function saveBase64Image(rawValue, filename, fileStorage) {
+  const value = String(rawValue || '').trim();
+  const base64 = value.includes(',') && /^data:image\//i.test(value)
+    ? value.slice(value.indexOf(',') + 1)
+    : value;
+  const buffer = Buffer.from(base64, 'base64');
+  if (!buffer.length) throw new Error('图片接口返回了空图片');
+  await fileStorage.mkdir(userChatImageDir, { recursive: true });
+  await fileStorage.writeFile(path.join(userChatImageDir, filename), buffer);
   return `/user_assets/chat/${filename}`;
 }
 
-// 调 Agnes AI 图片生成接口，返回本地保存后的图片路径
-export async function generateImage(subject, fetchImpl = fetch) {
-  if (!AGNES_AI_KEY) throw new Error('未配置 AGNES_AI_KEY，请在 .env 里添加');
+async function downloadAndSaveImage(imageUrl, filename, fetchImpl, fileStorage) {
+  let lastError = null;
 
-  const prompt = buildImagePrompt(subject);
-  const url = `${AGNES_AI_BASE}/images/generations`;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await fetchImpl(imageUrl, {
+        headers: { Accept: 'image/*' },
+        signal: AbortSignal.timeout(60000)
+      });
+      if (!response.ok) {
+        throw new Error(`图片下载失败: ${response.status}`);
+      }
 
-  const response = await fetchImpl(url, {
+      const buffer = Buffer.from(await response.arrayBuffer());
+      if (!buffer.length) throw new Error('下载到的图片是空的');
+      await fileStorage.mkdir(userChatImageDir, { recursive: true });
+      await fileStorage.writeFile(path.join(userChatImageDir, filename), buffer);
+      return `/user_assets/chat/${filename}`;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) {
+        await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+      }
+    }
+  }
+
+  const detail = lastError?.cause?.message || lastError?.message || '未知网络错误';
+  throw new Error(`图片已经生成，但下载到本地失败：${detail}`);
+}
+
+function readImageResult(payload) {
+  const first = payload?.data?.[0] || payload?.images?.[0] || payload?.output?.[0] || null;
+  if (typeof first === 'string') {
+    return /^https?:\/\//i.test(first) ? { url: first } : { base64: first };
+  }
+
+  const url = first?.url || first?.image_url || payload?.url || payload?.image_url;
+  if (url) return { url: String(url) };
+
+  const base64 = first?.b64_json || first?.base64 || payload?.b64_json || payload?.base64;
+  if (base64) return { base64: String(base64) };
+
+  return null;
+}
+
+export async function generateImage(subject, options = {}) {
+  const normalizedOptions = typeof options === 'function'
+    ? { fetchImpl: options }
+    : (options || {});
+  const apiKey = String(normalizedOptions.apiKey || LEGACY_IMAGE_KEY || '').trim();
+  const apiBase = String(normalizedOptions.apiBase || LEGACY_IMAGE_BASE || '').trim();
+  const model = String(normalizedOptions.model || LEGACY_IMAGE_MODEL || '').trim();
+  const fetchImpl = normalizedOptions.fetchImpl || fetch;
+  const fileStorage = normalizedOptions.fileStorage || fs;
+  const extras = normalizeExtras(normalizedOptions.extras);
+
+  if (!apiKey || !apiBase || !model) {
+    throw new Error('请先在“我的 → 她的能力”里启用并选择“画图发图”模型');
+  }
+
+  const prompt = buildImagePrompt(subject, normalizedOptions.character);
+  if (!prompt) throw new Error('请告诉我你想画什么');
+
+  const requestBody = {
+    model,
+    prompt,
+    n: 1,
+    size: String(extras.size || '1024x1024')
+  };
+  if (extras.response_format) {
+    requestBody.response_format = String(extras.response_format);
+  }
+
+  const response = await fetchImpl(buildImageGenerationsUrl(apiBase), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${AGNES_AI_KEY}`,
+      Authorization: `Bearer ${apiKey}`
     },
-    body: JSON.stringify({
-      model: 'gpt-image-1',
-      prompt,
-      n: 1,
-      size: '1024x1024',
-      response_format: 'url',
-    }),
+    body: JSON.stringify(requestBody)
   });
 
   const detail = await response.text().catch(() => '');
   if (!response.ok) {
-    let msg = `图片生成失败 (${response.status})`;
+    let message = `图片生成失败 (${response.status})`;
     try {
       const parsed = JSON.parse(detail);
-      if (parsed?.error?.message) msg = parsed.error.message;
+      message = parsed?.error?.message || parsed?.message || message;
     } catch {}
-    throw new Error(msg);
+    throw new Error(message);
   }
 
-  const payload = JSON.parse(detail);
-  const imageUrl = payload?.data?.[0]?.url || payload?.data?.[0]?.b64_json;
-  if (!imageUrl) throw new Error('接口返回里没有图片地址');
-
-  // 如果是 base64
-  if (!imageUrl.startsWith('http')) {
-    const filename = `draw-${Date.now()}.png`;
-    await fs.mkdir(userChatImageDir, { recursive: true });
-    const buffer = Buffer.from(imageUrl, 'base64');
-    const filepath = path.join(userChatImageDir, filename);
-    await fs.writeFile(filepath, buffer);
-    return `/user_assets/chat/${filename}`;
+  let payload;
+  try {
+    payload = JSON.parse(detail);
+  } catch {
+    throw new Error('图片接口返回的内容无法识别');
   }
 
-  // 下载并保存
-  const filename = `draw-${Date.now()}.png`;
-  return downloadAndSaveImage(imageUrl, filename);
+  const result = readImageResult(payload);
+  if (!result) throw new Error('接口返回里没有图片地址或图片内容');
+
+  const filename = `draw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
+  if (result.url) {
+    return downloadAndSaveImage(result.url, filename, fetchImpl, fileStorage);
+  }
+  return saveBase64Image(result.base64, filename, fileStorage);
 }

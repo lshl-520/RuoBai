@@ -193,7 +193,8 @@ export function createChatRouter({
   requireCharacterForUser = defaultRequireCharacterForUser,
   fetchImpl = fetch,
   publicBaseUrl = process.env.PUBLIC_BASE_URL || 'http://localhost:3000',
-  fileStorage = fs
+  fileStorage = fs,
+  generateImageImpl = generateImage
 } = {}) {
   const router = express.Router();
   let supportsMessageSoftDelete;
@@ -513,17 +514,34 @@ export function createChatRouter({
     try {
       const characterId = getRequestCharacterId(req);
       if (!characterId) return res.status(400).json({ success: false, error: '缺少 character_id' });
-      await requireCharacterForUser(req.userId, characterId, pool);
+      const character = await requireCharacterForUser(req.userId, characterId, pool);
 
       const content = String(req.body?.content || '').trim();
       const subject = detectDrawIntent(content) || content;
       if (!subject) return res.status(400).json({ success: false, error: '请告诉我你想画什么' });
 
-      // 1. 保存用户消息
-      const userMsg = await saveMessage({ userId: req.userId, characterId, role: 'user', content, messageType: 'text', mediaUrl: null });
+      const imageConfig = await getCapabilityModelConfig(req.userId, 'image');
+      if (!imageConfig) {
+        return res.status(400).json({
+          success: false,
+          error: '请先在“我的 → 她的能力”里启用并选择“画图发图”模型'
+        });
+      }
 
-      // 2. 生成图片
-      const mediaUrl = await generateImage(subject, fetchImpl);
+      // 1. 使用“她的能力”里当前选中的图片渠道和模型生成图片
+      // 先生成成功再落库，避免接口失败时留下只有请求、没有图片的残缺消息。
+      const mediaUrl = await generateImageImpl(subject, {
+        apiBase: imageConfig.api_base,
+        apiKey: imageConfig.api_key,
+        model: imageConfig.model,
+        extras: imageConfig.extras,
+        character,
+        fetchImpl,
+        fileStorage
+      });
+
+      // 2. 图片成功后，再保存用户请求和 AI 图片消息
+      const userMsg = await saveMessage({ userId: req.userId, characterId, role: 'user', content, messageType: 'text', mediaUrl: null });
 
       // 3. 保存 AI 图片消息
       const aiMsg = await saveMessage({
