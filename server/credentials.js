@@ -3,9 +3,12 @@ import { pool as defaultPool, withTransaction as defaultWithTransaction } from '
 import { asyncHandler, maskSecret, parseInteger } from './helpers.js';
 import { buildChatCompletionsUrl } from './chat.js';
 import { guessModelCapabilities } from './model-capabilities.js';
+import { testVolcRealtimeCredential } from './realtime-call.js';
 
 const TASK_IMAGE_PROVIDER = 'image-task-no-key';
 const TASK_IMAGE_MODEL = 'task-image-default';
+const VOLC_REALTIME_PROVIDER = 'volc-realtime';
+const VOLC_REALTIME_MODEL = '2.2.0.0';
 
 function buildModelsUrl(apiBase) {
   const base = String(apiBase || '').trim().replace(/\/+$/, '');
@@ -30,6 +33,14 @@ function isTaskImageProvider(providerType) {
 
 function fixedTaskImageModels() {
   return [{ model_id: TASK_IMAGE_MODEL, capabilities: ['image'] }];
+}
+
+function isVolcRealtimeProvider(providerType) {
+  return String(providerType || '').trim() === VOLC_REALTIME_PROVIDER;
+}
+
+function fixedVolcRealtimeModels() {
+  return [{ model_id: VOLC_REALTIME_MODEL, capabilities: ['realtime'] }];
 }
 
 function sanitizeCredential(body = {}) {
@@ -157,11 +168,16 @@ export function createCredentialsRouter({
         [req.userId, payload.name, payload.provider_type, payload.api_base, payload.api_aux_base, payload.api_key]
       );
 
-      if (isTaskImageProvider(payload.provider_type)) {
+      const fixedModels = isTaskImageProvider(payload.provider_type)
+        ? fixedTaskImageModels()
+        : isVolcRealtimeProvider(payload.provider_type)
+          ? fixedVolcRealtimeModels()
+          : [];
+      for (const fixedModel of fixedModels) {
         await connection.query(
           `INSERT INTO credential_models (credential_id, model_id, capabilities, discovered_at)
            VALUES (?, ?, ?, NOW())`,
-          [result.insertId, TASK_IMAGE_MODEL, JSON.stringify(['image'])]
+          [result.insertId, fixedModel.model_id, JSON.stringify(fixedModel.capabilities)]
         );
       }
 
@@ -265,6 +281,8 @@ export function createCredentialsRouter({
     let items = [];
     if (isTaskImageProvider(credential.provider_type)) {
       items = fixedTaskImageModels();
+    } else if (isVolcRealtimeProvider(credential.provider_type)) {
+      items = fixedVolcRealtimeModels();
     } else {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15000);
@@ -342,6 +360,15 @@ export function createCredentialsRouter({
     const credential = await loadCredentialRow(pool, credentialId, req.userId);
     if (!credential) {
       return res.status(404).json({ success: false, error: '凭证不存在' });
+    }
+
+    if (isVolcRealtimeProvider(credential.provider_type)) {
+      try {
+        await testVolcRealtimeCredential(credential);
+        return res.json({ success: true, message: '火山实时通话连接正常' });
+      } catch (error) {
+        return res.status(400).json({ success: false, error: error.message });
+      }
     }
 
     const controller = new AbortController();

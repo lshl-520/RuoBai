@@ -3,8 +3,10 @@ import { pool as defaultPool, withTransaction as defaultWithTransaction } from '
 import { asyncHandler } from './helpers.js';
 import { buildChatCompletionsUrl } from './chat.js';
 import { guessModelCapabilities } from './model-capabilities.js';
+import { testVolcRealtimeCredential } from './realtime-call.js';
 
 const CAPABILITIES = ['chat', 'vision', 'image', 'tts', 'realtime'];
+const VOLC_REALTIME_PROVIDER = 'volc-realtime';
 
 function normalizeExtras(value) {
   if (!value) {
@@ -44,10 +46,18 @@ function parseCapabilityList(value) {
 }
 
 function supportedCapabilities(row) {
-  return new Set([
+  const capabilities = new Set([
     ...parseCapabilityList(row.capabilities),
     ...guessModelCapabilities(row.model_id)
   ]);
+
+  // 当前实时通话桥接器实现的是火山二进制 WebSocket 协议。
+  // 其他渠道即使模型名里带 realtime，也不能误显示成可选项。
+  if (capabilities.has('realtime') && row.provider_type !== VOLC_REALTIME_PROVIDER) {
+    capabilities.delete('realtime');
+  }
+
+  return capabilities;
 }
 
 function buildEmptyItem(capability) {
@@ -114,6 +124,7 @@ async function loadCapabilityOptions(queryable, userId) {
       SELECT
         c.id AS credential_id,
         c.name AS credential_name,
+        c.provider_type,
         cm.model_id,
         cm.capabilities
       FROM credentials c
@@ -137,6 +148,7 @@ async function loadAssignmentForTest(queryable, userId, capability) {
         ca.credential_id,
         ca.extras,
         c.name AS credential_name,
+        c.provider_type,
         c.api_base,
         c.api_key
       FROM capability_assignments ca
@@ -156,6 +168,7 @@ async function loadCompatibleModel(queryable, credentialId, userId, modelId) {
       SELECT
         c.id AS credential_id,
         c.name AS credential_name,
+        c.provider_type,
         cm.model_id,
         cm.capabilities
       FROM credential_models cm
@@ -309,6 +322,15 @@ export function createCapabilitiesRouter({
     const assignment = await loadAssignmentForTest(pool, req.userId, capability);
     if (!assignment || !assignment.enabled) {
       return res.status(404).json({ success: false, error: '这个能力还没启用' });
+    }
+
+    if (capability === 'realtime' && assignment.provider_type === 'volc-realtime') {
+      try {
+        await testVolcRealtimeCredential(assignment);
+        return res.json({ success: true, message: '火山实时通话连接正常' });
+      } catch (error) {
+        return res.status(400).json({ success: false, error: error.message });
+      }
     }
 
     const controller = new AbortController();

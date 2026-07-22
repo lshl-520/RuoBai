@@ -21,6 +21,7 @@
     "express-mysql-session": "^3.0.3",
     "express-session": "^1.18.0",
     "firebase-admin": "^14.0.0",
-    "mysql2": "^3.11.0"
+    "mysql2": "^3.11.0",
+    "ws": "^8.21.1"
   }
 }

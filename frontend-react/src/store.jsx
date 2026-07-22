@@ -133,6 +133,7 @@ const CHANNEL_TYPES = {
   deepseek:   { name: "DeepSeek 官方", base: "https://api.deepseek.com",                          keyHint: "sk-...",  caps: ["chat"],                   models: ["deepseek-chat", "deepseek-reasoner"] },
   dashscope:  { name: "阿里千问官方",   base: "https://dashscope.aliyuncs.com/compatible-mode/v1", keyHint: "sk-...",  caps: ["chat", "image", "voice"], models: ["qwen-max", "qwen-plus", "qwen-turbo", "qwen-vl-max"] },
   volcengine: { name: "火山豆包",      base: "https://ark.cn-beijing.volces.com/api/v3",          keyHint: "...",     caps: ["chat", "image", "voice"], models: ["doubao-pro-32k", "doubao-lite-32k", "doubao-vision-pro"] },
+  "volc-realtime": { name: "火山实时通话", base: "wss://openspeech.bytedance.com/api/v3/realtime/dialogue", keyHint: "新版 API Key", caps: ["realtime"], models: ["2.2.0.0"] },
   custom:     { name: "自定义 / 中转", base: "https://",                                          keyHint: "sk-...",  caps: ["chat", "image", "voice"], models: [] },
   "openai-compatible": { name: "OpenAI兼容", base: "https://", keyHint: "sk-...", caps: ["chat", "image", "voice"], models: [] }, // 后端兼容用，不在UI显示
 };

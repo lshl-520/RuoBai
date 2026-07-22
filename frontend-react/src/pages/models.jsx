@@ -9,6 +9,8 @@ const { useState: useStateMo } = React;
 const LS_CH = "ruobai_channels_v2";
 const TASK_IMAGE_PROVIDER = "image-task-no-key";
 const TASK_IMAGE_MODEL = "task-image-default";
+const VOLC_REALTIME_PROVIDER = "volc-realtime";
+const VOLC_REALTIME_MODEL = "2.2.0.0";
 const loadCH = () => { try { const s = JSON.parse(localStorage.getItem(LS_CH)); if (Array.isArray(s)) return s; } catch (e) {} return []; };
 
 const CAP_INFO = {
@@ -74,6 +76,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
   useLockBody();
   const [type, setType] = useStateMo(channel?.type || "openai");
   const preset = CHANNEL_TYPES[type] || CHANNEL_TYPES.custom;
+  const realtimeMode = type === VOLC_REALTIME_PROVIDER;
   const [taskImageMode, setTaskImageMode] = useStateMo(channel?.providerType === TASK_IMAGE_PROVIDER);
   const noKeyRequired = taskImageMode;
   const [name, setName] = useStateMo(channel?.name || "");
@@ -82,13 +85,13 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
   const [apiKey, setApiKey] = useStateMo(channel?.apiKey || "");
   const [enabled, setEnabled] = useStateMo(channel?.enabled ?? true);
   const [showKey, setShowKey] = useStateMo(false);
-  const [models, setModels] = useStateMo([]);
-  const [model, setModel] = useStateMo(channel?.model || "");
-  const [fetchState, setFetchState] = useStateMo("idle");
-  const [purposes, setPurposes] = useStateMo(channel?.purposes?.length ? channel.purposes : ["chat"]);
+  const [models, setModels] = useStateMo(realtimeMode ? [VOLC_REALTIME_MODEL] : []);
+  const [model, setModel] = useStateMo(channel?.model || (realtimeMode ? VOLC_REALTIME_MODEL : ""));
+  const [fetchState, setFetchState] = useStateMo(realtimeMode ? "done" : "idle");
+  const [purposes, setPurposes] = useStateMo(channel?.purposes?.length ? channel.purposes : (realtimeMode ? ["realtime"] : ["chat"]));
 
   const togglePurpose = (p) => {
-    if (taskImageMode) return;
+    if (taskImageMode || realtimeMode) return;
     setPurposes((prev) => prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]);
   };
 
@@ -115,10 +118,21 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
     setType(t);
     const p = CHANNEL_TYPES[t] || CHANNEL_TYPES.custom;
     if (t !== "custom") setTaskImageMode(false);
+    if (t === VOLC_REALTIME_PROVIDER) {
+      setBase(p.base);
+      setModels([VOLC_REALTIME_MODEL]);
+      setModel(VOLC_REALTIME_MODEL);
+      setPurposes(["realtime"]);
+      setFetchState("done");
+      if (!name.trim()) setName("火山实时通话");
+      return;
+    }
+    setFetchState("idle");
     if (!channel) {
       setBase(p.base);
       setModels(p.models || []);
       setModel(p.models?.[0] || "");
+      setPurposes(["chat"]);
     }
   };
 
@@ -128,6 +142,10 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
       if (taskImageMode) {
         setModels([TASK_IMAGE_MODEL]);
         setModel(TASK_IMAGE_MODEL);
+        setFetchState("done");
+      } else if (realtimeMode) {
+        setModels([VOLC_REALTIME_MODEL]);
+        setModel(VOLC_REALTIME_MODEL);
         setFetchState("done");
       } else if (channel?._backendId) {
         const result = await refreshCredentialModels(channel._backendId);
@@ -200,15 +218,15 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
           <label className="field-label">渠道名称 <span className="lbl-hint">给这个接口起个好认的名</span></label>
           <input className="fld" value={name} onChange={(e) => setName(e.target.value)} placeholder="例如:OpenAI 中转·贵 / 千问·语音" />
 
-          <label className="field-label">{taskImageMode ? "任务提交地址" : "中转地址 / Base URL"}</label>
-          <input className="fld" value={base} onChange={(e) => setBase(e.target.value)} placeholder={taskImageMode ? "https://submit.example.com" : "https://api.example.com/v1"} />
+          <label className="field-label">{taskImageMode ? "任务提交地址" : realtimeMode ? "实时语音 WebSocket 地址" : "中转地址 / Base URL"}</label>
+          <input className="fld" value={base} onChange={(e) => setBase(e.target.value)} placeholder={taskImageMode ? "https://submit.example.com" : realtimeMode ? "wss://openspeech.bytedance.com/api/v3/realtime/dialogue" : "https://api.example.com/v1"} />
 
           {taskImageMode && (<>
             <label className="field-label">任务查询 / 图片地址</label>
             <input className="fld" value={taskBase} onChange={(e) => setTaskBase(e.target.value)} placeholder="https://tasks.example.com" />
           </>)}
 
-          <label className="field-label">API 密钥 <span className="lbl-hint">{noKeyRequired ? "这个渠道无需填写" : "只存你本地"}</span></label>
+          <label className="field-label">API 密钥 <span className="lbl-hint">{noKeyRequired ? "这个渠道无需填写" : realtimeMode ? "填写新版 API Key，不是旧版 Access Token" : "只存你本地"}</span></label>
           {noKeyRequired ? (
             <div className="model-empty" style={{ marginTop: 0 }}>无需密钥，保存后即可在「画图发图」里选择。</div>
           ) : (
@@ -221,7 +239,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
 
           <label className="field-label">这个渠道用来做什么 <span className="lbl-hint">可多选</span></label>
           <div className="type-grid">
-            {(taskImageMode ? PURPOSE_OPTS.filter((p) => p.key === "image") : PURPOSE_OPTS).map((p) => (
+            {(taskImageMode ? PURPOSE_OPTS.filter((p) => p.key === "image") : realtimeMode ? PURPOSE_OPTS.filter((p) => p.key === "realtime") : PURPOSE_OPTS).map((p) => (
               <button key={p.key} className={"type-chip" + (purposes.includes(p.key) ? " on" : "")} onClick={() => togglePurpose(p.key)}>
                 {p.label}
               </button>
@@ -237,7 +255,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
                 : <><Icon name="refresh" /> 获取模型列表</>}
             </button>
           </div>
-          {models.length === 0 && <div className="model-empty">{noKeyRequired ? "这个渠道会自动使用固定生图模型" : "点「获取模型列表」拉取，或手动输入"}</div>}
+          {models.length === 0 && <div className="model-empty">{noKeyRequired ? "这个渠道会自动使用固定生图模型" : realtimeMode ? "火山实时通话固定使用 SC2.0 模型" : "点「获取模型列表」拉取，或手动输入"}</div>}
           {models.length > 0 && models.length <= 10 && (
             <div className="model-chips" style={{ marginTop: 8 }}>
               {models.map((m) => (
@@ -253,6 +271,8 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
           )}
           {taskImageMode ? (
             <div className="model-empty" style={{ marginTop: 8 }}>固定模型：{TASK_IMAGE_MODEL}</div>
+          ) : realtimeMode ? (
+            <div className="model-empty" style={{ marginTop: 8 }}>固定模型：{VOLC_REALTIME_MODEL}（SC2.0 角色扮演）</div>
           ) : (
             <input className="fld" style={{ marginTop: 8 }} value={model} onChange={(e) => setModel(e.target.value)} placeholder="模型名,例如 gpt-5.5" />
           )}
@@ -265,7 +285,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
         <div className="sheet-foot">
           {!isNew && <button className="icon-btn det-del" onClick={() => onDelete(channel.id)}><Icon name="trash" /></button>}
           <button className="pill pill-primary grow" disabled={!canSave} style={!canSave ? { opacity: 0.5 } : null}
-            onClick={() => onSave({ id: channel?.id, type, providerType: taskImageMode ? TASK_IMAGE_PROVIDER : type, name, base, taskBase, apiKey: taskImageMode ? "" : apiKey, enabled, model: taskImageMode ? TASK_IMAGE_MODEL : model, fetched: models, purposes: taskImageMode ? ["image"] : purposes })}>
+            onClick={() => onSave({ id: channel?.id, type, providerType: taskImageMode ? TASK_IMAGE_PROVIDER : type, name, base, taskBase, apiKey: taskImageMode ? "" : apiKey, enabled, model: taskImageMode ? TASK_IMAGE_MODEL : realtimeMode ? VOLC_REALTIME_MODEL : model, fetched: models, purposes: taskImageMode ? ["image"] : realtimeMode ? ["realtime"] : purposes })}>
             {isNew ? "添加渠道" : "保存"}
           </button>
         </div>

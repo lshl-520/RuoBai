@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import compression from 'compression';
@@ -25,6 +26,7 @@ import ttsRoutes from './tts.js';
 import postsRoutes from './posts.js';
 import momentRoutes from './moments.js';
 import settingsRoutes from './settings.js';
+import { attachRealtimeCallServer } from './realtime-call.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -59,19 +61,19 @@ const sessionStore = new MySQLStore({
   createDatabaseTable: false
 });
 
-app.use(
-  session({
-    store: sessionStore,
-    secret: process.env.SESSION_SECRET || 'ruobai-secret-change-me',
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-      httpOnly: true,
-      sameSite: 'lax'
-    }
-  })
-);
+const sessionMiddleware = session({
+  store: sessionStore,
+  secret: process.env.SESSION_SECRET || 'ruobai-secret-change-me',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+    httpOnly: true,
+    sameSite: 'lax'
+  }
+});
+
+app.use(sessionMiddleware);
 
 const allowedOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',')
@@ -181,7 +183,9 @@ app.use((error, _req, res, _next) => {
 
 function listenOnPort(port) {
   return new Promise((resolve, reject) => {
-    const server = app.listen(port, () => resolve({ server, port }));
+    const server = createServer(app);
+    attachRealtimeCallServer({ server, sessionMiddleware, pool });
+    server.listen(port, () => resolve({ server, port }));
     server.on('error', reject);
   });
 }
