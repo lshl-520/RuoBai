@@ -2,7 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import { requireAuth } from './middleware.js';
-import { createTtsRouter, isQwenDashscopeTts } from './tts.js';
+import defaultTtsRouter, { createTtsRouter, isQwenDashscopeTts, isVolcDoubaoTts, parseVolcTtsStream } from './tts.js';
+
+test('默认导出是已经创建好的 TTS 路由，而不是路由工厂', () => {
+  assert.equal(typeof defaultTtsRouter, 'function');
+  assert.ok(Array.isArray(defaultTtsRouter.stack));
+  assert.ok(defaultTtsRouter.stack.some(layer => layer.route?.path === '/preview'));
+  assert.ok(defaultTtsRouter.stack.some(layer => layer.route?.path === '/speak'));
+});
 
 function createApp({ router, sessionUser = { userId: 7, username: 'user-7', role: 'user' } }) {
   const app = express();
@@ -126,7 +133,7 @@ test('POST /api/tts/speak downloads qwen audio url and caches mp3', async () => 
 
     assert.equal(response.status, 200);
     assert.equal(payload.success, true);
-    assert.match(payload.audio_url, /^\/user_assets\/tts\/91\.mp3$/);
+    assert.match(payload.audio_url, /^\/user_assets\/tts\/91-[a-f0-9]{14}\.mp3$/);
     assert.equal(payload.voice_id, 'longwan');
     assert.equal(upstreamCalls.length, 2);
     assert.equal(upstreamCalls[0].url, 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation');
@@ -137,7 +144,7 @@ test('POST /api/tts/speak downloads qwen audio url and caches mp3', async () => 
     assert.equal(body.input.voice, 'longwan');
     assert.equal(body.parameters.format, 'mp3');
     assert.equal(body.parameters.response_format, 'mp3');
-    assert.ok(writes.some(item => item.type === 'write' && item.filePath.endsWith('91.mp3') && item.size === 4));
+    assert.ok(writes.some(item => item.type === 'write' && /91-[a-f0-9]{14}\.mp3$/.test(item.filePath) && item.size === 4));
   });
 });
 
@@ -355,7 +362,7 @@ test('POST /api/tts/speak returns cached audio when mp3 already exists', async (
       mkdir: async () => {},
       writeFile: async () => {},
       access: async filePath => {
-        assert.match(filePath, /91\.mp3$/);
+        assert.match(filePath, /91-[a-f0-9]{14}\.mp3$/);
       }
     },
     fetchImpl: async () => {
@@ -401,7 +408,157 @@ test('POST /api/tts/speak returns cached audio when mp3 already exists', async (
 
     assert.equal(response.status, 200);
     assert.equal(payload.success, true);
-    assert.equal(payload.audio_url, '/user_assets/tts/91.mp3');
+    assert.match(payload.audio_url, /^\/user_assets\/tts\/91-[a-f0-9]{14}\.mp3$/);
     assert.equal(fetchCalled, false);
+  });
+});
+
+
+test('isVolcDoubaoTts identifies the merged doubao voice channel', () => {
+  assert.equal(isVolcDoubaoTts({ provider_type: 'volc-realtime', model: 'seed-tts-2.0' }), true);
+  assert.equal(isVolcDoubaoTts({ model: 'seed-tts-2.0' }), true);
+  assert.equal(isVolcDoubaoTts({ api_base: 'https://openspeech.bytedance.com/api/v3' }), true);
+  assert.equal(isVolcDoubaoTts({ provider_type: 'openai-compatible', model: 'qwen3-tts-vd' }), false);
+});
+
+test('parseVolcTtsStream joins multiple base64 audio chunks', () => {
+  const result = parseVolcTtsStream([
+    JSON.stringify({ code: 0, data: Buffer.from([1, 2]).toString('base64') }),
+    JSON.stringify({ code: 0, data: Buffer.from([3, 4, 5]).toString('base64') }),
+    JSON.stringify({ code: 20000000, usage: { characters: 6 } })
+  ].join('\n'));
+
+  assert.deepEqual([...result.audioBuffer], [1, 2, 3, 4, 5]);
+  assert.equal(result.finished, true);
+  assert.deepEqual(result.usage, { characters: 6 });
+});
+
+test('POST /api/tts/preview calls doubao seed tts and returns cached mp3', async () => {
+  const upstreamCalls = [];
+  const writes = [];
+  const pool = {
+    query: async (sql, params) => {
+      if (sql.includes('FROM capability_assignments ca')) {
+        assert.deepEqual(params, [7, 'tts']);
+        return [[{
+          capability: 'tts',
+          enabled: 1,
+          extras: JSON.stringify({ voice_id: 'saturn_zh_female_wenrouwenya_tob', resource_id: 'seed-tts-2.0' }),
+          provider_type: 'volc-realtime',
+          api_base: 'wss://openspeech.bytedance.com/api/v3/realtime/dialogue',
+          api_key: 'volc-test-key',
+          model: 'seed-tts-2.0'
+        }]];
+      }
+      throw new Error(`Unexpected query: ${sql}`);
+    }
+  };
+
+  const router = createTtsRouter({
+    pool,
+    fileStorage: {
+      mkdir: async () => {},
+      access: async () => { throw new Error('not cached'); },
+      writeFile: async (filePath, content) => writes.push({ filePath, content })
+    },
+    fetchImpl: async (url, options) => {
+      upstreamCalls.push({ url, options });
+      return {
+        ok: true,
+        status: 200,
+        text: async () => [
+          JSON.stringify({ code: 0, data: Buffer.from([9, 8]).toString('base64') }),
+          JSON.stringify({ code: 20000000 })
+        ].join('\n')
+      };
+    }
+  });
+
+  await withServer(createApp({ router }), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/tts/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: '我在呢。', voice_override: 'saturn_zh_female_wenrouwenya_tob', rate: 0.9 })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.success, true);
+    assert.match(payload.audio_url, /^\/user_assets\/tts\/preview-7-[a-f0-9]{14}\.mp3$/);
+    assert.equal(upstreamCalls.length, 1);
+    assert.equal(upstreamCalls[0].url, 'https://openspeech.bytedance.com/api/v3/tts/unidirectional');
+    assert.equal(upstreamCalls[0].options.headers['X-Api-Key'], 'volc-test-key');
+    assert.equal(upstreamCalls[0].options.headers['X-Api-Resource-Id'], 'seed-tts-2.0');
+    const body = JSON.parse(upstreamCalls[0].options.body);
+    assert.equal(body.req_params.text, '我在呢。');
+    assert.equal(body.req_params.speaker, 'saturn_zh_female_wenrouwenya_tob');
+    assert.equal(body.req_params.audio_params.format, 'mp3');
+    assert.equal(body.req_params.audio_params.sample_rate, 24000);
+    assert.equal(body.req_params.audio_params.speech_rate, -10);
+    assert.deepEqual([...writes[0].content], [9, 8]);
+  });
+});
+
+test('POST /api/tts/speak can convert an assistant text message into a persistent voice message', async () => {
+  const updates = [];
+  const pool = {
+    query: async (sql, params) => {
+      if (sql.includes('FROM messages')) {
+        return [[{
+          id: 91,
+          user_id: 7,
+          role: 'assistant',
+          content: '这次换我说给你听。',
+          character_id: 3,
+          message_type: 'text',
+          media_url: null
+        }]];
+      }
+      if (sql.includes('FROM capability_assignments ca')) {
+        return [[{
+          capability: 'tts',
+          enabled: 1,
+          extras: JSON.stringify({ voice_id: 'alloy' }),
+          provider_type: 'openai-compatible',
+          api_base: 'https://api.example.com/v1',
+          api_key: 'tts-test-key',
+          model: 'gpt-4o-mini-tts'
+        }]];
+      }
+      if (sql.includes("UPDATE messages") && sql.includes("message_type = 'voice'")) {
+        updates.push(params);
+        return [{ affectedRows: 1 }];
+      }
+      throw new Error(`Unexpected query: ${sql}`);
+    }
+  };
+  const router = createTtsRouter({
+    pool,
+    fileStorage: {
+      mkdir: async () => {},
+      access: async () => { throw new Error('not cached'); },
+      writeFile: async () => {}
+    },
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      arrayBuffer: async () => new Uint8Array([6, 6, 6]).buffer,
+      text: async () => ''
+    })
+  });
+
+  await withServer(createApp({ router }), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/tts/speak`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message_id: 91, convert_to_voice: true, voice_override: 'alloy', rate: 1 })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.success, true);
+    assert.equal(payload.converted_to_voice, true);
+    assert.equal(updates.length, 1);
+    assert.deepEqual(updates[0], [payload.audio_url, 91, 7]);
   });
 });

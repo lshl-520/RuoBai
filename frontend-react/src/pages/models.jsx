@@ -2,6 +2,7 @@ import React from "react";
 import { Icon, CHANNEL_TYPES, VOICE_ENGINES, useLockBody } from "../store.jsx";
 import { getCredentials, createCredential, updateCredential, deleteCredential, refreshCredentialModels, discoverModelConfigs, getCapabilities, updateCapability } from "../lib/profile.js";
 import { loadVoiceSettings, saveVoiceSettings } from "../lib/voice-settings.js";
+import { previewTts } from "../lib/chat.js";
 import { Toggle, StatusDot, Row } from "./profile.jsx";
 
 const { useState: useStateMo } = React;
@@ -11,6 +12,9 @@ const TASK_IMAGE_PROVIDER = "image-task-no-key";
 const TASK_IMAGE_MODEL = "task-image-default";
 const VOLC_REALTIME_PROVIDER = "volc-realtime";
 const VOLC_REALTIME_MODEL = "2.2.0.0";
+const VOLC_TTS_MODEL = "seed-tts-2.0";
+const VOLC_VOICE_MODELS = [VOLC_REALTIME_MODEL, VOLC_TTS_MODEL];
+const DEFAULT_VOLC_VOICE = "saturn_zh_female_wenrouwenya_tob";
 const loadCH = () => { try { const s = JSON.parse(localStorage.getItem(LS_CH)); if (Array.isArray(s)) return s; } catch (e) {} return []; };
 
 const CAP_INFO = {
@@ -85,10 +89,10 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
   const [apiKey, setApiKey] = useStateMo(channel?.apiKey || "");
   const [enabled, setEnabled] = useStateMo(channel?.enabled ?? true);
   const [showKey, setShowKey] = useStateMo(false);
-  const [models, setModels] = useStateMo(realtimeMode ? [VOLC_REALTIME_MODEL] : []);
+  const [models, setModels] = useStateMo(realtimeMode ? VOLC_VOICE_MODELS : []);
   const [model, setModel] = useStateMo(channel?.model || (realtimeMode ? VOLC_REALTIME_MODEL : ""));
   const [fetchState, setFetchState] = useStateMo(realtimeMode ? "done" : "idle");
-  const [purposes, setPurposes] = useStateMo(channel?.purposes?.length ? channel.purposes : (realtimeMode ? ["realtime"] : ["chat"]));
+  const [purposes, setPurposes] = useStateMo(channel?.purposes?.length ? channel.purposes : (realtimeMode ? ["realtime", "tts"] : ["chat"]));
 
   const togglePurpose = (p) => {
     if (taskImageMode || realtimeMode) return;
@@ -120,11 +124,11 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
     if (t !== "custom") setTaskImageMode(false);
     if (t === VOLC_REALTIME_PROVIDER) {
       setBase(p.base);
-      setModels([VOLC_REALTIME_MODEL]);
+      setModels(VOLC_VOICE_MODELS);
       setModel(VOLC_REALTIME_MODEL);
-      setPurposes(["realtime"]);
+      setPurposes(["realtime", "tts"]);
       setFetchState("done");
-      if (!name.trim()) setName("火山实时通话");
+      if (!name.trim()) setName("豆包语音");
       return;
     }
     setFetchState("idle");
@@ -144,7 +148,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
         setModel(TASK_IMAGE_MODEL);
         setFetchState("done");
       } else if (realtimeMode) {
-        setModels([VOLC_REALTIME_MODEL]);
+        setModels(VOLC_VOICE_MODELS);
         setModel(VOLC_REALTIME_MODEL);
         setFetchState("done");
       } else if (channel?._backendId) {
@@ -239,7 +243,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
 
           <label className="field-label">这个渠道用来做什么 <span className="lbl-hint">可多选</span></label>
           <div className="type-grid">
-            {(taskImageMode ? PURPOSE_OPTS.filter((p) => p.key === "image") : realtimeMode ? PURPOSE_OPTS.filter((p) => p.key === "realtime") : PURPOSE_OPTS).map((p) => (
+            {(taskImageMode ? PURPOSE_OPTS.filter((p) => p.key === "image") : realtimeMode ? PURPOSE_OPTS.filter((p) => ["tts", "realtime"].includes(p.key)) : PURPOSE_OPTS).map((p) => (
               <button key={p.key} className={"type-chip" + (purposes.includes(p.key) ? " on" : "")} onClick={() => togglePurpose(p.key)}>
                 {p.label}
               </button>
@@ -255,7 +259,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
                 : <><Icon name="refresh" /> 获取模型列表</>}
             </button>
           </div>
-          {models.length === 0 && <div className="model-empty">{noKeyRequired ? "这个渠道会自动使用固定生图模型" : realtimeMode ? "火山实时通话固定使用 SC2.0 模型" : "点「获取模型列表」拉取，或手动输入"}</div>}
+          {models.length === 0 && <div className="model-empty">{noKeyRequired ? "这个渠道会自动使用固定生图模型" : realtimeMode ? "豆包语音会自动登记实时通话和文字转语音" : "点「获取模型列表」拉取，或手动输入"}</div>}
           {models.length > 0 && models.length <= 10 && (
             <div className="model-chips" style={{ marginTop: 8 }}>
               {models.map((m) => (
@@ -272,7 +276,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
           {taskImageMode ? (
             <div className="model-empty" style={{ marginTop: 8 }}>固定模型：{TASK_IMAGE_MODEL}</div>
           ) : realtimeMode ? (
-            <div className="model-empty" style={{ marginTop: 8 }}>固定模型：{VOLC_REALTIME_MODEL}（SC2.0 角色扮演）</div>
+            <div className="model-empty" style={{ marginTop: 8 }}>固定能力：{VOLC_REALTIME_MODEL}（实时通话）+ {VOLC_TTS_MODEL}（文字转语音）</div>
           ) : (
             <input className="fld" style={{ marginTop: 8 }} value={model} onChange={(e) => setModel(e.target.value)} placeholder="模型名,例如 gpt-5.5" />
           )}
@@ -285,7 +289,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
         <div className="sheet-foot">
           {!isNew && <button className="icon-btn det-del" onClick={() => onDelete(channel.id)}><Icon name="trash" /></button>}
           <button className="pill pill-primary grow" disabled={!canSave} style={!canSave ? { opacity: 0.5 } : null}
-            onClick={() => onSave({ id: channel?.id, type, providerType: taskImageMode ? TASK_IMAGE_PROVIDER : type, name, base, taskBase, apiKey: taskImageMode ? "" : apiKey, enabled, model: taskImageMode ? TASK_IMAGE_MODEL : realtimeMode ? VOLC_REALTIME_MODEL : model, fetched: models, purposes: taskImageMode ? ["image"] : realtimeMode ? ["realtime"] : purposes })}>
+            onClick={() => onSave({ id: channel?.id, type, providerType: taskImageMode ? TASK_IMAGE_PROVIDER : type, name, base, taskBase, apiKey: taskImageMode ? "" : apiKey, enabled, model: taskImageMode ? TASK_IMAGE_MODEL : realtimeMode ? VOLC_REALTIME_MODEL : model, fetched: models, purposes: taskImageMode ? ["image"] : realtimeMode ? ["realtime", "tts"] : purposes })}>
             {isNew ? "添加渠道" : "保存"}
           </button>
         </div>
@@ -295,15 +299,21 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
 }
 
 /* ====== 语音 TTS 配置 Sheet ====== */
-function VoiceSheet({ voice, onClose, onSave }) {
+function VoiceSheet({ voice, capabilities, onClose, onSave, onPrepareCloud }) {
   useLockBody();
   const [engine, setEngine] = useStateMo(voice?.engine || "browser");
   const [rate, setRate] = useStateMo(voice?.rate ?? 0.9);
-  const [qwenVoiceId, setQwenVoiceId] = useStateMo(voice?.voiceId || "");
+  const [qwenVoiceId, setQwenVoiceId] = useStateMo(voice?.voiceId || "longwan");
   const [browserVoiceURI, setBrowserVoiceURI] = useStateMo(voice?.browserVoiceURI || "");
-  const [volcVoice, setVolcVoice] = useStateMo(voice?.volcVoice || "zh_female_wennuan");
+  const [volcVoice, setVolcVoice] = useStateMo(voice?.volcVoice || DEFAULT_VOLC_VOICE);
   const [browserVoices, setBrowserVoices] = useStateMo([]);
   const [testing, setTesting] = useStateMo(false);
+  const [saving, setSaving] = useStateMo(false);
+  const [error, setError] = useStateMo("");
+
+  const ttsOptions = capabilities?.find((item) => item.capability === "tts")?.options || [];
+  const hasVolcTts = ttsOptions.some((item) => item.model_id === VOLC_TTS_MODEL);
+  const hasQwenTts = ttsOptions.some((item) => /qwen/i.test(item.model_id || ""));
 
   React.useEffect(() => {
     if (!("speechSynthesis" in window)) return;
@@ -311,17 +321,70 @@ function VoiceSheet({ voice, onClose, onSave }) {
     load(); window.speechSynthesis.onvoiceschanged = load;
   }, []);
 
-  const test = () => {
+  const currentConfig = () => ({
+    engine,
+    rate: Number(rate),
+    voiceId: qwenVoiceId.trim() || "longwan",
+    browserVoiceURI,
+    volcVoice: volcVoice.trim() || DEFAULT_VOLC_VOICE,
+  });
+
+  const speakInBrowser = () => new Promise((resolve, reject) => {
+    if (!("speechSynthesis" in window)) {
+      reject(new Error("当前浏览器不支持语音朗读"));
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance("我在呢。今天也会好好陪着你。");
+    u.lang = "zh-CN"; u.rate = Number(rate); u.pitch = 1.1;
+    const sel = browserVoices.find((v) => v.voiceURI === browserVoiceURI);
+    if (sel) u.voice = sel;
+    u.onend = resolve;
+    u.onerror = () => reject(new Error("浏览器语音播放失败"));
+    window.speechSynthesis.speak(u);
+  });
+
+  const test = async () => {
+    if (testing) return;
     setTesting(true);
-    if (engine === "browser" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance("我在呢。今天也会好好陪着你。");
-      u.lang = "zh-CN"; u.rate = Number(rate); u.pitch = 1.1;
-      const sel = browserVoices.find((v) => v.voiceURI === browserVoiceURI);
-      if (sel) u.voice = sel;
-      u.onend = () => setTesting(false);
-      window.speechSynthesis.speak(u);
-    } else { setTimeout(() => setTesting(false), 1600); }
+    setError("");
+    try {
+      if (engine === "browser") {
+        await speakInBrowser();
+        return;
+      }
+
+      const config = currentConfig();
+      await onPrepareCloud(config);
+      const result = await previewTts({
+        voiceOverride: engine === "volcengine" ? config.volcVoice : config.voiceId,
+        rate: config.rate,
+      });
+      if (!result?.success || !result.audio_url) throw new Error(result?.error || "没有生成试听音频");
+      const audio = new Audio(`${result.audio_url}?preview=${Date.now()}`);
+      await audio.play();
+      await new Promise((resolve, reject) => {
+        audio.onended = resolve;
+        audio.onerror = () => reject(new Error("试听音频播放失败"));
+      });
+    } catch (e) {
+      setError(e?.message || String(e));
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const save = async () => {
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      await onSave(currentConfig());
+    } catch (e) {
+      setError(e?.message || String(e));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -337,7 +400,7 @@ function VoiceSheet({ voice, onClose, onSave }) {
         <div className="sheet-body">
           <label className="field-label">语音引擎</label>
           {VOICE_ENGINES.map((e) => (
-            <button key={e.id} className={"engine-row" + (engine === e.id ? " on" : "")} onClick={() => setEngine(e.id)}>
+            <button key={e.id} className={"engine-row" + (engine === e.id ? " on" : "")} onClick={() => { setEngine(e.id); setError(""); }}>
               <span className="er-radio" />
               <span className="er-main"><span className="er-name">{e.name}{e.free && <span className="er-free">免费</span>}</span><span className="er-sub">{e.sub}</span></span>
             </button>
@@ -349,30 +412,31 @@ function VoiceSheet({ voice, onClose, onSave }) {
               <option value="">系统默认</option>
               {browserVoices.map((v) => <option key={v.voiceURI} value={v.voiceURI}>{v.name} ({v.lang})</option>)}
             </select>
-            <div className="voice-tip">浏览器自带,免费、即开即用、断网也能用。音色取决于你的系统。</div>
+            <div className="voice-tip">浏览器自带，免费、即开即用。它只能临时朗读，不能保存成角色语音气泡。</div>
           </>)}
 
           {engine === "qwen" && (<>
             <label className="field-label">千问音色 ID</label>
-            <input className="fld" value={qwenVoiceId} onChange={(e) => setQwenVoiceId(e.target.value)} placeholder="qwen-tts-vd-bailian-voice-..." />
-            <div className="voice-tip">走「阿里千问」渠道的密钥,请求 /audio/speech。</div>
+            <input className="fld" value={qwenVoiceId} onChange={(e) => setQwenVoiceId(e.target.value)} placeholder="longwan 或专属音色 ID" />
+            <div className="voice-tip">{hasQwenTts ? "已找到支持文字转语音的千问渠道。" : "还没有发现千问 TTS 模型，请先在接口渠道里配置。"}</div>
           </>)}
 
           {engine === "volcengine" && (<>
-            <label className="field-label">火山音色</label>
-            <input className="fld" value={volcVoice} onChange={(e) => setVolcVoice(e.target.value)} placeholder="zh_female_wennuan" />
-            <div className="voice-tip">火山语音需要 appId / token / cluster。<b>后端还没接,先占个位。</b></div>
+            <label className="field-label">豆包音色 ID</label>
+            <input className="fld" value={volcVoice} onChange={(e) => setVolcVoice(e.target.value)} placeholder={DEFAULT_VOLC_VOICE} />
+            <div className="voice-tip">{hasVolcTts ? "已复用实时通话的豆包语音 Key，可试听，也能生成角色语音消息。" : "请先添加或保存一次“豆包语音”渠道，系统会自动登记实时通话和文字转语音。"}</div>
           </>)}
 
           <label className="field-label">语速 <span className="lbl-hint">{Number(rate).toFixed(2)}x</span></label>
           <input className="range" type="range" min="0.6" max="1.4" step="0.05" value={rate} onChange={(e) => setRate(e.target.value)} />
 
-          <button className={"test-btn" + (testing ? " loading" : "")} onClick={test} style={{ marginTop: 16 }}>
-            {testing ? <><span className="test-spin" /> 她正在说...</> : <><Icon name="wave" /> 试听一句</>}
+          <button className={"test-btn" + (testing ? " loading" : "")} onClick={test} disabled={testing} style={{ marginTop: 16 }}>
+            {testing ? <><span className="test-spin" /> 她正在说...</> : <><Icon name="wave" /> 真实试听一句</>}
           </button>
+          {error && <div className="voice-tip" style={{ color: "#c4566b", marginTop: 10 }}>{error}</div>}
         </div>
         <div className="sheet-foot">
-          <button className="pill pill-primary grow" onClick={() => onSave({ engine, rate: Number(rate), voiceId: qwenVoiceId, browserVoiceURI, volcVoice })}>保存语音</button>
+          <button className="pill pill-primary grow" onClick={save} disabled={saving}>{saving ? "保存中..." : "保存语音"}</button>
         </div>
       </div>
     </div>
@@ -406,7 +470,7 @@ function ModelsSection() {
   const toggleCap = async (capKey, currentEnabled) => {
     if (!currentEnabled) {
       // 开启时：必须带上已有的 credential_id + model_id，否则后端400
-      const cap = caps.find((c) => c.capability === capKey);
+      const cap = capabilities.find((c) => c.capability === capKey);
       if (!cap?.current?.credential_id || !cap?.current?.model_id) {
         // 还没选过模型，直接打开选择器
         setCapPicker(capKey);
@@ -458,6 +522,13 @@ function ModelsSection() {
         _backendId: cfg.id,
       }));
       setChannels(converted);
+      const volcCredentialIds = raw
+        .filter((cfg) => cfg.provider_type === VOLC_REALTIME_PROVIDER)
+        .map((cfg) => cfg.id);
+      if (volcCredentialIds.length > 0) {
+        Promise.all(volcCredentialIds.map((id) => refreshCredentialModels(id).catch(() => null)))
+          .then(() => { if (!cancelled) refreshCaps(); });
+      }
     }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
@@ -521,14 +592,50 @@ function ModelsSection() {
     setChSheet(undefined);
   };
 
-  const saveVoice = (v) => {
-    const saved = saveVoiceSettings({ ...voiceConfig, ...v });
+  const prepareCloudVoice = async (v) => {
+    if (v.engine === "browser") return null;
+    const ttsCapability = capabilities.find((item) => item.capability === "tts");
+    const options = ttsCapability?.options || [];
+    const target = v.engine === "volcengine"
+      ? options.find((item) => item.model_id === VOLC_TTS_MODEL)
+      : options.find((item) => /qwen/i.test(item.model_id || "")) || (ttsCapability?.current?.model_id !== VOLC_TTS_MODEL ? ttsCapability?.current : null);
+
+    if (!target?.credential_id || !target?.model_id) {
+      throw new Error(v.engine === "volcengine"
+        ? "还没有可用的豆包语音渠道，请先保存一次“豆包语音”接口渠道"
+        : "还没有可用的千问 TTS 模型，请先配置千问语音渠道");
+    }
+
+    const voiceId = v.engine === "volcengine" ? (v.volcVoice || DEFAULT_VOLC_VOICE) : (v.voiceId || "longwan");
+    const result = await updateCapability("tts", {
+      enabled: true,
+      credential_id: target.credential_id,
+      model_id: target.model_id,
+      extras: {
+        engine: v.engine,
+        voice_id: voiceId,
+        resource_id: target.model_id,
+        rate: Number(v.rate) || 0.9,
+      },
+    });
+    if (!result?.success) throw new Error(result?.error || "语音渠道保存失败");
+    refreshCaps();
+    return target;
+  };
+
+  const saveVoice = async (v) => {
+    if (v.engine !== "browser") await prepareCloudVoice(v);
+    const saved = saveVoiceSettings({ ...voiceConfig, ...v, enabled: true });
     setVoiceConfig(saved);
     setVoiceSheet(false);
   };
 
-  const toggleVoice = () => {
-    const saved = saveVoiceSettings({ ...voiceConfig, enabled: !voiceConfig.enabled });
+  const toggleVoice = async () => {
+    const nextEnabled = !voiceConfig.enabled;
+    if (nextEnabled && voiceConfig.engine !== "browser") {
+      try { await prepareCloudVoice(voiceConfig); } catch { setVoiceSheet(true); return; }
+    }
+    const saved = saveVoiceSettings({ ...voiceConfig, enabled: nextEnabled });
     setVoiceConfig(saved);
   };
 
@@ -608,7 +715,7 @@ function ModelsSection() {
         ) : null;
       })()}
       {voiceSheet && (
-        <VoiceSheet voice={voiceConfig} onClose={() => setVoiceSheet(false)} onSave={saveVoice} />
+        <VoiceSheet voice={voiceConfig} capabilities={capabilities} onClose={() => setVoiceSheet(false)} onSave={saveVoice} onPrepareCloud={prepareCloudVoice} />
       )}
     </>
   );

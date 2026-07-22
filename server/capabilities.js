@@ -107,7 +107,8 @@ async function loadAssignments(queryable, userId) {
         ca.model_id,
         ca.credential_id,
         ca.extras,
-        c.name AS credential_name
+        c.name AS credential_name,
+        c.provider_type
       FROM capability_assignments ca
       INNER JOIN credentials c ON c.id = ca.credential_id
       WHERE ca.user_id = ?
@@ -193,7 +194,7 @@ function buildCapabilityItems(assignments, optionsRows) {
       if (!item) continue;
       item.options.push({
         credential_id: row.credential_id,
-        credential_name: row.credential_name,
+        credential_name: row.provider_type === VOLC_REALTIME_PROVIDER && row.credential_name === '火山实时通话' ? '豆包语音' : row.credential_name,
         model_id: row.model_id
       });
     }
@@ -205,7 +206,7 @@ function buildCapabilityItems(assignments, optionsRows) {
     item.enabled = Boolean(row.enabled);
     item.current = {
       credential_id: row.credential_id,
-      credential_name: row.credential_name,
+      credential_name: row.provider_type === VOLC_REALTIME_PROVIDER && row.credential_name === '火山实时通话' ? '豆包语音' : row.credential_name,
       model_id: row.model_id,
       extras: normalizeExtras(row.extras)
     };
@@ -327,7 +328,7 @@ export function createCapabilitiesRouter({
     if (capability === 'realtime' && assignment.provider_type === 'volc-realtime') {
       try {
         await testVolcRealtimeCredential(assignment);
-        return res.json({ success: true, message: '火山实时通话连接正常' });
+        return res.json({ success: true, message: '豆包语音实时通话连接正常' });
       } catch (error) {
         return res.status(400).json({ success: false, error: error.message });
       }

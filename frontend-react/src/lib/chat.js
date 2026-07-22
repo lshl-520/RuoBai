@@ -51,11 +51,25 @@ export function clearChat(roleId) {
   });
 }
 
-export function speakMessage(messageId) {
+export function speakMessage(messageId, options = {}) {
   return request("/api/tts/speak", {
     method: "POST",
     body: JSON.stringify({
       message_id: messageId,
+      voice_override: options.voiceOverride || "",
+      rate: options.rate,
+      convert_to_voice: Boolean(options.convertToVoice),
+    }),
+  });
+}
+
+export function previewTts(options = {}) {
+  return request("/api/tts/preview", {
+    method: "POST",
+    body: JSON.stringify({
+      text: options.text || "我在呢。今天也会好好陪着你。",
+      voice_override: options.voiceOverride || "",
+      rate: options.rate,
     }),
   });
 }

@@ -132,8 +132,8 @@ const CHANNEL_TYPES = {
   grok:       { name: "Grok 官方",     base: "https://api.x.ai/v1",                               keyHint: "xai-...", caps: ["chat", "image"],          models: ["grok-4", "grok-3", "grok-3-mini"] },
   deepseek:   { name: "DeepSeek 官方", base: "https://api.deepseek.com",                          keyHint: "sk-...",  caps: ["chat"],                   models: ["deepseek-chat", "deepseek-reasoner"] },
   dashscope:  { name: "阿里千问官方",   base: "https://dashscope.aliyuncs.com/compatible-mode/v1", keyHint: "sk-...",  caps: ["chat", "image", "voice"], models: ["qwen-max", "qwen-plus", "qwen-turbo", "qwen-vl-max"] },
-  volcengine: { name: "火山豆包",      base: "https://ark.cn-beijing.volces.com/api/v3",          keyHint: "...",     caps: ["chat", "image", "voice"], models: ["doubao-pro-32k", "doubao-lite-32k", "doubao-vision-pro"] },
-  "volc-realtime": { name: "火山实时通话", base: "wss://openspeech.bytedance.com/api/v3/realtime/dialogue", keyHint: "新版 API Key", caps: ["realtime"], models: ["2.2.0.0"] },
+  volcengine: { name: "火山方舟",      base: "https://ark.cn-beijing.volces.com/api/v3",          keyHint: "...",     caps: ["chat", "image", "voice"], models: ["doubao-pro-32k", "doubao-lite-32k", "doubao-vision-pro"] },
+  "volc-realtime": { name: "豆包语音", base: "wss://openspeech.bytedance.com/api/v3/realtime/dialogue", keyHint: "新版豆包语音 API Key", caps: ["realtime", "voice"], models: ["2.2.0.0", "seed-tts-2.0"] },
   custom:     { name: "自定义 / 中转", base: "https://",                                          keyHint: "sk-...",  caps: ["chat", "image", "voice"], models: [] },
   "openai-compatible": { name: "OpenAI兼容", base: "https://", keyHint: "sk-...", caps: ["chat", "image", "voice"], models: [] }, // 后端兼容用，不在UI显示
 };
@@ -144,7 +144,7 @@ const CAP_LABELS = { chat: "聊天", image: "图片", voice: "语音", realtime:
 const VOICE_ENGINES = [
   { id: "browser", name: "浏览器语音", sub: "免费 · 内置 · 无需密钥", free: true },
   { id: "qwen", name: "千问 TTS", sub: "阿里千问 · 自然女声", free: false },
-  { id: "volcengine", name: "火山语音", sub: "豆包 · 高拟真(需配置)", free: false },
+  { id: "volcengine", name: "豆包语音", sub: "实时通话同一把 Key · 高拟真", free: false },
 ];
 
 /* ---------- 动态 / 朋友圈 ---------- */

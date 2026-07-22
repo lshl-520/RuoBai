@@ -105,7 +105,7 @@ test('GET /api/capabilities returns 5 capabilities with current assignment and a
   });
 });
 
-test('GET /api/capabilities 只把火山专用渠道列进实时通话', async () => {
+test('GET /api/capabilities 把豆包语音分别列进实时通话和文字转语音', async () => {
   const router = createCapabilitiesRouter({
     pool: {
       query: async sql => {
@@ -125,6 +125,13 @@ test('GET /api/capabilities 只把火山专用渠道列进实时通话', async (
               provider_type: 'volc-realtime',
               model_id: '2.2.0.0',
               capabilities: '[\"realtime\"]'
+            },
+            {
+              credential_id: 9,
+              credential_name: '火山实时通话',
+              provider_type: 'volc-realtime',
+              model_id: 'seed-tts-2.0',
+              capabilities: '[\"tts\"]'
             }
           ]];
         }
@@ -137,10 +144,13 @@ test('GET /api/capabilities 只把火山专用渠道列进实时通话', async (
     const response = await fetch(`${baseUrl}/api/capabilities`);
     const payload = await response.json();
     const realtime = payload.items.find(item => item.capability === 'realtime');
+    const tts = payload.items.find(item => item.capability === 'tts');
 
     assert.equal(response.status, 200);
-    assert.deepEqual(realtime.options.map(item => item.credential_name), ['火山实时通话']);
+    assert.deepEqual(realtime.options.map(item => item.credential_name), ['豆包语音']);
     assert.deepEqual(realtime.options.map(item => item.model_id), ['2.2.0.0']);
+    assert.deepEqual(tts.options.map(item => item.credential_name), ['豆包语音']);
+    assert.deepEqual(tts.options.map(item => item.model_id), ['seed-tts-2.0']);
   });
 });
 
