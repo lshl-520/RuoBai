@@ -205,8 +205,10 @@ async function start() {
         await listenOnPort(port);
         console.log(`\n  ✨ RuoBai 启动成功`);
         console.log(`  ─────────────────────────────────`);
-        console.log(`  前台：http://localhost:${port}/index.html`);
-        console.log(`  后台：http://localhost:${port}/admin.html`);
+        console.log(`  后端接口：http://localhost:${port}/api/`);
+        console.log(`  正式前台：http://localhost:${port}/`);
+        console.log(`  React 开发：http://127.0.0.1:4175/`);
+        console.log(`  管理后台：http://localhost:${port}/admin.html`);
         console.log(`  ─────────────────────────────────`);
         console.log(`  默认管理员账号：admin`);
         console.log(`  默认管理员密码：123456`);

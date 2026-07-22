@@ -44,3 +44,13 @@ test('profile keeps rendering when the backend returns an empty role list', asyn
   assert.match(profile, /const visibleAgents = hasRealAgents \? agents : \[\];/);
   assert.doesNotMatch(profile, /const agents = realAgents\s*\?\s*realAgents\.map/);
 });
+
+test('owner sees a React profile shortcut to the existing admin page', async () => {
+  const profile = await readProjectFile('frontend-react', 'src', 'pages', 'profile.jsx');
+  const vite = await readProjectFile('frontend-react', 'vite.config.js');
+
+  assert.match(profile, /const isOwner = realUser\?\.role === "owner";/);
+  assert.match(profile, /\{isOwner && <Row[^>]+title="管理后台"/);
+  assert.match(profile, /window\.location\.href = "\/admin"/);
+  assert.match(vite, /"\/admin": \{/);
+});
