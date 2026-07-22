@@ -63,6 +63,10 @@ test('POST /api/chat sends image_url payload to vision model when image message 
           return [[{ column_name: 'is_deleted' }]];
         }
 
+        if (sql.includes('SELECT city FROM users')) {
+          return [[{ city: '' }]];
+        }
+
         if (sql.includes('FROM messages') && sql.includes('ORDER BY id DESC')) {
           return [[
             {
@@ -188,6 +192,10 @@ test('POST /api/chat falls back to chat model with downgrade hint when vision ca
 
         if (sql.includes('INFORMATION_SCHEMA.COLUMNS')) {
           return [[{ column_name: 'is_deleted' }]];
+        }
+
+        if (sql.includes('SELECT city FROM users')) {
+          return [[{ city: '' }]];
         }
 
         if (sql.includes('FROM messages') && sql.includes('ORDER BY id DESC')) {
