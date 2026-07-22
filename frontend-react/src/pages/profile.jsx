@@ -582,6 +582,7 @@ function ProfileScreen({ user: userProp, onOnboard, onGoMemory, onLogout }) {
   const [avatar, setAvatar] = useStateP(user.avatar || FALLBACK_USER.avatar);
   const [nameOverride, setNameOverride] = useStateP(null); // 保存昵称后立刻更新显示
   const displayName = nameOverride ?? user.name;
+  const isOwner = realUser?.role === "owner";
 
   // 真实数据加载完后同步头像
   useEffectP(() => { setAvatar(user.avatar || FALLBACK_USER.avatar); }, [user.avatar]);
@@ -650,6 +651,7 @@ function ProfileScreen({ user: userProp, onOnboard, onGoMemory, onLogout }) {
           <Row icon="bell" title="通知与主动消息" sub="她想你的时候提醒你" onClick={() => setSheet("notif")} trailing={<Icon name="chevron" className="row-chev" />} />
           <Row icon="download" tint="lav" title="导出聊天记录" sub="存成 .txt,自己留底 / 搬家" onClick={() => setSheet("export")} trailing={<Icon name="chevron" className="row-chev" />} />
           <Row icon="shield" tint="lav" title="隐私与数据" sub="数据存哪、清理、注销" onClick={() => setSheet("privacy")} trailing={<Icon name="chevron" className="row-chev" />} />
+          {isOwner && <Row icon="settings" tint="rose" title="管理后台" sub="用户、邀请码、系统状态与网站更新" onClick={() => { window.location.href = "/admin"; }} trailing={<Icon name="chevron" className="row-chev" />} />}
           <Row icon="spark" tint="rose" title="关于若白" sub="为什么会有她 · v2.0" last onClick={() => setSheet("about")} trailing={<Icon name="chevron" className="row-chev" />} />
         </div>
         <button className="logout-btn" onClick={handleLogout}><Icon name="logout" /> 退出登录</button>

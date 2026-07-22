@@ -12,6 +12,11 @@ export default defineConfig({
         changeOrigin: true,
         ws: true,
       },
+      // React 开发端口只负责新前台；后台继续由 3000 的独立 admin.html 提供。
+      "/admin": {
+        target: "http://127.0.0.1:3000",
+        changeOrigin: true,
+      },
       // 用户上传的聊天图片/头像/立绘存在后端 /user_assets 下，代理过去才能显示。
       // 注意：这里只代理 /user_assets，绝不代理 /assets（那是 React 自己的装修图/立绘）。
       "/user_assets": {
