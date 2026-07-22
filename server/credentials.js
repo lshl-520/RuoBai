@@ -9,6 +9,7 @@ const TASK_IMAGE_PROVIDER = 'image-task-no-key';
 const TASK_IMAGE_MODEL = 'task-image-default';
 const VOLC_REALTIME_PROVIDER = 'volc-realtime';
 const VOLC_REALTIME_MODEL = '2.2.0.0';
+const VOLC_TTS_MODEL = 'seed-tts-2.0';
 
 function buildModelsUrl(apiBase) {
   const base = String(apiBase || '').trim().replace(/\/+$/, '');
@@ -40,7 +41,10 @@ function isVolcRealtimeProvider(providerType) {
 }
 
 function fixedVolcRealtimeModels() {
-  return [{ model_id: VOLC_REALTIME_MODEL, capabilities: ['realtime'] }];
+  return [
+    { model_id: VOLC_REALTIME_MODEL, capabilities: ['realtime'] },
+    { model_id: VOLC_TTS_MODEL, capabilities: ['tts'] }
+  ];
 }
 
 function sanitizeCredential(body = {}) {
@@ -54,10 +58,13 @@ function sanitizeCredential(body = {}) {
 }
 
 function presentCredential(row) {
+  const displayName = row.provider_type === VOLC_REALTIME_PROVIDER && row.name === '火山实时通话'
+    ? '豆包语音'
+    : row.name;
   return {
     id: row.id,
     user_id: row.user_id,
-    name: row.name,
+    name: displayName,
     provider_type: row.provider_type,
     api_base: row.api_base,
     api_aux_base: row.api_aux_base || '',
@@ -365,7 +372,7 @@ export function createCredentialsRouter({
     if (isVolcRealtimeProvider(credential.provider_type)) {
       try {
         await testVolcRealtimeCredential(credential);
-        return res.json({ success: true, message: '火山实时通话连接正常' });
+        return res.json({ success: true, message: '豆包语音连接正常' });
       } catch (error) {
         return res.status(400).json({ success: false, error: error.message });
       }

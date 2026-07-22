@@ -469,3 +469,62 @@ test('task image refresh uses a fixed model and connectivity test uses the auxil
     assert.deepEqual(requestedUrls, ['https://tasks.example.com/system_stats']);
   });
 });
+
+
+test('doubao voice credential registers realtime and tts models with the same key', async () => {
+  const insertedModels = [];
+  const created = {
+    id: 21,
+    user_id: 7,
+    name: '豆包语音',
+    provider_type: 'volc-realtime',
+    api_base: 'wss://openspeech.bytedance.com/api/v3/realtime/dialogue',
+    api_aux_base: '',
+    api_key: 'volc-test-key',
+    created_at: '2026-07-22 10:00:00'
+  };
+  const router = createCredentialsRouter({
+    pool: {
+      query: async (sql, params) => {
+        if (sql.includes('SELECT id FROM credentials WHERE user_id = ? AND name = ?')) {
+          assert.deepEqual(params, [7, '豆包语音']);
+          return [[]];
+        }
+        throw new Error(`Unexpected pool query: ${sql}`);
+      }
+    },
+    withTransaction: async work => work({
+      query: async (sql, params) => {
+        if (sql.includes('FROM credentials WHERE user_id = ? AND api_base = ? AND api_key = ?')) return [[]];
+        if (sql.includes('INSERT INTO credentials')) return [{ insertId: 21 }];
+        if (sql.includes('INSERT INTO credential_models')) {
+          insertedModels.push({ model: params[1], capabilities: JSON.parse(params[2]) });
+          return [{ insertId: insertedModels.length }];
+        }
+        if (sql.includes('FROM credentials') && sql.includes('WHERE id = ? AND user_id = ?')) return [[created]];
+        throw new Error(`Unexpected tx query: ${sql}`);
+      }
+    })
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: '豆包语音',
+        provider_type: 'volc-realtime',
+        api_base: 'wss://openspeech.bytedance.com/api/v3/realtime/dialogue',
+        api_key: 'volc-test-key'
+      })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 201);
+    assert.equal(payload.success, true);
+    assert.deepEqual(insertedModels, [
+      { model: '2.2.0.0', capabilities: ['realtime'] },
+      { model: 'seed-tts-2.0', capabilities: ['tts'] }
+    ]);
+  });
+});

@@ -6,16 +6,21 @@ export const DEFAULT_VOICE_SETTINGS = {
   rate: 0.9,
   voiceId: "",
   browserVoiceURI: "",
-  volcVoice: "zh_female_wennuan",
+  volcVoice: "saturn_zh_female_wenrouwenya_tob",
 };
 
 export function normalizeVoiceSettings(value) {
   const source = value && typeof value === "object" ? value : {};
+  const savedVolcVoice = String(source.volcVoice || "").trim();
+  const volcVoice = !savedVolcVoice || savedVolcVoice === "zh_female_wennuan"
+    ? DEFAULT_VOICE_SETTINGS.volcVoice
+    : savedVolcVoice;
   return {
     ...DEFAULT_VOICE_SETTINGS,
     ...source,
     enabled: source.enabled !== false,
     rate: Number.isFinite(Number(source.rate)) ? Number(source.rate) : DEFAULT_VOICE_SETTINGS.rate,
+    volcVoice,
   };
 }
 

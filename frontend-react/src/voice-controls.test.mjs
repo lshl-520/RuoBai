@@ -14,6 +14,7 @@ const __dirname = path.dirname(__filename);
 test('browser TTS defaults to enabled and preserves an explicit off switch', () => {
   assert.equal(normalizeVoiceSettings(null).enabled, true);
   assert.equal(normalizeVoiceSettings({ enabled: false }).enabled, false);
+  assert.equal(normalizeVoiceSettings({ volcVoice: 'zh_female_wennuan' }).volcVoice, 'saturn_zh_female_wenrouwenya_tob');
 });
 
 test('speech recognition errors are translated into useful Chinese messages', () => {
@@ -27,9 +28,11 @@ test('voice controls use local TTS settings and wait for recognition to finish',
   const chat = await readFile(path.join(__dirname, 'pages', 'chat.jsx'), 'utf8');
 
   assert.match(models, /<Toggle on=\{voiceConfig\.enabled\}/);
-  assert.match(models, /saveVoiceSettings\(\{ \.\.\.voiceConfig, enabled: !voiceConfig\.enabled \}\)/);
-  assert.match(chat, /recognitionDoneRef/);
+  assert.match(models, /previewTts\(/);
+  assert.match(models, /VOLC_TTS_MODEL = "seed-tts-2\.0"/);
+  assert.match(models, /saveVoiceSettings\(\{ \.\.\.voiceConfig, enabled: nextEnabled \}\)/);
   assert.match(chat, /secondsRef\.current/);
-  assert.match(chat, /finishIfReady\(\)/);
-  assert.match(chat, /voiceSettings\.enabled && fullReply/);
+  assert.match(chat, /convertToVoice: true/);
+  assert.match(chat, /type: "voice"/);
+  assert.match(chat, /她的文字回复已经保留，但生成语音失败/);
 });

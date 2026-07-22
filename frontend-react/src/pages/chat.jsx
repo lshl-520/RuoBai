@@ -1,7 +1,7 @@
 import React from "react";
 import { Icon, Bars, greetByHour, STICKERS } from "../store.jsx";
 import { getRoles, getRolePortraitSrc, getRoleFullPortrait, clampIntimacy } from "../lib/roles.js";
-import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage, uploadVoice, deleteAllMessages, deleteMessage, detectDrawKeywords, drawImage } from "../lib/chat.js";
+import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage, uploadVoice, deleteAllMessages, deleteMessage, detectDrawKeywords, drawImage, speakMessage } from "../lib/chat.js";
 import { createRealtimeCallSocket, startRealtimeMicrophone, RealtimePcmPlayer } from "../lib/realtime-call.js";
 import { getSessionProfile, getCapabilities, updateCapability } from "../lib/profile.js";
 import {
@@ -273,6 +273,7 @@ function ThinkCard({ text }) {
 /* ---------------- 语音气泡 ---------------- */
 function VoiceBubble({ mine, dur, src }) {
   const [playing, setPlaying] = useStateC(false);
+  const [measuredDur, setMeasuredDur] = useStateC("");
   const audioRef = useRefC(null);
   const bars = [8, 14, 10, 17, 12, 9, 15, 11, 7, 13, 9, 16, 10, 8, 12];
 
@@ -280,8 +281,15 @@ function VoiceBubble({ mine, dur, src }) {
     const audio = audioRef.current;
     if (!audio) return;
     const onEnd = () => setPlaying(false);
+    const onMeta = () => {
+      if (Number.isFinite(audio.duration)) setMeasuredDur(`${Math.max(1, Math.round(audio.duration))}\"`);
+    };
     audio.addEventListener("ended", onEnd);
-    return () => audio.removeEventListener("ended", onEnd);
+    audio.addEventListener("loadedmetadata", onMeta);
+    return () => {
+      audio.removeEventListener("ended", onEnd);
+      audio.removeEventListener("loadedmetadata", onMeta);
+    };
   }, [src]);
 
   const toggle = (e) => {
@@ -294,35 +302,77 @@ function VoiceBubble({ mine, dur, src }) {
 
   return (
     <button className={"voice" + (mine ? " mine" : "")} onClick={toggle}>
-      {src && <audio ref={audioRef} src={src} preload="none" />}
+      {src && <audio ref={audioRef} src={src} preload="metadata" />}
       <span className="voice-play"><Icon name={playing ? "pause" : "play"} /></span>
       <span className="voice-wave">
         {bars.map((h, i) => <i key={i} style={{ height: h, opacity: playing ? 1 : 0.5, animationDelay: `${i * 60}ms` }} className={playing ? "on" : ""} />)}
       </span>
-      <span className="voice-dur">{dur || "0\""}</span>
+      <span className="voice-dur">{dur || measuredDur || "…"}</span>
     </button>
   );
 }
 
 /* ---------------- 文字转语音(TTS) ---------------- */
-function TTSButton({ text, voice }) {
-  const [on, setOn] = useStateC(false);
-  const speak = (e) => {
-    e.stopPropagation();
-    if (!("speechSynthesis" in window)) return;
-    if (on) { window.speechSynthesis.cancel(); setOn(false); return; }
+function TTSButton({ messageId, text, voice }) {
+  const [status, setStatus] = useStateC("idle");
+  const audioRef = useRefC(null);
+
+  const speakInBrowser = () => {
+    if (!("speechSynthesis" in window)) throw new Error("当前浏览器不支持朗读");
     const u = new SpeechSynthesisUtterance(text);
     u.lang = "zh-CN"; u.pitch = 1.1; u.rate = Number(voice?.rate) || 0.95;
     if (voice?.browserVoiceURI) {
-      const v = window.speechSynthesis.getVoices().find((x) => x.voiceURI === voice.browserVoiceURI);
-      if (v) u.voice = v;
+      const selected = window.speechSynthesis.getVoices().find((x) => x.voiceURI === voice.browserVoiceURI);
+      if (selected) u.voice = selected;
     }
-    u.onend = () => setOn(false);
-    window.speechSynthesis.cancel(); window.speechSynthesis.speak(u); setOn(true);
+    u.onend = () => setStatus("idle");
+    u.onerror = () => setStatus("error");
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u);
+    setStatus("playing");
   };
+
+  const speak = async (e) => {
+    e.stopPropagation();
+    if (status === "loading") return;
+    if (status === "playing") {
+      window.speechSynthesis?.cancel();
+      audioRef.current?.pause();
+      setStatus("idle");
+      return;
+    }
+
+    try {
+      if (voice?.engine === "browser") {
+        speakInBrowser();
+        return;
+      }
+      if (!messageId) throw new Error("这条消息还没有保存，稍后再试");
+      setStatus("loading");
+      const result = await speakMessage(messageId, {
+        voiceOverride: voice?.engine === "volcengine" ? voice?.volcVoice : voice?.voiceId,
+        rate: Number(voice?.rate) || 0.9,
+      });
+      if (!result?.success) throw new Error(result?.error || "语音生成失败");
+      if (result.use_browser_tts) {
+        speakInBrowser();
+        return;
+      }
+      const audio = new Audio(result.audio_url);
+      audioRef.current = audio;
+      audio.onended = () => setStatus("idle");
+      audio.onerror = () => setStatus("error");
+      await audio.play();
+      setStatus("playing");
+    } catch {
+      setStatus("error");
+    }
+  };
+
+  const label = status === "loading" ? "生成中…" : status === "playing" ? "正在读…" : status === "error" ? "再试一次" : "读出来";
   return (
-    <button className={"tts-btn" + (on ? " on" : "")} onClick={speak}>
-      <Icon name={on ? "wave" : "wave"} /><span>{on ? "正在读…" : "读出来"}</span>
+    <button className={"tts-btn" + (status === "playing" ? " on" : "")} onClick={speak}>
+      <Icon name="wave" /><span>{label}</span>
     </button>
   );
 }
@@ -634,7 +684,8 @@ function Bubble({ m, agent, tts, voice, myAvatar, onDelete, onOpenImage }) {
               {m.type === "voice" ? <VoiceBubble dur={m.dur} src={m.audioUrl} /> : (herText && <span className="msg-text">{herText}</span>)}
             </div>
             {m.time && <span className="msg-time">{m.time}</span>}
-            {tts && m.type === "text" && herText && <TTSButton text={herText} voice={voice} />}
+            {tts && m.type === "text" && herText && <TTSButton messageId={m.id} text={herText} voice={voice} />}
+            {m.type === "voice" && herText && <VoiceTranscriptButton transcript={herText} />}
             {(m.think || herThink) && <ThinkCard text={m.think || herThink} />}
           </div>
         </div>
@@ -1093,17 +1144,63 @@ function ChatRoom({ agent, onBack }) {
         onError: (err) => { setTyping(false); setChatError(String(err)); },
       });
       setTyping(false);
-      // 语音模式下自动 TTS
-      if (voiceMode && voiceSettings.enabled && fullReply && "speechSynthesis" in window) {
+
+      if (!fullReply.trim()) return;
+
+      // 先保存文字回复，云端语音需要用真实消息 ID 生成并持久化音频。
+      let savedReply = null;
+      try {
+        savedReply = await saveMessage(roleId, { role: "assistant", content: fullReply });
+        if (savedReply?.item?.id) {
+          setMsgs((p) => p.map((m) => m._id === replyId ? { ...m, id: savedReply.item.id } : m));
+        }
+      } catch {
+        setChatError("她已经回复了，但这条回复保存失败，暂时不能生成可保存的语音。");
+      }
+
+      if (!voiceMode || !voiceSettings.enabled) return;
+
+      if (voiceSettings.engine === "browser") {
+        if (!("speechSynthesis" in window)) {
+          setChatError("当前浏览器不支持语音朗读，她的文字回复已经保留。");
+          return;
+        }
         const u = new SpeechSynthesisUtterance(fullReply.replace(/<[^>]+>/g, ""));
         u.lang = "zh-CN"; u.rate = Number(voiceSettings.rate) || 0.95;
         if (voiceSettings.browserVoiceURI) {
           const selectedVoice = window.speechSynthesis.getVoices().find((item) => item.voiceURI === voiceSettings.browserVoiceURI);
           if (selectedVoice) u.voice = selectedVoice;
         }
-        window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(u);
+        return;
       }
-      try { await saveMessage(roleId, { role: "assistant", content: fullReply }); } catch {}
+
+      if (!savedReply?.item?.id) return;
+
+      try {
+        const speech = await speakMessage(savedReply.item.id, {
+          voiceOverride: voiceSettings.engine === "volcengine" ? voiceSettings.volcVoice : voiceSettings.voiceId,
+          rate: Number(voiceSettings.rate) || 0.9,
+          convertToVoice: true,
+        });
+        if (!speech?.success || !speech.audio_url) {
+          throw new Error(speech?.error || "没有生成语音文件");
+        }
+        setMsgs((p) => p.map((m) => m._id === replyId ? {
+          ...m,
+          id: savedReply.item.id,
+          type: "voice",
+          audioUrl: speech.audio_url,
+          text: fullReply,
+          transcript: fullReply,
+          dur: "",
+          _streaming: false,
+        } : m));
+      } catch (speechError) {
+        const detail = speechError instanceof Error ? speechError.message : String(speechError);
+        setChatError(`她的文字回复已经保留，但生成语音失败：${detail}`);
+      }
     } catch (err) { setTyping(false); setChatError(String(err)); }
   };
 
