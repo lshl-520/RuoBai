@@ -1,0 +1,694 @@
+import { randomUUID } from 'node:crypto';
+import { WebSocket, WebSocketServer } from 'ws';
+import { pool as defaultPool } from './db.js';
+import { requireCharacterForUser as defaultRequireCharacterForUser } from './helpers.js';
+
+export const VOLC_REALTIME_URL = 'wss://openspeech.bytedance.com/api/v3/realtime/dialogue';
+export const VOLC_RESOURCE_ID = 'volc.speech.dialog';
+export const VOLC_APP_KEY = 'PlgvMymc7f3tQnJ6';
+export const DEFAULT_REALTIME_MODEL = '2.2.0.0';
+export const DEFAULT_REALTIME_SPEAKER = 'saturn_zh_female_wenrouwenya_tob';
+
+const CONNECT_EVENTS = new Set([1, 2, 50, 51, 52]);
+const SERVER_EVENT_NAMES = new Map([
+  [50, 'connection_started'],
+  [51, 'connection_failed'],
+  [52, 'connection_finished'],
+  [150, 'session_started'],
+  [152, 'session_finished'],
+  [153, 'session_failed'],
+  [154, 'usage'],
+  [251, 'config_updated'],
+  [350, 'tts_start'],
+  [351, 'tts_sentence_end'],
+  [352, 'tts_audio'],
+  [359, 'tts_end'],
+  [450, 'asr_info'],
+  [451, 'asr'],
+  [459, 'asr_end'],
+  [550, 'assistant_text'],
+  [553, 'text_confirmed'],
+  [559, 'assistant_text_end'],
+  [599, 'dialog_error']
+]);
+
+function parseExtras(value) {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function cleanText(value, maxLength = 4000) {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
+}
+
+function normalizeWsUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return VOLC_REALTIME_URL;
+  if (/^wss:\/\//i.test(raw)) return raw;
+  if (/^https:\/\//i.test(raw)) return raw.replace(/^https:/i, 'wss:');
+  return VOLC_REALTIME_URL;
+}
+
+export function buildVolcEventPacket(event, payload = {}, { sessionId = '', audio = false } = {}) {
+  const payloadBuffer = Buffer.isBuffer(payload)
+    ? payload
+    : payload instanceof Uint8Array
+      ? Buffer.from(payload.buffer, payload.byteOffset, payload.byteLength)
+      : Buffer.from(JSON.stringify(payload ?? {}), 'utf8');
+
+  const messageType = audio ? 0x2 : 0x1;
+  const serialization = audio ? 0x0 : 0x1;
+  const parts = [
+    Buffer.from([0x11, (messageType << 4) | 0x4, serialization << 4, 0]),
+    uint32(event)
+  ];
+
+  if (!CONNECT_EVENTS.has(event)) {
+    const sessionBuffer = Buffer.from(String(sessionId), 'utf8');
+    parts.push(uint32(sessionBuffer.length), sessionBuffer);
+  }
+
+  parts.push(uint32(payloadBuffer.length), payloadBuffer);
+  return Buffer.concat(parts);
+}
+
+export function parseVolcFrame(input) {
+  const frame = Buffer.isBuffer(input)
+    ? input
+    : Buffer.from(input.buffer || input, input.byteOffset || 0, input.byteLength || undefined);
+
+  if (frame.length < 8) {
+    throw new Error(`火山实时语音返回了过短数据帧：${frame.length}`);
+  }
+
+  const headerBytes = (frame[0] & 0x0f) * 4;
+  const messageType = frame[1] >> 4;
+  const flags = frame[1] & 0x0f;
+  const serialization = frame[2] >> 4;
+  const compression = frame[2] & 0x0f;
+  let offset = headerBytes;
+  let errorCode = null;
+  let sequence = null;
+  let event = null;
+  let sessionId = '';
+
+  if (messageType === 0x0f) {
+    errorCode = frame.readUInt32BE(offset);
+    offset += 4;
+  }
+
+  if (flags === 0x1 || flags === 0x3) {
+    sequence = frame.readInt32BE(offset);
+    offset += 4;
+  }
+
+  if (flags & 0x4) {
+    event = frame.readUInt32BE(offset);
+    offset += 4;
+
+    if (!CONNECT_EVENTS.has(event)) {
+      const sessionLength = frame.readUInt32BE(offset);
+      offset += 4;
+      sessionId = frame.subarray(offset, offset + sessionLength).toString('utf8');
+      offset += sessionLength;
+    }
+  }
+
+  if (offset + 4 > frame.length) {
+    throw new Error('火山实时语音数据帧缺少 payload 长度');
+  }
+
+  const payloadLength = frame.readUInt32BE(offset);
+  offset += 4;
+  const payloadBuffer = frame.subarray(offset, offset + payloadLength);
+  let payload = payloadBuffer;
+
+  if (serialization === 0x1) {
+    const text = payloadBuffer.toString('utf8');
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = text;
+    }
+  }
+
+  return {
+    messageType,
+    flags,
+    serialization,
+    compression,
+    errorCode,
+    sequence,
+    event,
+    eventName: SERVER_EVENT_NAMES.get(event) || `event_${event ?? 'unknown'}`,
+    sessionId,
+    payload,
+    payloadBuffer
+  };
+}
+
+function uint32(value) {
+  const buffer = Buffer.allocUnsafe(4);
+  buffer.writeUInt32BE(Number(value) >>> 0, 0);
+  return buffer;
+}
+
+export function buildRealtimeCharacterPrompt(character) {
+  const name = cleanText(character?.name, 40) || '若白';
+  const persona = cleanText(character?.persona, 3000);
+  const speechStyle = String(character?.speech_style || 'natural');
+  const style = speechStyle === 'roleplay'
+    ? '自然地扮演角色，可以有少量动作和情绪表达，但不要长篇旁白。'
+    : '像真实恋人打电话一样说话：口语、自然、简短，通常一到三句；不要自称AI，不要客服腔，不要反复套用固定安慰话。';
+
+  return [
+    `你叫${name}，正在和用户进行一对一实时语音通话。`,
+    persona,
+    style,
+    '先接住用户当前这句话，再自然延续话题。允许亲近和暧昧的日常表达，保持人设和前后文一致。'
+  ].filter(Boolean).join('\n');
+}
+
+export function buildVolcStartSessionPayload({ character, config, context = [] }) {
+  const extras = parseExtras(config?.extras);
+  const model = cleanText(config?.model_id || config?.model || extras.model, 40) || DEFAULT_REALTIME_MODEL;
+  const speaker = cleanText(extras.speaker || extras.voice || config?.speaker, 120) || DEFAULT_REALTIME_SPEAKER;
+  const prompt = buildRealtimeCharacterPrompt(character);
+  const isStrongCharacter = model === '2.2.0.0' || /^2\./.test(model);
+  const dialog = {
+    dialog_context: context,
+    extra: {
+      model,
+      enable_loudness_norm: extras.enable_loudness_norm !== false,
+      enable_conversation_truncate: true,
+      enable_user_query_exit: true
+    }
+  };
+
+  if (isStrongCharacter) {
+    dialog.character_manifest = prompt;
+  } else {
+    dialog.bot_name = cleanText(character?.name, 20) || '若白';
+    dialog.system_role = prompt;
+    dialog.speaking_style = '自然、亲近、口语化、简短，像真实电话交流。';
+  }
+
+  return {
+    asr: {
+      audio_info: {
+        format: 'pcm',
+        sample_rate: 16000,
+        channel: 1
+      },
+      extra: {
+        end_smooth_window_ms: Number(extras.end_smooth_window_ms) || 700,
+        enable_custom_vad: true,
+        enable_asr_twopass: Boolean(extras.enable_asr_twopass)
+      }
+    },
+    dialog,
+    tts: {
+      speaker,
+      audio_config: {
+        channel: 1,
+        format: 'pcm_s16le',
+        sample_rate: 24000,
+        speech_rate: Number(extras.speech_rate) || 0,
+        loudness_rate: Number(extras.loudness_rate) || 0
+      }
+    }
+  };
+}
+
+export function buildDialogContext(messages = []) {
+  const normalized = messages
+    .map(item => ({ role: item?.role, text: cleanText(item?.content, 1200) }))
+    .filter(item => ['user', 'assistant'].includes(item.role) && item.text);
+  const pairs = [];
+
+  for (let index = 0; index < normalized.length - 1; index += 1) {
+    const user = normalized[index];
+    const assistant = normalized[index + 1];
+    if (user.role === 'user' && assistant.role === 'assistant') {
+      pairs.push(user, assistant);
+      index += 1;
+    }
+  }
+
+  return pairs.slice(-20);
+}
+
+async function loadRecentDialogContext(pool, userId, characterId) {
+  try {
+    const [rows] = await pool.query(
+      `
+        SELECT role, content
+        FROM messages
+        WHERE user_id = ? AND character_id = ? AND is_active = 1
+        ORDER BY id DESC
+        LIMIT 24
+      `,
+      [userId, characterId]
+    );
+    return buildDialogContext(rows.reverse());
+  } catch {
+    return [];
+  }
+}
+
+export async function loadRealtimeConfig(pool, userId) {
+  const [rows] = await pool.query(
+    `
+      SELECT
+        ca.model_id,
+        ca.extras,
+        c.name,
+        c.provider_type,
+        c.api_base,
+        c.api_key
+      FROM capability_assignments ca
+      INNER JOIN credentials c ON c.id = ca.credential_id
+      WHERE ca.user_id = ? AND ca.capability = 'realtime' AND ca.enabled = 1
+      ORDER BY ca.id DESC
+      LIMIT 1
+    `,
+    [userId]
+  );
+
+  if (rows[0]?.api_key) {
+    return rows[0];
+  }
+
+  if (process.env.VOLC_REALTIME_API_KEY) {
+    return {
+      name: '火山端到端实时语音',
+      provider_type: 'volcengine_realtime',
+      api_base: process.env.VOLC_REALTIME_URL || VOLC_REALTIME_URL,
+      api_key: process.env.VOLC_REALTIME_API_KEY,
+      model_id: process.env.VOLC_REALTIME_MODEL || DEFAULT_REALTIME_MODEL,
+      extras: {
+        speaker: process.env.VOLC_REALTIME_SPEAKER || DEFAULT_REALTIME_SPEAKER
+      }
+    };
+  }
+
+  return null;
+}
+
+export function testVolcRealtimeCredential(config, { WebSocketImpl = WebSocket, timeoutMs = 10000 } = {}) {
+  return new Promise((resolve, reject) => {
+    const extras = parseExtras(config?.extras);
+    const socket = new WebSocketImpl(normalizeWsUrl(config?.api_base), {
+      headers: {
+        'x-api-key': String(config?.api_key || '').trim(),
+        'X-Api-Resource-Id': cleanText(extras.resource_id, 120) || VOLC_RESOURCE_ID,
+        'X-Api-App-Key': cleanText(extras.app_key, 120) || VOLC_APP_KEY,
+        'X-Api-Connect-Id': randomUUID()
+      }
+    });
+    const timeout = setTimeout(() => {
+      try { socket.terminate?.(); } catch {}
+      reject(new Error('连接火山实时语音超时'));
+    }, timeoutMs);
+
+    const finish = (error = null) => {
+      clearTimeout(timeout);
+      socket.removeAllListeners?.();
+      if (error) reject(error);
+      else resolve(true);
+    };
+
+    socket.once('open', () => {
+      try { socket.close(1000, 'handshake test'); } catch {}
+      finish();
+    });
+    socket.once('error', finish);
+    socket.once('unexpected-response', (_request, response) => {
+      finish(new Error(`火山实时语音握手失败：HTTP ${response?.statusCode || 'unknown'}`));
+    });
+  });
+}
+
+function socketIsOpen(socket) {
+  return socket?.readyState === WebSocket.OPEN;
+}
+
+function sendJson(socket, payload) {
+  if (!socketIsOpen(socket)) return;
+  socket.send(JSON.stringify(payload));
+}
+
+function safeClientError(error) {
+  const message = String(error?.message || error || '实时通话连接失败');
+  if (/401|Invalid X-Api-Key/i.test(message)) return '火山实时通话 API Key 不对或已经失效';
+  if (/403/i.test(message)) return '火山实时通话服务还没开通，或当前 Key 没有权限';
+  if (/实时通话渠道/.test(message)) return message;
+  return `实时通话暂时没有接通：${message.slice(0, 160)}`;
+}
+
+class RealtimeCallBridge {
+  constructor({ client, userId, characterId, pool, requireCharacterForUser, WebSocketImpl }) {
+    this.client = client;
+    this.userId = userId;
+    this.characterId = characterId;
+    this.pool = pool;
+    this.requireCharacterForUser = requireCharacterForUser;
+    this.WebSocketImpl = WebSocketImpl;
+    this.upstream = null;
+    this.sessionId = randomUUID();
+    this.ready = false;
+    this.closing = false;
+    this.character = null;
+    this.config = null;
+    this.context = [];
+    this.pendingAudio = [];
+  }
+
+  async start() {
+    this.character = await this.requireCharacterForUser(this.userId, this.characterId, this.pool);
+    this.config = await loadRealtimeConfig(this.pool, this.userId);
+    if (!this.config) {
+      throw new Error('请先在“我的 → 她的能力”里添加火山实时通话渠道，并启用“实时通话”');
+    }
+
+    this.context = await loadRecentDialogContext(this.pool, this.userId, this.characterId);
+    const extras = parseExtras(this.config.extras);
+    const upstreamUrl = normalizeWsUrl(this.config.api_base);
+    const headers = {
+      'x-api-key': this.config.api_key,
+      'X-Api-Resource-Id': cleanText(extras.resource_id, 120) || VOLC_RESOURCE_ID,
+      'X-Api-App-Key': cleanText(extras.app_key, 120) || VOLC_APP_KEY,
+      'X-Api-Connect-Id': randomUUID()
+    };
+
+    this.upstream = new this.WebSocketImpl(upstreamUrl, { headers });
+    this.upstream.binaryType = 'arraybuffer';
+    this.upstream.on('open', () => {
+      this.sendUpstream(1, {});
+      sendJson(this.client, { type: 'connecting', message: '正在接通火山实时语音' });
+    });
+    this.upstream.on('message', data => this.handleUpstreamMessage(data));
+    this.upstream.on('error', error => this.fail(error));
+    this.upstream.on('close', (code, reason) => {
+      if (!this.closing && socketIsOpen(this.client)) {
+        sendJson(this.client, {
+          type: 'closed',
+          code,
+          message: Buffer.from(reason || '').toString('utf8') || '实时通话已断开'
+        });
+        this.client.close(1011, 'upstream closed');
+      }
+    });
+
+    this.client.on('message', (data, isBinary) => this.handleClientMessage(data, isBinary));
+    this.client.on('close', () => this.close());
+    this.client.on('error', () => this.close());
+  }
+
+  sendUpstream(event, payload = {}, options = {}) {
+    if (!socketIsOpen(this.upstream)) return false;
+    this.upstream.send(buildVolcEventPacket(event, payload, {
+      sessionId: this.sessionId,
+      ...options
+    }));
+    return true;
+  }
+
+  handleClientMessage(data, isBinary) {
+    if (isBinary) {
+      const audio = Buffer.from(data);
+      if (!audio.length) return;
+      if (!this.ready) {
+        if (this.pendingAudio.length < 50) this.pendingAudio.push(audio);
+        return;
+      }
+      if (this.upstream?.bufferedAmount < 2 * 1024 * 1024) {
+        this.sendUpstream(200, audio, { audio: true });
+      }
+      return;
+    }
+
+    let message;
+    try {
+      message = JSON.parse(Buffer.from(data).toString('utf8'));
+    } catch {
+      return;
+    }
+
+    if (message.type === 'interrupt') {
+      this.sendUpstream(515, {});
+      sendJson(this.client, { type: 'interrupted' });
+      return;
+    }
+
+    if (message.type === 'text') {
+      const content = cleanText(message.content, 2000);
+      if (content && this.ready) this.sendUpstream(501, { content });
+      return;
+    }
+
+    if (message.type === 'hello') {
+      const content = cleanText(message.content, 500);
+      if (content && this.ready) this.sendUpstream(300, { content });
+      return;
+    }
+
+    if (message.type === 'finish') {
+      this.close();
+    }
+  }
+
+  handleUpstreamMessage(data) {
+    let frame;
+    try {
+      frame = parseVolcFrame(data);
+    } catch (error) {
+      this.fail(error);
+      return;
+    }
+
+    const { event, payload, payloadBuffer, messageType, errorCode } = frame;
+    if (messageType === 0x0f) {
+      this.fail(new Error(`火山实时语音错误 ${errorCode}: ${String(payload).slice(0, 200)}`));
+      return;
+    }
+
+    if (event === 50) {
+      this.sendUpstream(100, buildVolcStartSessionPayload({
+        character: this.character,
+        config: this.config,
+        context: this.context
+      }));
+      return;
+    }
+
+    if (event === 150) {
+      this.ready = true;
+      sendJson(this.client, {
+        type: 'session_started',
+        dialog_id: payload?.dialog_id || '',
+        input_sample_rate: 16000,
+        output_sample_rate: 24000,
+        speaker: parseExtras(this.config.extras).speaker || DEFAULT_REALTIME_SPEAKER
+      });
+      for (const audio of this.pendingAudio.splice(0)) {
+        this.sendUpstream(200, audio, { audio: true });
+      }
+      return;
+    }
+
+    if (event === 352) {
+      if (socketIsOpen(this.client)) this.client.send(payloadBuffer, { binary: true });
+      return;
+    }
+
+    if (event === 450) {
+      sendJson(this.client, { type: 'user_speaking', question_id: payload?.question_id || '' });
+      return;
+    }
+
+    if (event === 451) {
+      const result = payload?.results?.[0] || {};
+      sendJson(this.client, {
+        type: 'asr',
+        text: result.text || '',
+        interim: Boolean(result.is_interim)
+      });
+      return;
+    }
+
+    if (event === 459) {
+      sendJson(this.client, { type: 'asr_end' });
+      return;
+    }
+
+    if (event === 550) {
+      sendJson(this.client, {
+        type: 'assistant_text',
+        delta: payload?.content || '',
+        question_id: payload?.question_id || '',
+        reply_id: payload?.reply_id || ''
+      });
+      return;
+    }
+
+    if (event === 350) {
+      sendJson(this.client, {
+        type: 'tts_start',
+        text: payload?.text || '',
+        question_id: payload?.question_id || '',
+        reply_id: payload?.reply_id || ''
+      });
+      return;
+    }
+
+    if (event === 351) {
+      sendJson(this.client, {
+        type: 'tts_sentence_end',
+        text: payload?.text || '',
+        duration: payload?.sentence_duration || null
+      });
+      return;
+    }
+
+    if (event === 359) {
+      sendJson(this.client, {
+        type: 'tts_end',
+        status_code: payload?.status_code || '',
+        question_id: payload?.question_id || '',
+        reply_id: payload?.reply_id || ''
+      });
+      return;
+    }
+
+    if (event === 154) {
+      sendJson(this.client, { type: 'usage', usage: payload?.usage || {} });
+      return;
+    }
+
+    if (event === 51 || event === 153 || event === 599) {
+      this.fail(new Error(payload?.error || payload?.message || `火山实时语音事件 ${event} 失败`));
+      return;
+    }
+
+    if (event === 152 || event === 52) {
+      if (socketIsOpen(this.client)) this.client.close(1000, 'call finished');
+    }
+  }
+
+  fail(error) {
+    if (this.closing) return;
+    sendJson(this.client, { type: 'error', message: safeClientError(error) });
+    this.close(1011);
+  }
+
+  close(code = 1000) {
+    if (this.closing) return;
+    this.closing = true;
+
+    if (socketIsOpen(this.upstream)) {
+      if (this.ready) this.sendUpstream(102, {});
+      this.sendUpstream(2, {});
+      const upstream = this.upstream;
+      setTimeout(() => {
+        if (socketIsOpen(upstream)) upstream.close(1000, 'client finished');
+      }, 300);
+    }
+
+    if (socketIsOpen(this.client)) {
+      setTimeout(() => {
+        if (socketIsOpen(this.client)) this.client.close(code, 'call finished');
+      }, 350);
+    }
+  }
+}
+
+function rejectUpgrade(socket, statusCode, message) {
+  const text = String(message || 'WebSocket upgrade rejected');
+  socket.write(
+    `HTTP/1.1 ${statusCode} ${statusCode === 401 ? 'Unauthorized' : 'Bad Request'}\r\n` +
+    'Connection: close\r\n' +
+    'Content-Type: text/plain; charset=utf-8\r\n' +
+    `Content-Length: ${Buffer.byteLength(text)}\r\n\r\n` +
+    text
+  );
+  socket.destroy();
+}
+
+function applySession(sessionMiddleware, request) {
+  return new Promise((resolve, reject) => {
+    const headers = new Map();
+    const response = {
+      getHeader(name) { return headers.get(String(name).toLowerCase()); },
+      setHeader(name, value) { headers.set(String(name).toLowerCase(), value); },
+      removeHeader(name) { headers.delete(String(name).toLowerCase()); },
+      writeHead() {},
+      end() {},
+      on() { return this; },
+      once() { return this; },
+      emit() { return false; }
+    };
+    sessionMiddleware(request, response, error => error ? reject(error) : resolve());
+  });
+}
+
+export function attachRealtimeCallServer({
+  server,
+  sessionMiddleware,
+  pool = defaultPool,
+  requireCharacterForUser = defaultRequireCharacterForUser,
+  WebSocketImpl = WebSocket
+}) {
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 });
+
+  wss.on('connection', (client, request, context) => {
+    const bridge = new RealtimeCallBridge({
+      client,
+      userId: context.userId,
+      characterId: context.characterId,
+      pool,
+      requireCharacterForUser,
+      WebSocketImpl
+    });
+    bridge.start().catch(error => bridge.fail(error));
+  });
+
+  server.on('upgrade', async (request, socket, head) => {
+    let url;
+    try {
+      url = new URL(request.url, 'http://localhost');
+    } catch {
+      return;
+    }
+
+    if (url.pathname !== '/api/realtime-call') return;
+
+    try {
+      await applySession(sessionMiddleware, request);
+      const userId = Number(request.session?.userId);
+      const characterId = Number(url.searchParams.get('character_id'));
+      if (!userId) {
+        rejectUpgrade(socket, 401, '请先登录');
+        return;
+      }
+      if (!characterId) {
+        rejectUpgrade(socket, 400, '缺少 character_id');
+        return;
+      }
+
+      wss.handleUpgrade(request, socket, head, client => {
+        wss.emit('connection', client, request, { userId, characterId });
+      });
+    } catch (error) {
+      rejectUpgrade(socket, 400, safeClientError(error));
+    }
+  });
+
+  return wss;
+}

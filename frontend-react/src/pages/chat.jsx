@@ -1,7 +1,8 @@
 import React from "react";
 import { Icon, Bars, greetByHour, STICKERS } from "../store.jsx";
 import { getRoles, getRolePortraitSrc, getRoleFullPortrait, clampIntimacy } from "../lib/roles.js";
-import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage, uploadVoice, deleteAllMessages, deleteMessage, detectDrawKeywords, drawImage, callReply } from "../lib/chat.js";
+import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage, uploadVoice, deleteAllMessages, deleteMessage, detectDrawKeywords, drawImage } from "../lib/chat.js";
+import { createRealtimeCallSocket, startRealtimeMicrophone, RealtimePcmPlayer } from "../lib/realtime-call.js";
 import { getSessionProfile, getCapabilities, updateCapability } from "../lib/profile.js";
 import {
   DEFAULT_USER_AVATAR,
@@ -1256,21 +1257,125 @@ function TempDot({ temp }) {
   return <span className="temp-dot"><Icon name="flame" /> {v.toFixed(1)}°</span>;
 }
 
-/* ---------------- 实时语音通话（简化版伪通话） ---------------- */
+/* ---------------- 火山端到端实时语音通话 ---------------- */
 function CallScreen({ agent, figSrc, onClose }) {
   const [sec, setSec] = useStateC(0);
   const [phase, setPhase] = useStateC("connecting"); // connecting | live | recording | thinking | speaking
   const [transcript, setTranscript] = useStateC("");
   const [reply, setReply] = useStateC("");
   const [err, setErr] = useStateC("");
-  const recogRef = useRefC(null);
-  const audioRef = useRefC(null);
+  const [micMuted, setMicMuted] = useStateC(false);
+  const [speakerMuted, setSpeakerMuted] = useStateC(false);
+  const socketRef = useRefC(null);
+  const microphoneRef = useRefC(null);
+  const playerRef = useRefC(null);
+  const closingRef = useRefC(false);
   const roleId = agent.id;
 
-  useEffectC(() => { const t = setTimeout(() => setPhase("live"), 1900); return () => clearTimeout(t); }, []);
   useEffectC(() => {
-    if (phase === "connecting") return;
-    const id = setInterval(() => setSec((s) => s + 1), 1000);
+    let active = true;
+    const player = new RealtimePcmPlayer();
+    playerRef.current = player;
+
+    const socket = createRealtimeCallSocket(roleId, {
+      onOpen: () => {
+        if (active) setPhase("connecting");
+      },
+      onAudio: (audio) => {
+        if (!active) return;
+        player.enqueue(audio);
+        setPhase("speaking");
+      },
+      onEvent: (event) => {
+        if (!active) return;
+        if (event.type === "session_started") {
+          setPhase("live");
+          setErr("");
+          return;
+        }
+        if (event.type === "user_speaking") {
+          player.interrupt();
+          setReply("");
+          setPhase("recording");
+          return;
+        }
+        if (event.type === "asr") {
+          setTranscript(event.text || "");
+          setPhase("recording");
+          return;
+        }
+        if (event.type === "asr_end") {
+          setPhase("thinking");
+          return;
+        }
+        if (event.type === "assistant_text") {
+          setReply((current) => current + (event.delta || ""));
+          setPhase((current) => current === "speaking" ? current : "thinking");
+          return;
+        }
+        if (event.type === "tts_start") {
+          setPhase("speaking");
+          return;
+        }
+        if (event.type === "tts_end") {
+          setPhase("live");
+          setTranscript("");
+          return;
+        }
+        if (event.type === "interrupted") {
+          player.interrupt();
+          setPhase("recording");
+          return;
+        }
+        if (event.type === "error") {
+          setErr(event.message || "实时通话暂时没有接通");
+          setPhase("live");
+        }
+      },
+      onError: (error) => {
+        if (!active) return;
+        setErr(error.message || "实时通话连接失败");
+        setPhase("live");
+      },
+      onClose: () => {
+        if (!active || closingRef.current) return;
+        setErr((current) => current || "通话连接断开了，挂断后再重试一次");
+        setPhase("live");
+      },
+    });
+    socketRef.current = socket;
+
+    const start = async () => {
+      try {
+        await player.resume();
+        const microphone = await startRealtimeMicrophone((chunk) => socket.sendAudio(chunk));
+        if (!active) {
+          await microphone.stop();
+          return;
+        }
+        microphoneRef.current = microphone;
+      } catch (error) {
+        if (!active) return;
+        setErr(error?.name === "NotAllowedError" ? "请允许麦克风权限后再拨一次" : "麦克风启动失败，请重试");
+        setPhase("live");
+      }
+    };
+    start();
+
+    return () => {
+      active = false;
+      closingRef.current = true;
+      socket.close();
+      microphoneRef.current?.stop?.();
+      microphoneRef.current = null;
+      player.close();
+      playerRef.current = null;
+    };
+  }, [roleId]);
+
+  useEffectC(() => {
+    if (phase === "connecting") return undefined;
+    const id = setInterval(() => setSec((current) => current + 1), 1000);
     return () => clearInterval(id);
   }, [phase === "connecting"]);
 
@@ -1278,65 +1383,38 @@ function CallScreen({ agent, figSrc, onClose }) {
   const ss = String(sec % 60).padStart(2, "0");
   const isLive = phase !== "connecting";
 
-  const startRecording = () => {
-    if (phase !== "live" && phase !== "speaking") return;
-    setErr(""); setTranscript(""); setPhase("recording");
-    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRec) { setErr("浏览器不支持语音识别，请用 Chrome"); setPhase("live"); return; }
-    const recog = new SpeechRec();
-    recog.lang = "zh-CN"; recog.interimResults = true; recog.continuous = false;
-    recogRef.current = recog;
-    recog.onresult = (e) => {
-      let text = ""; for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
-      setTranscript(text);
-    };
-    recog.onerror = () => { setPhase("live"); };
-    recog.start();
-  };
-
-  const speakWithBrowser = (text) => {
-    setPhase("speaking");
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.lang = "zh-CN"; utter.rate = 0.92;
-    utter.onend = () => setPhase("live");
-    utter.onerror = () => setPhase("live");
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utter);
-  };
-
-  const stopRecording = async () => {
-    const text = transcript.trim() || "（语音）";
-    if (recogRef.current) { try { recogRef.current.stop(); } catch {} recogRef.current = null; }
-    setPhase("thinking");
-    try {
-      const result = await callReply(roleId, text);
-      setReply(result.reply || "");
-      if (result.audio_url) {
-        setPhase("speaking");
-        const audio = new Audio(result.audio_url);
-        audioRef.current = audio;
-        audio.onended = () => setPhase("live");
-        audio.onerror = () => speakWithBrowser(result.reply || "");
-        audio.play().catch(() => speakWithBrowser(result.reply || ""));
-      } else if (result.reply) {
-        speakWithBrowser(result.reply);
-      } else {
-        setPhase("live");
-      }
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "出错了");
+  const toggleMic = () => {
+    const next = !micMuted;
+    setMicMuted(next);
+    microphoneRef.current?.setMuted(next);
+    if (next) {
       setPhase("live");
     }
   };
 
+  const toggleSpeaker = () => {
+    const next = !speakerMuted;
+    setSpeakerMuted(next);
+    playerRef.current?.setMuted(next);
+  };
+
   const hangup = () => {
-    if (recogRef.current) { try { recogRef.current.stop(); } catch {} recogRef.current = null; }
-    if (audioRef.current) { try { audioRef.current.pause(); } catch {} audioRef.current = null; }
-    window.speechSynthesis.cancel();
+    closingRef.current = true;
+    socketRef.current?.close();
+    microphoneRef.current?.stop?.();
+    microphoneRef.current = null;
+    playerRef.current?.close?.();
+    playerRef.current = null;
     onClose();
   };
 
-  const phaseLabel = { connecting: "正在接通…", live: "通话中 · 按住说话", recording: "正在听你说…", thinking: "她在想…", speaking: "她在说…" }[phase] || "通话中";
+  const phaseLabel = {
+    connecting: "正在接通实时语音…",
+    live: micMuted ? "通话中 · 麦克风已静音" : "通话中 · 可以直接说话",
+    recording: "正在听你说…",
+    thinking: "她在回应…",
+    speaking: "她在说…",
+  }[phase] || "通话中";
   const bars = Array.from({ length: 30 });
 
   return (
@@ -1360,27 +1438,23 @@ function CallScreen({ agent, figSrc, onClose }) {
         <div className="call-caption">
           {phase === "recording" && transcript && `「${transcript}」`}
           {phase !== "recording" && reply && `「${reply}」`}
-          {err && <span style={{ color: "#f87171" }}>{err}</span>}
-          {!transcript && !reply && !err && phase === "live" && "按住麦克风说话"}
-          {phase === "thinking" && "她在想…"}
+          {err && <span style={{ color: "#fca5a5" }}>{err}</span>}
+          {!transcript && !reply && !err && phase === "live" && (micMuted ? "点一下麦克风恢复收音" : "直接说话，她会自动听见，也可以随时插话")}
+          {phase === "thinking" && !reply && "她在回应…"}
         </div>
       )}
       <div className="call-controls">
-        <button
-          className={"call-btn" + (phase === "recording" ? " on" : "")}
-          onPointerDown={startRecording} onPointerUp={stopRecording} onPointerLeave={() => { if (phase === "recording") stopRecording(); }}
-          disabled={phase === "thinking" || !isLive}
-        >
+        <button className={"call-btn" + (micMuted ? " on" : "")} onClick={toggleMic} disabled={!isLive}>
           <span className="cb"><Icon name="mic" /></span>
-          <span>{phase === "recording" ? "松开发送" : "按住说话"}</span>
+          <span>{micMuted ? "取消静音" : "麦克风"}</span>
         </button>
         <button className="call-btn" onClick={hangup}>
           <span className="call-hangup"><Icon name="phone" /></span>
           <span style={{ opacity: 0 }}>挂断</span>
         </button>
-        <button className="call-btn" disabled>
+        <button className={"call-btn" + (speakerMuted ? " on" : "")} onClick={toggleSpeaker} disabled={!isLive}>
           <span className="cb"><Icon name="wave" /></span>
-          <span>扬声器</span>
+          <span>{speakerMuted ? "打开声音" : "扬声器"}</span>
         </button>
       </div>
     </div>

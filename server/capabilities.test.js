@@ -105,6 +105,45 @@ test('GET /api/capabilities returns 5 capabilities with current assignment and a
   });
 });
 
+test('GET /api/capabilities 只把火山专用渠道列进实时通话', async () => {
+  const router = createCapabilitiesRouter({
+    pool: {
+      query: async sql => {
+        if (sql.includes('FROM capability_assignments ca')) return [[]];
+        if (sql.includes('FROM credentials c') && sql.includes('INNER JOIN credential_models cm')) {
+          return [[
+            {
+              credential_id: 3,
+              credential_name: '普通中转',
+              provider_type: 'openai-compatible',
+              model_id: 'gpt-4o-realtime-preview',
+              capabilities: '[\"chat\",\"realtime\"]'
+            },
+            {
+              credential_id: 9,
+              credential_name: '火山实时通话',
+              provider_type: 'volc-realtime',
+              model_id: '2.2.0.0',
+              capabilities: '[\"realtime\"]'
+            }
+          ]];
+        }
+        throw new Error(`Unexpected query: ${sql}`);
+      }
+    }
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/capabilities`);
+    const payload = await response.json();
+    const realtime = payload.items.find(item => item.capability === 'realtime');
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(realtime.options.map(item => item.credential_name), ['火山实时通话']);
+    assert.deepEqual(realtime.options.map(item => item.model_id), ['2.2.0.0']);
+  });
+});
+
 test('PUT /api/capabilities/:cap upserts assignment for current user and accepts extras', async () => {
   const calls = [];
   let savedAssignment = {
