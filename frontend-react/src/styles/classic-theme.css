@@ -391,9 +391,16 @@ html[data-theme="classic"] .prow-s { color: #c05a7c; }
 html[data-theme="classic"] .logout-btn { border-color: #efb8cb; color: #cf3f70; background: #fff7fa; }
 html[data-theme="classic"] .profile-foot { color: #c9849d; }
 
-/* ===== 聊天室：原版轻粉对话，不显示微光常驻立绘 ===== */
+/* ===== 聊天室：原版轻粉对话，保留可显示/隐藏的常驻立绘 ===== */
 html[data-theme="classic"] .chat-screen { background: linear-gradient(180deg, #fff6fa, #fffdfd 44%); }
-html[data-theme="classic"] .chat-figure { display: none; }
+html[data-theme="classic"] .chat-figure { display: block; }
+html[data-theme="classic"] .chat-fig-glow {
+  background: radial-gradient(circle, rgba(242, 151, 184, .34), rgba(255, 219, 232, .16) 48%, transparent 70%);
+}
+html[data-theme="classic"] .chat-fig-img { opacity: .78; filter: drop-shadow(0 12px 28px rgba(180, 59, 105, .18)); }
+html[data-theme="classic"] .chat-fig-fade {
+  background: linear-gradient(to bottom, #fff6fa 0%, rgba(255,246,250,.64) 14%, rgba(255,246,250,0) 42%, rgba(255,253,253,0) 72%, rgba(255,253,253,.58) 92%, #fffdfd 100%);
+}
 html[data-theme="classic"] .chat-top {
   background: rgba(255,255,255,.96);
   border-bottom: 1px solid #f2c8d7;

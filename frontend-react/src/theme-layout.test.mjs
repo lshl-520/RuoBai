@@ -53,11 +53,13 @@ test("原版角色页保留全部三项关系数据，并正确展开横向角�
   assert.match(classic, /\.ac-photo\s*\{\s*display:\s*contents/);
 });
 
-test("原版隐藏的动态封面头像和聊天室常驻立绘都有等价功能入口", () => {
+test("原版动态装饰头像有等价筛选入口，聊天室常驻立绘不能被主题隐藏", () => {
   assert.match(moments, /filter === null/);
   assert.match(moments, /user\?\.username \|\| "我"/);
   assert.match(chat, /className="ct-avatar"[\s\S]{0,260}onClick=\{\(\) => setBig\(true\)\}/);
   assert.match(chat, /className="chat-fig-img"[\s\S]{0,180}setBig\(true\)/);
+  assert.match(classic, /\.chat-figure\s*\{\s*display:\s*block/);
+  assert.doesNotMatch(classic, /\.chat-figure\s*\{\s*display:\s*none/);
 });
 
 test("两套聊天室共用的图标入口具有大白话名称", () => {
