@@ -1,6 +1,6 @@
 import React from "react";
 import { Icon, CHANNEL_TYPES, VOICE_ENGINES, useLockBody } from "../store.jsx";
-import { getCredentials, createCredential, updateCredential, deleteCredential, refreshCredentialModels, discoverModelConfigs, getCapabilities, updateCapability, testCredentialDraft, applyCredential } from "../lib/profile.js";
+import { getCredentials, createCredential, updateCredential, deleteCredential, refreshCredentialModels, getCapabilities, updateCapability, testCredentialDraft, applyCredential } from "../lib/profile.js";
 import { loadVoiceSettings, saveVoiceSettings } from "../lib/voice-settings.js";
 import { previewTts } from "../lib/chat.js";
 import { Toggle, StatusDot, Row } from "./profile.jsx";
@@ -89,14 +89,26 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete, onTest }) {
   const [apiKey, setApiKey] = useStateMo(channel?.apiKey || "");
   const [enabled, setEnabled] = useStateMo(channel?.enabled ?? true);
   const [showKey, setShowKey] = useStateMo(false);
-  const [models, setModels] = useStateMo(realtimeMode ? VOLC_VOICE_MODELS : []);
-  const [model, setModel] = useStateMo(channel?.model || (realtimeMode ? VOLC_REALTIME_MODEL : ""));
-  const [fetchState, setFetchState] = useStateMo(realtimeMode ? "done" : "idle");
+  const [replacingKey, setReplacingKey] = useStateMo(isNew || !channel?.keyConfigured);
+  const [models, setModels] = useStateMo([]);
+  const [model, setModel] = useStateMo(channel?.model || "");
+  const [fetchState, setFetchState] = useStateMo("idle");
   const [purposes, setPurposes] = useStateMo(channel?.purposes?.length ? channel.purposes : (realtimeMode ? ["realtime", "tts"] : ["chat"]));
-  const [testState, setTestState] = useStateMo(channel?.testState || "idle");
-  const [testMessage, setTestMessage] = useStateMo(channel?.testMessage || "");
+  const [fetchMessage, setFetchMessage] = useStateMo(channel?.testMessage || "");
   const [saving, setSaving] = useStateMo(false);
   const [saveError, setSaveError] = useStateMo("");
+  const originalType = channel?.type || "openai";
+  const originalProviderType = channel?.providerType || originalType;
+  const currentProviderType = taskImageMode ? TASK_IMAGE_PROVIDER : type;
+  const connectionChanged = !!channel && (
+    type !== originalType
+    || currentProviderType !== originalProviderType
+    || base.trim() !== String(channel?.base || "").trim()
+    || taskBase.trim() !== String(channel?.apiAuxBase || "").trim()
+    || (replacingKey && !!apiKey.trim())
+  );
+  const connectionReady = fetchState === "done" || (!isNew && !connectionChanged);
+  const canChoosePurpose = !!model.trim() && connectionReady;
 
   const togglePurpose = (p) => {
     if (taskImageMode || realtimeMode) return;
@@ -109,8 +121,8 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete, onTest }) {
     setFetchState("idle");
     if (next) {
       setPurposes(["image"]);
-      setModels([TASK_IMAGE_MODEL]);
-      setModel(TASK_IMAGE_MODEL);
+      setModels([]);
+      setModel("");
     } else {
       setModels([]);
       setModel("");
@@ -128,57 +140,40 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete, onTest }) {
     if (t !== "custom") setTaskImageMode(false);
     if (t === VOLC_REALTIME_PROVIDER) {
       setBase(p.base);
-      setModels(VOLC_VOICE_MODELS);
-      setModel(VOLC_REALTIME_MODEL);
+      setModels([]);
+      setModel("");
       setPurposes(["realtime", "tts"]);
-      setFetchState("done");
+      setFetchState("idle");
       if (!name.trim()) setName("豆包语音");
       return;
     }
     setFetchState("idle");
     if (!channel) {
       setBase(p.base);
-      setModels(p.models || []);
-      setModel(p.models?.[0] || "");
+      setModels([]);
+      setModel("");
       setPurposes(["chat"]);
     }
   };
 
   const fetchModels = async () => {
+    if (fetchState === "loading") return;
     setFetchState("loading");
+    setFetchMessage("正在核对地址、密钥并获取模型...");
     try {
-      if (taskImageMode) {
-        setModels([TASK_IMAGE_MODEL]);
-        setModel(TASK_IMAGE_MODEL);
-        setFetchState("done");
-      } else if (realtimeMode) {
-        setModels(VOLC_VOICE_MODELS);
-        setModel(VOLC_REALTIME_MODEL);
-        setFetchState("done");
-      } else if (channel?._backendId) {
-        const result = await refreshCredentialModels(channel._backendId);
-        if (result.success && result.items?.length) {
-          const ids = result.items.map((m) => m.model_id);
-          setModels(ids);
-          setFetchState("done");
-        } else {
-          setFetchState("done");
-          setModels([]);
-        }
-      } else {
-        if (!apiKey.trim()) { setFetchState("fail"); return; }
-        const result = await discoverModelConfigs({ api_base: base, api_key: apiKey });
-        if (result.success && result.items?.length) {
-          setModels(result.items);
-          setFetchState("done");
-        } else {
-          setFetchState("fail");
-          setModels([]);
-        }
-      }
-    } catch (err) {
+      const result = await onTest(buildDraft());
+      if (!result?.success) throw new Error(result?.error || result?.message || "获取模型失败");
+      const ids = Array.isArray(result.models) ? result.models.filter(Boolean)
+        : taskImageMode ? [TASK_IMAGE_MODEL]
+        : realtimeMode ? VOLC_VOICE_MODELS
+        : [];
+      setModels(ids);
+      setModel((current) => ids.includes(current) ? current : (ids[0] || current || ""));
+      setFetchState("done");
+      setFetchMessage(result.message || `连接正常，已获取 ${ids.length} 个模型`);
+    } catch (error) {
       setFetchState("fail");
-      setTestMessage(err?.message || "获取模型失败");
+      setFetchMessage(error?.message || String(error));
       setModels([]);
     }
   };
@@ -197,21 +192,6 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete, onTest }) {
     purposes: taskImageMode ? ["image"] : realtimeMode ? ["realtime", "tts"] : purposes,
   });
 
-  const runTest = async () => {
-    if (testState === "loading") return;
-    setTestState("loading");
-    setTestMessage("正在核对地址和密钥...");
-    try {
-      const result = await onTest(buildDraft());
-      if (!result?.success) throw new Error(result?.error || result?.message || "连接测试失败");
-      setTestState("ok");
-      setTestMessage(result.message || "密钥和连接正常");
-      if (Number.isFinite(result.models_count)) setModels((prev) => prev);
-    } catch (error) {
-      setTestState("fail");
-      setTestMessage(error?.message || String(error));
-    }
-  };
 
   const save = async () => {
     if (saving) return;
@@ -226,11 +206,15 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete, onTest }) {
     }
   };
 
+  const hasUsableKey = noKeyRequired
+    || apiKey.trim()
+    || (!replacingKey && !!channel?._backendId && channel?.providerType !== TASK_IMAGE_PROVIDER);
   const canSave = (isNew ? name.trim() : true)
     && base.trim()
     && (!taskImageMode || taskBase.trim())
-    && (noKeyRequired || apiKey.trim() || (!!channel?._backendId && channel?.providerType !== TASK_IMAGE_PROVIDER))
-    && ((taskImageMode || realtimeMode) || purposes.length === 0 || model.trim());
+    && hasUsableKey
+    && connectionReady
+    && model.trim();
 
   const PURPOSE_OPTS = [
     { key: "chat", icon: "chat", label: "聊天" },
@@ -272,50 +256,42 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete, onTest }) {
           <input className="fld" value={name} onChange={(e) => setName(e.target.value)} placeholder="例如:OpenAI 中转·贵 / 千问·语音" />
 
           <label className="field-label">{taskImageMode ? "任务提交地址" : realtimeMode ? "实时语音 WebSocket 地址" : "中转地址 / Base URL"}</label>
-          <input className="fld" value={base} onChange={(e) => setBase(e.target.value)} placeholder={taskImageMode ? "https://submit.example.com" : realtimeMode ? "wss://openspeech.bytedance.com/api/v3/realtime/dialogue" : "https://api.example.com/v1"} />
+          <input className="fld" value={base} onChange={(e) => { setBase(e.target.value); setFetchState("idle"); setFetchMessage(""); }} placeholder={taskImageMode ? "https://submit.example.com" : realtimeMode ? "wss://openspeech.bytedance.com/api/v3/realtime/dialogue" : "https://api.example.com/v1"} />
 
           {taskImageMode && (<>
             <label className="field-label">任务查询 / 图片地址</label>
-            <input className="fld" value={taskBase} onChange={(e) => setTaskBase(e.target.value)} placeholder="https://tasks.example.com" />
+            <input className="fld" value={taskBase} onChange={(e) => { setTaskBase(e.target.value); setFetchState("idle"); setFetchMessage(""); }} placeholder="https://tasks.example.com" />
           </>)}
 
           <label className="field-label">API 密钥 <span className="lbl-hint">{noKeyRequired ? "这个渠道无需填写" : realtimeMode ? "填写新版 API Key，不是旧版 Access Token" : "只存你本地"}</span></label>
           {noKeyRequired ? (
-            <div className="model-empty" style={{ marginTop: 0 }}>无需密钥，保存后即可在「画图发图」里选择。</div>
-          ) : (
-            <div className="key-field">
-              <input className="fld" type={showKey ? "text" : "password"} value={apiKey}
-                onChange={(e) => { setApiKey(e.target.value); setFetchState("idle"); }} placeholder={preset.keyHint} />
-              <button className="key-eye" onClick={() => setShowKey(!showKey)}><Icon name={showKey ? "eyeOff" : "eye"} /></button>
+            <div className="model-empty" style={{ marginTop: 0 }}>无需密钥，点击下方“获取模型列表”检查接口。</div>
+          ) : !replacingKey && channel?.keyConfigured ? (
+            <div className="saved-key-row">
+              <div><span className="saved-key-label">已保存</span><code>{channel.apiKeyMasked || "密钥已保存"}</code></div>
+              <button type="button" onClick={() => { setReplacingKey(true); setApiKey(""); setShowKey(false); setFetchState("idle"); setFetchMessage(""); }}>更换密钥</button>
             </div>
+          ) : (
+            <>
+              <div className="key-field">
+                <input className="fld" type={showKey ? "text" : "password"} value={apiKey}
+                  onChange={(e) => { setApiKey(e.target.value); setFetchState("idle"); setFetchMessage(""); }} placeholder={isNew ? preset.keyHint : "粘贴新的 API Key"} />
+                <button className="key-eye" type="button" onClick={() => setShowKey(!showKey)}><Icon name={showKey ? "eyeOff" : "eye"} /></button>
+              </div>
+              {!isNew && channel?.keyConfigured && <button className="cancel-key-change" type="button" onClick={() => { setReplacingKey(false); setApiKey(""); setShowKey(false); setFetchState("idle"); setFetchMessage(""); }}>取消更换，继续使用 {channel.apiKeyMasked}</button>}
+            </>
           )}
 
-          <label className="field-label">这个渠道用来做什么 <span className="lbl-hint">可多选</span></label>
-          <div className="type-grid">
-            {(taskImageMode ? PURPOSE_OPTS.filter((p) => p.key === "image") : realtimeMode ? PURPOSE_OPTS.filter((p) => ["tts", "realtime"].includes(p.key)) : PURPOSE_OPTS).map((p) => (
-              <button key={p.key} className={"type-chip" + (purposes.includes(p.key) ? " on" : "")} onClick={() => togglePurpose(p.key)}>
-                {p.label}
-              </button>
-            ))}
-          </div>
-
-          <button className={"test-btn " + testState} onClick={runTest} disabled={testState === "loading"} style={{ marginTop: 16 }}>
-            {testState === "loading" ? <><span className="test-spin" /> 正在测试...</>
-              : testState === "ok" ? <><Icon name="check" /> 密钥和连接可用</>
-              : testState === "fail" ? <><Icon name="alert" /> 测试失败，点此重试</>
-              : <><Icon name="cpu" /> 测试密钥和连接</>}
-          </button>
-          {testMessage && <div className={"channel-feedback " + testState}>{testMessage}</div>}
-
           <div className="model-head">
-            <label className="field-label" style={{ margin: 0 }}>模型</label>
+            <label className="field-label" style={{ margin: 0 }}>模型 <span className="lbl-hint">先获取，再选择</span></label>
             <button className={"fetch-btn " + fetchState} onClick={fetchModels}>
               {fetchState === "loading" ? <><span className="test-spin" /> 获取中...</>
-                : fetchState === "done" ? <><Icon name="check" /> 已更新 {models.length} 个</>
-                : fetchState === "fail" ? <><Icon name="alert" /> 获取失败</>
+                : fetchState === "done" ? <><Icon name="check" /> 已获取 {models.length} 个</>
+                : fetchState === "fail" ? <><Icon name="alert" /> 获取失败，点此重试</>
                 : <><Icon name="refresh" /> 获取模型列表</>}
             </button>
           </div>
+          {fetchMessage && <div className={"channel-feedback " + fetchState}>{fetchMessage}</div>}
           {models.length === 0 && <div className="model-empty">{noKeyRequired ? "这个渠道会自动使用固定生图模型" : realtimeMode ? "豆包语音会自动登记实时通话和文字转语音" : "点「获取模型列表」拉取，或手动输入"}</div>}
           {models.length > 0 && models.length <= 10 && (
             <div className="model-chips" style={{ marginTop: 8 }}>
@@ -337,6 +313,18 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete, onTest }) {
           ) : (
             <input className="fld" style={{ marginTop: 8 }} value={model} onChange={(e) => setModel(e.target.value)} placeholder="模型名,例如 gpt-5.5" />
           )}
+
+
+
+          <label className="field-label">这个模型用来做什么 <span className="lbl-hint">先选模型，再选用途</span></label>
+          {!canChoosePurpose && <div className="model-empty" style={{ marginTop: 0 }}>{!connectionReady ? "请先获取模型列表并确认连接。" : "请先选择模型。"}</div>}
+          <div className={"type-grid" + (!canChoosePurpose ? " is-disabled" : "")}>
+            {(taskImageMode ? PURPOSE_OPTS.filter((p) => p.key === "image") : realtimeMode ? PURPOSE_OPTS.filter((p) => ["tts", "realtime"].includes(p.key)) : PURPOSE_OPTS).map((p) => (
+              <button key={p.key} disabled={!canChoosePurpose} className={"type-chip" + (purposes.includes(p.key) ? " on" : "")} onClick={() => togglePurpose(p.key)}>
+                {p.label}
+              </button>
+            ))}
+          </div>
 
           <div className="switch-row">
             <div><div className="sr-t">启用此渠道</div><div className="sr-s">停用后所有用途不会再选到它</div></div>

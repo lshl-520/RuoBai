@@ -155,7 +155,7 @@ function connectivityError(status, raw = '') {
 async function testCredentialConnection(credential, fetchImpl) {
   if (isVolcRealtimeProvider(credential.provider_type)) {
     await testVolcRealtimeCredential(credential);
-    return { success: true, code: 'ok', message: '豆包语音 Key 和连接正常' };
+    return { success: true, code: 'ok', message: '连接正常，已获取豆包语音固定模型', models_count: 2, models: [VOLC_REALTIME_MODEL, VOLC_TTS_MODEL] };
   }
 
   const controller = new AbortController();
@@ -182,13 +182,26 @@ async function testCredentialConnection(credential, fetchImpl) {
         return { success: false, status: 400, code: 'invalid_response', message: '地址能连上，但返回的不是正常模型列表' };
       }
     }
+    const models = isTaskImageProvider(credential.provider_type)
+      ? [TASK_IMAGE_MODEL]
+      : (() => {
+          try {
+            const payload = raw ? JSON.parse(raw) : {};
+            return Array.isArray(payload?.data)
+              ? payload.data.map(item => String(item?.id || '').trim()).filter(Boolean)
+              : [];
+          } catch {
+            return [];
+          }
+        })();
     return {
       success: true,
       code: 'ok',
       message: isTaskImageProvider(credential.provider_type)
-        ? '任务式图片接口连通正常'
-        : `连通正常：密钥和地址可用${modelCount === null ? '' : `，发现 ${modelCount} 个模型`}`,
-      models_count: modelCount
+        ? '连接正常，已获取固定图片模型'
+        : `连接正常，已获取 ${models.length} 个模型`,
+      models_count: models.length,
+      models
     };
   } catch (error) {
     const timeoutError = error?.name === 'AbortError';

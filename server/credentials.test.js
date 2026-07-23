@@ -57,7 +57,7 @@ test('GET /api/credentials returns current user credentials with masked key', as
     assert.equal(payload.items.length, 1);
     assert.equal(payload.items[0].name, '饼干姐姐');
     assert.equal(payload.items[0].models_count, 12);
-    assert.equal(payload.items[0].api_key_masked, 'sk-1***abcd');
+    assert.equal(payload.items[0].api_key_masked, 'sk-1…abcd');
   });
 });
 
@@ -148,7 +148,7 @@ test('POST /api/credentials creates a credential and PATCH updates only the curr
     assert.equal(updateResponse.status, 200);
     assert.equal(updatePayload.success, true);
     assert.equal(updatePayload.item.name, '千问新名字');
-    assert.equal(updatePayload.item.api_key_masked, 'sk-u***ated');
+    assert.equal(updatePayload.item.api_key_masked, 'sk-u…ated');
     assert.ok(calls.some(call => call.sql.includes('INSERT INTO credentials')));
     assert.ok(calls.some(call => call.sql.includes('UPDATE credentials SET')));
   });
@@ -327,7 +327,8 @@ test('POST /api/credentials/:id/test checks /v1/models connectivity for the curr
 
     assert.equal(response.status, 200);
     assert.equal(payload.success, true);
-    assert.match(payload.message, /连通正常/);
+    assert.match(payload.message, /连接正常，已获取 1 个模型/);
+    assert.deepEqual(payload.models, ['qwen-max']);
   });
 });
 
@@ -611,6 +612,7 @@ test('POST /api/credentials/test-draft tests edited address with the saved key',
     const payload = await response.json();
     assert.equal(response.status, 200);
     assert.equal(payload.models_count, 1);
+    assert.deepEqual(payload.models, ['model-a']);
     assert.equal(requestedUrl, 'https://new.example.com/v1/models');
     assert.equal(authorization, 'Bearer saved-key');
   });
