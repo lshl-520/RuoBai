@@ -301,9 +301,24 @@ export async function loadRealtimeConfig(pool, userId) {
   return null;
 }
 
+function formatVolcPayload(payload) {
+  if (Buffer.isBuffer(payload)) return payload.toString('utf8').slice(0, 500);
+  if (typeof payload === 'string') return payload.slice(0, 500);
+  try {
+    return JSON.stringify(payload ?? {}).slice(0, 500);
+  } catch {
+    return String(payload).slice(0, 500);
+  }
+}
+
+function buildVolcFrameError(frame) {
+  return new Error(`火山实时语音错误 ${frame.errorCode ?? 'unknown'}: ${formatVolcPayload(frame.payload)}`);
+}
+
 export function testVolcRealtimeCredential(config, { WebSocketImpl = WebSocket, timeoutMs = 10000 } = {}) {
   return new Promise((resolve, reject) => {
     const extras = parseExtras(config?.extras);
+    const sessionId = randomUUID();
     const socket = new WebSocketImpl(normalizeWsUrl(config?.api_base), {
       headers: {
         'x-api-key': String(config?.api_key || '').trim(),
@@ -312,23 +327,67 @@ export function testVolcRealtimeCredential(config, { WebSocketImpl = WebSocket, 
         'X-Api-Connect-Id': randomUUID()
       }
     });
+    let settled = false;
     const timeout = setTimeout(() => {
       try { socket.terminate?.(); } catch {}
-      reject(new Error('连接火山实时语音超时'));
+      finish(new Error('连接火山实时语音超时'));
     }, timeoutMs);
 
     const finish = (error = null) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timeout);
       socket.removeAllListeners?.();
       if (error) reject(error);
       else resolve(true);
     };
 
-    socket.once('open', () => {
-      try { socket.close(1000, 'handshake test'); } catch {}
-      finish();
+    const send = (event, payload = {}) => {
+      socket.send(buildVolcEventPacket(event, payload, { sessionId }));
+    };
+
+    socket.once('open', () => send(1, {}));
+    socket.on('message', data => {
+      let frame;
+      try {
+        frame = parseVolcFrame(data);
+      } catch (error) {
+        finish(error);
+        return;
+      }
+
+      if (frame.messageType === 0x0f) {
+        finish(buildVolcFrameError(frame));
+        return;
+      }
+
+      if (frame.event === 50) {
+        send(100, buildVolcStartSessionPayload({
+          character: { name: '若白', persona: '自然、简短地回应。', speech_style: 'natural' },
+          config,
+          context: []
+        }));
+        return;
+      }
+
+      if (frame.event === 150) {
+        try {
+          send(102, {});
+          send(2, {});
+          socket.close?.(1000, 'session test passed');
+        } catch {}
+        finish();
+        return;
+      }
+
+      if (frame.event === 51 || frame.event === 153 || frame.event === 599) {
+        finish(new Error(frame.payload?.error || frame.payload?.message || `火山实时语音事件 ${frame.event} 失败`));
+      }
     });
     socket.once('error', finish);
+    socket.once('close', (code, reason) => {
+      if (!settled) finish(new Error(Buffer.from(reason || '').toString('utf8') || `火山实时语音提前断开：${code}`));
+    });
     socket.once('unexpected-response', (_request, response) => {
       finish(new Error(`火山实时语音握手失败：HTTP ${response?.statusCode || 'unknown'}`));
     });
@@ -475,7 +534,7 @@ class RealtimeCallBridge {
 
     const { event, payload, payloadBuffer, messageType, errorCode } = frame;
     if (messageType === 0x0f) {
-      this.fail(new Error(`火山实时语音错误 ${errorCode}: ${String(payload).slice(0, 200)}`));
+      this.fail(buildVolcFrameError({ errorCode, payload }));
       return;
     }
 
