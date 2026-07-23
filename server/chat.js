@@ -361,7 +361,7 @@ export function createChatRouter({
           ca.model_id AS model
         FROM capability_assignments ca
         INNER JOIN credentials c ON c.id = ca.credential_id
-        WHERE ca.user_id = ? AND ca.capability = 'chat' AND ca.enabled = 1
+        WHERE ca.user_id = ? AND ca.capability = 'chat' AND ca.enabled = 1 AND c.is_enabled = 1
         ORDER BY ca.id DESC
         LIMIT 1
       `,
@@ -402,7 +402,7 @@ export function createChatRouter({
           ca.model_id AS model
         FROM capability_assignments ca
         INNER JOIN credentials c ON c.id = ca.credential_id
-        WHERE ca.user_id = ? AND ca.capability = ? AND ca.enabled = 1
+        WHERE ca.user_id = ? AND ca.capability = ? AND ca.enabled = 1 AND c.is_enabled = 1
         ORDER BY ca.id DESC
         LIMIT 1
       `,

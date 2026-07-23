@@ -111,7 +111,7 @@ async function loadAssignments(queryable, userId) {
         c.provider_type
       FROM capability_assignments ca
       INNER JOIN credentials c ON c.id = ca.credential_id
-      WHERE ca.user_id = ?
+      WHERE ca.user_id = ? AND c.is_enabled = 1
     `,
     [userId]
   );
@@ -130,7 +130,7 @@ async function loadCapabilityOptions(queryable, userId) {
         cm.capabilities
       FROM credentials c
       INNER JOIN credential_models cm ON cm.credential_id = c.id
-      WHERE c.user_id = ?
+      WHERE c.user_id = ? AND c.is_enabled = 1
       ORDER BY c.id ASC, cm.model_id ASC
     `,
     [userId]
@@ -174,7 +174,7 @@ async function loadCompatibleModel(queryable, credentialId, userId, modelId) {
         cm.capabilities
       FROM credential_models cm
       INNER JOIN credentials c ON c.id = cm.credential_id
-      WHERE c.id = ? AND c.user_id = ? AND cm.model_id = ?
+      WHERE c.id = ? AND c.user_id = ? AND c.is_enabled = 1 AND cm.model_id = ?
       LIMIT 1
     `,
     [credentialId, userId, modelId]

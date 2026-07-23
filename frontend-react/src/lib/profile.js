@@ -201,6 +201,20 @@ export function testCredential(credId) {
   });
 }
 
+export function testCredentialDraft(payload) {
+  return request("/api/credentials/test-draft", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function applyCredential(credId, payload) {
+  return request(`/api/credentials/${encodeURIComponent(credId)}/apply`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function getRoles() {
   return request("/api/roles", { method: "GET" });
 }
