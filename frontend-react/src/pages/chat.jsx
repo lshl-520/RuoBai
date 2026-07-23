@@ -223,6 +223,10 @@ function ChatListScreen({ onOpen }) {
                 <span className="cl-msg">{a.lastMsg}</span>
                 {a.unread > 0 && <span className="cl-badge">{a.unread}</span>}
               </div>
+              <div className="cl-classic-meter" aria-hidden="true">
+                <span><i style={{ width: `${a.intimacy}%` }} /></span>
+                <b>Lv.{Math.max(1, Math.round(a.intimacy || 1))}</b>
+              </div>
             </div>
             <div className="cl-arrow"><Icon name="chevron" /></div>
           </button>
