@@ -1,9 +1,9 @@
 import React from "react";
 import { Icon, Bars, greetByHour, STICKERS } from "../store.jsx";
-import { getRoles, getRolePortraitSrc, getRoleFullPortrait, clampIntimacy } from "../lib/roles.js";
+import { getRoles, updateRole, getRolePortraitSrc, getRoleFullPortrait, clampIntimacy } from "../lib/roles.js";
 import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage, uploadVoice, deleteAllMessages, deleteMessage, detectDrawKeywords, drawImage, speakMessage } from "../lib/chat.js";
 import { createRealtimeCallSocket, startRealtimeMicrophone, RealtimePcmPlayer } from "../lib/realtime-call.js";
-import { getSessionProfile, getCapabilities, updateCapability } from "../lib/profile.js";
+import { getSessionProfile, getCapabilities } from "../lib/profile.js";
 import {
   DEFAULT_USER_AVATAR,
   fallbackToDefaultRoleAvatar,
@@ -23,14 +23,16 @@ const THINK_LEVELS = [
   { key: "ultra", label: "超高" },
 ];
 
-function ModelPanel({ roleId, current, onPick, onClose }) {
+function ModelPanel({ roleName, current, onPick, onClose }) {
   const [caps, setCaps] = useStateC(null);
   const [thinkLevel, setThinkLevel] = useStateC(current?.thinkLevel || "off");
+  const [saving, setSaving] = useStateC(false);
+  const [error, setError] = useStateC("");
 
   useEffectC(() => {
     getCapabilities().then((res) => {
       if (res?.success && Array.isArray(res.items)) setCaps(res.items);
-    }).catch(() => {});
+    }).catch(() => setError("模型列表加载失败，请稍后再试"));
   }, []);
 
   const chatCap = caps?.find((c) => c.capability === "chat");
@@ -42,35 +44,52 @@ function ModelPanel({ roleId, current, onPick, onClose }) {
   });
   const allGroups = Object.values(groups);
 
+  const save = async (choice, closeAfter = false) => {
+    setSaving(true);
+    setError("");
+    try {
+      await onPick(choice);
+      if (closeAfter) onClose();
+    } catch (e) {
+      setError(e?.message || "保存失败，请稍后再试");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const pick = (credId, modelId) => {
-    onPick({ credentialId: credId, modelId, thinkLevel });
-    updateCapability("chat", { credential_id: credId, model_id: modelId, enabled: true }).catch(() => {});
-    onClose();
+    save({ credentialId: credId, modelId, thinkLevel }, true);
+  };
+
+  const followDefault = () => {
+    save({ credentialId: null, modelId: null, thinkLevel }, true);
   };
 
   const pickThink = (level) => {
     setThinkLevel(level);
-    if (current?.credentialId && current?.modelId) {
-      onPick({ ...current, thinkLevel: level });
-    }
+    save({ ...current, thinkLevel: level }, false);
   };
 
   return (
     <div className="model-panel-mask" onClick={onClose}>
       <div className="model-panel" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-grip" />
+        <div className="mp-scope">这里的选择仅用于「{roleName}」，不会改变其他角色</div>
         <div className="mp-cols">
           <div className="mp-left">
             <div className="mp-title">切换聊天模型</div>
-            {!caps && <div className="mp-loading">加载中...</div>}
-            {caps && allGroups.length === 0 && <div className="mp-empty">先去「我的」页配置一个供应商</div>}
+            <button className={"model-chip mp-default" + (!current?.credentialId && !current?.modelId ? " on" : "")} onClick={followDefault} disabled={saving}>
+              跟随“我的”默认模型
+            </button>
+            {!caps && !error && <div className="mp-loading">加载中...</div>}
+            {caps && allGroups.length === 0 && <div className="mp-empty">先去「我的」页配置一个聊天模型</div>}
             {allGroups.map((g) => (
               <div key={g.credId} className="mp-group">
                 <div className="mp-group-name">{g.name}</div>
                 {g.models.length <= 5 ? (
                   <div className="model-chips">
                     {g.models.map((m) => (
-                      <button key={m} className={"model-chip" + (current?.credentialId === g.credId && current?.modelId === m ? " on" : "")}
+                      <button key={m} disabled={saving} className={"model-chip" + (current?.credentialId === g.credId && current?.modelId === m ? " on" : "")}
                         onClick={() => pick(g.credId, m)}>{m}</button>
                     ))}
                   </div>
@@ -78,11 +97,11 @@ function ModelPanel({ roleId, current, onPick, onClose }) {
                   <>
                     <div className="model-chips">
                       {g.models.slice(0, 3).map((m) => (
-                        <button key={m} className={"model-chip" + (current?.credentialId === g.credId && current?.modelId === m ? " on" : "")}
+                        <button key={m} disabled={saving} className={"model-chip" + (current?.credentialId === g.credId && current?.modelId === m ? " on" : "")}
                           onClick={() => pick(g.credId, m)}>{m}</button>
                       ))}
                     </div>
-                    <select className="fld mp-select" value={current?.credentialId === g.credId ? (current?.modelId || "") : ""}
+                    <select disabled={saving} className="fld mp-select" value={current?.credentialId === g.credId ? (current?.modelId || "") : ""}
                       onChange={(e) => { if (e.target.value) pick(g.credId, e.target.value); }}>
                       <option value="">更多 ({g.models.length - 3} 个)...</option>
                       {g.models.slice(3).map((m) => <option key={m} value={m}>{m}</option>)}
@@ -91,17 +110,18 @@ function ModelPanel({ roleId, current, onPick, onClose }) {
                 )}
               </div>
             ))}
-            <div className="mp-hint">有钱用贵的,没钱切便宜的</div>
+            {error && <div className="mp-error">{error}</div>}
+            <div className="mp-hint">可以给长期陪伴角色固定更合适的模型，其他角色继续使用默认模型</div>
           </div>
           <div className="mp-divider" />
           <div className="mp-right">
             <div className="mp-title">推理深度</div>
             {THINK_LEVELS.map((t) => (
-              <button key={t.key} className={"mp-think" + (thinkLevel === t.key ? " on" : "")} onClick={() => pickThink(t.key)}>
+              <button disabled={saving} key={t.key} className={"mp-think" + (thinkLevel === t.key ? " on" : "")} onClick={() => pickThink(t.key)}>
                 <span className="mp-radio" />{t.label}
               </button>
             ))}
-            <div className="mp-hint">陪聊用关闭/低,写代码/复杂任务用高/超高</div>
+            <div className="mp-hint">陪聊用关闭/低，复杂任务用高/超高</div>
           </div>
         </div>
       </div>
@@ -840,10 +860,11 @@ function ChatRoom({ agent, onBack }) {
   const [moreOpen, setMoreOpen] = useStateC(false); // 更多菜单
   const [modelOpen, setModelOpen] = useStateC(false);
   const [previewImage, setPreviewImage] = useStateC("");
-  const [modelChoice, setModelChoice] = useStateC(() => {
-    try { const s = JSON.parse(localStorage.getItem(`ruobai_model_${roleId}`)); if (s) return s; } catch (e) {}
-    return { credentialId: null, modelId: null, thinkLevel: "off" };
-  });
+  const [modelChoice, setModelChoice] = useStateC(() => ({
+    credentialId: agent._raw?.chat_credential_id || null,
+    modelId: agent._raw?.chat_model_id || null,
+    thinkLevel: agent._raw?.chat_thinking_level || "off",
+  }));
 
   useEffectC(() => {
     const syncVoiceSettings = (event) => setVoiceSettings(event?.detail || loadVoiceSettings());
@@ -858,26 +879,35 @@ function ChatRoom({ agent, onBack }) {
     };
   }, []);
 
-  // 进入聊天室时从后端同步最新的能力配置（"我的"页可能改过）
   useEffectC(() => {
-    getCapabilities().then((res) => {
-      if (!res?.success || !Array.isArray(res.items)) return;
-      const chatCap = res.items.find((c) => c.capability === "chat");
-      if (chatCap?.current?.credential_id && chatCap?.current?.model_id) {
-        setModelChoice((prev) => {
-          const updated = { ...prev, credentialId: chatCap.current.credential_id, modelId: chatCap.current.model_id };
-          try { localStorage.setItem(`ruobai_model_${roleId}`, JSON.stringify(updated)); } catch (e) {}
-          return updated;
-        });
-      }
-    }).catch(() => {});
-  }, [roleId]);
+    setModelChoice({
+      credentialId: agent._raw?.chat_credential_id || null,
+      modelId: agent._raw?.chat_model_id || null,
+      thinkLevel: agent._raw?.chat_thinking_level || "off",
+    });
+  }, [roleId, agent._raw?.chat_credential_id, agent._raw?.chat_model_id, agent._raw?.chat_thinking_level]);
 
-  const saveModelChoice = (choice) => {
-    setModelChoice(choice);
-    try { localStorage.setItem(`ruobai_model_${roleId}`, JSON.stringify(choice)); } catch (e) {}
+  const saveModelChoice = async (choice) => {
+    const response = await updateRole(roleId, {
+      chat_credential_id: choice.credentialId || null,
+      chat_model_id: choice.modelId || null,
+      chat_thinking_level: choice.thinkLevel || "off",
+    });
+    if (response?.success === false) throw new Error(response.error || "保存角色模型失败");
+    const saved = response?.item || {};
+    const next = {
+      credentialId: saved.chat_credential_id || null,
+      modelId: saved.chat_model_id || null,
+      thinkLevel: saved.chat_thinking_level || "off",
+    };
+    Object.assign(agent._raw, {
+      chat_credential_id: next.credentialId,
+      chat_model_id: next.modelId,
+      chat_thinking_level: next.thinkLevel,
+    });
+    setModelChoice(next);
   };
-  const modelLabel = modelChoice.modelId || "对话模型";
+  const modelLabel = modelChoice.modelId ? `${modelChoice.modelId} · 仅${agent.name}` : "跟随默认";
   const [chatError, setChatError] = useStateC("");
   const [momentNotice, setMomentNotice] = useStateC("");
   const [uploading, setUploading] = useStateC(false);
@@ -1244,7 +1274,7 @@ function ChatRoom({ agent, onBack }) {
       )}
 
       {modelOpen && (
-        <ModelPanel roleId={roleId} current={modelChoice} onPick={saveModelChoice} onClose={() => setModelOpen(false)} />
+        <ModelPanel roleName={agent.name} current={modelChoice} onPick={saveModelChoice} onClose={() => setModelOpen(false)} />
       )}
 
       {searching && (

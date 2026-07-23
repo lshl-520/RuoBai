@@ -10,9 +10,24 @@ const CHARACTER_RUNTIME_COLUMNS = [
     after: 'portrait_id'
   },
   {
+    name: 'chat_credential_id',
+    definition: 'INT DEFAULT NULL',
+    after: 'intimacy'
+  },
+  {
+    name: 'chat_model_id',
+    definition: 'VARCHAR(100) DEFAULT NULL',
+    after: 'chat_credential_id'
+  },
+  {
+    name: 'chat_thinking_level',
+    definition: "VARCHAR(20) DEFAULT 'off'",
+    after: 'chat_model_id'
+  },
+  {
     name: 'first_chat_at',
     definition: 'DATETIME DEFAULT NULL',
-    after: 'intimacy'
+    after: 'chat_thinking_level'
   },
   {
     name: 'auto_moments_enabled',

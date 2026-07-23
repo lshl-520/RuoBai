@@ -58,3 +58,25 @@ test('ensurePushRuntimeTables creates FCM and proactive-message tables', async (
   assert.match(joined, /CREATE TABLE IF NOT EXISTS proactive_events/i);
   assert.match(joined, /UNIQUE KEY unique_fcm_token/i);
 });
+
+
+test('ensureCharacterRuntimeColumns adds role dedicated chat model columns on startup', async () => {
+  const calls = [];
+  const missing = new Set(['chat_credential_id', 'chat_model_id', 'chat_thinking_level']);
+  const db = {
+    query: async (sql, params = []) => {
+      calls.push({ sql, params });
+      if (sql.includes('information_schema.COLUMNS')) {
+        return [missing.has(params[1]) ? [] : [{ COLUMN_NAME: params[1] }]];
+      }
+      return [{ affectedRows: 0 }];
+    }
+  };
+
+  await ensureCharacterRuntimeColumns(db);
+
+  const joined = calls.filter(call => /^ALTER TABLE characters/i.test(call.sql)).map(call => call.sql).join('\n');
+  assert.match(joined, /ADD COLUMN chat_credential_id INT DEFAULT NULL AFTER intimacy/i);
+  assert.match(joined, /ADD COLUMN chat_model_id VARCHAR\(100\) DEFAULT NULL AFTER chat_credential_id/i);
+  assert.match(joined, /ADD COLUMN chat_thinking_level VARCHAR\(20\) DEFAULT 'off' AFTER chat_model_id/i);
+});

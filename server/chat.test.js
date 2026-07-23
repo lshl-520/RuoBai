@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import { requireAuth } from './middleware.js';
-import { createChatRouter } from './chat.js';
+import { buildSystemPrompt, createChatRouter } from './chat.js';
 
 function createApp({ router, sessionUser = { userId: 1, username: 'user-1', role: 'user' } }) {
   const app = express();
@@ -803,5 +803,85 @@ test('POST /api/chat/draw returns 503 for temporary image upstream failures', as
     assert.equal(response.status, 503);
     assert.equal(payload.success, false);
     assert.match(payload.error, /上游暂时繁忙/);
+  });
+});
+
+
+test('buildSystemPrompt keeps adult companion intimacy and relationship continuity', () => {
+  const prompt = buildSystemPrompt({
+    name: '小白',
+    tag: '恋人',
+    persona: '双方均为成年人，是长期恋人。',
+    speech_style: 'compact'
+  });
+  assert.match(prompt, /双方均为成年人/);
+  assert.match(prompt, /双方自愿的亲密表达视为关系中的自然交流/);
+  assert.match(prompt, /不突然切换成客服、老师、旁观者或说教者/);
+  assert.match(prompt, /不要先主动接住或承诺会继续/);
+});
+
+test('POST /api/chat uses the current role dedicated model before the global default', async () => {
+  const upstreamCalls = [];
+  let globalModelQueried = false;
+  const character = {
+    id: 7,
+    user_id: 1,
+    is_deleted: 0,
+    name: '小白',
+    tag: '恋人',
+    persona: '双方均为成年人，是长期恋人。',
+    speech_style: 'compact',
+    chat_credential_id: 12,
+    chat_model_id: 'companion-model',
+    chat_thinking_level: 'low'
+  };
+  const router = createChatRouter({
+    requireCharacterForUser: async () => character,
+    pool: {
+      query: async (sql, params) => {
+        if (sql.includes('INNER JOIN credential_models')) {
+          assert.deepEqual(params, [12, 1, 'companion-model']);
+          return [[{
+            id: 12,
+            name: '伴侣渠道',
+            provider_type: 'openai-compatible',
+            api_base: 'https://companion.example/v1',
+            api_key: 'secret',
+            model: 'companion-model',
+            capabilities: '["chat"]'
+          }]];
+        }
+        if (sql.includes('FROM capability_assignments ca') && !sql.includes('credential_models')) {
+          globalModelQueried = true;
+          return [[]];
+        }
+        if (sql.includes('INFORMATION_SCHEMA.COLUMNS')) return [[{ column_name: 'is_deleted' }]];
+        if (sql.includes('SELECT city FROM users')) return [[{ city: '' }]];
+        if (sql.includes('FROM messages') && sql.includes('ORDER BY id DESC')) return [[]];
+        if (sql.includes('FROM memories')) return [[]];
+        if (sql.includes('UPDATE users')) return [{ affectedRows: 1 }];
+        throw new Error(`Unexpected query: ${sql}`);
+      }
+    },
+    fetchImpl: async (url, options) => {
+      upstreamCalls.push({ url, options });
+      return { ok: true, json: async () => ({ choices: [{ message: { content: '一直是我呀' } }] }) };
+    }
+  });
+
+  await withServer(createApp({ router }), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/chat?character_id=7`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: '你还是小白吗', skip_server_persistence: true })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(payload.item.content, '一直是我呀');
+    assert.equal(globalModelQueried, false);
+    assert.equal(upstreamCalls[0].url, 'https://companion.example/v1/chat/completions');
+    const body = JSON.parse(upstreamCalls[0].options.body);
+    assert.equal(body.model, 'companion-model');
+    assert.equal(body.thinking.budget_tokens, 1024);
   });
 });

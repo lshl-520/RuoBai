@@ -484,3 +484,93 @@ test('DELETE /api/roles/:id returns 404 when role is already missing', async () 
     assert.equal(payload.error, '角色不存在');
   });
 });
+
+
+test('PATCH /api/roles/:id saves a chat model only on the selected role', async () => {
+  const connection = {
+    query: async (sql, params) => {
+      if (sql.includes('SELECT id, chat_credential_id')) {
+        assert.deepEqual(params, [7, 1]);
+        return [[{ id: 7, chat_credential_id: null, chat_model_id: null, chat_thinking_level: 'off' }]];
+      }
+      if (sql.includes('INNER JOIN credential_models')) {
+        assert.deepEqual(params, [12, 1, 'companion-model']);
+        return [[{ id: 12, model_id: 'companion-model', capabilities: '["chat"]' }]];
+      }
+      if (sql.includes('UPDATE characters') && sql.includes('chat_credential_id')) {
+        assert.match(sql, /chat_model_id = CASE WHEN \? = 1/);
+        assert.ok(params.includes(12));
+        assert.ok(params.includes('companion-model'));
+        assert.ok(params.includes('low'));
+        return [{ affectedRows: 1 }];
+      }
+      if (sql.includes('SELECT id, user_id, char_key')) {
+        return [[{
+          id: 7,
+          user_id: 1,
+          char_key: 'xiaobai',
+          name: '小白',
+          tag: '恋人',
+          persona: '成年伴侣',
+          chat_credential_id: 12,
+          chat_model_id: 'companion-model',
+          chat_thinking_level: 'low',
+          is_active: 1,
+          is_deleted: 0
+        }]];
+      }
+      throw new Error(`Unexpected query: ${sql}`);
+    }
+  };
+
+  const router = createRolesRouter({ withTransaction: async work => work(connection) });
+  await withServer(createApp({ router }), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/roles/7`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_credential_id: 12,
+        chat_model_id: 'companion-model',
+        chat_thinking_level: 'low'
+      })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(payload.item.chat_credential_id, 12);
+    assert.equal(payload.item.chat_model_id, 'companion-model');
+    assert.equal(payload.item.chat_thinking_level, 'low');
+  });
+});
+
+test('PATCH /api/roles/:id clears the role model and returns to the global default', async () => {
+  let updateParams;
+  const connection = {
+    query: async (sql, params) => {
+      if (sql.includes('SELECT id, chat_credential_id')) {
+        return [[{ id: 7, chat_credential_id: 12, chat_model_id: 'companion-model', chat_thinking_level: 'low' }]];
+      }
+      if (sql.includes('UPDATE characters') && sql.includes('chat_credential_id')) {
+        updateParams = params;
+        return [{ affectedRows: 1 }];
+      }
+      if (sql.includes('SELECT id, user_id, char_key')) {
+        return [[{ id: 7, user_id: 1, name: '小白', chat_credential_id: null, chat_model_id: null, chat_thinking_level: 'off' }]];
+      }
+      throw new Error(`Unexpected query: ${sql}`);
+    }
+  };
+
+  const router = createRolesRouter({ withTransaction: async work => work(connection) });
+  await withServer(createApp({ router }), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/roles/7`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_credential_id: null, chat_model_id: null, chat_thinking_level: 'off' })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(payload.item.chat_credential_id, null);
+    assert.equal(payload.item.chat_model_id, null);
+    assert.ok(updateParams.includes(null));
+  });
+});

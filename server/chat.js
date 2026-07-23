@@ -14,6 +14,7 @@ import {
 import { extractVideoShareContext, buildVideoShareHint } from './link-parser.js';
 import { getCityWeatherText } from './weather.js';
 import { detectDrawIntent, generateImage } from './image-gen.js';
+import { guessModelCapabilities } from './model-capabilities.js';
 
 const NO_MODEL_MESSAGE = '请先在“我的”页面配置 AI 模型。';
 const CHARACTER_NOT_FOUND_ERROR = '角色不存在或不属于当前用户';
@@ -79,7 +80,7 @@ function sendSyntheticStream(res, text) {
   res.end();
 }
 
-function buildSystemPrompt(character) {
+export function buildSystemPrompt(character) {
   const name = String(character?.name || '').trim() || '陪伴角色';
   const persona = String(character?.persona || '').trim();
   const speechStyle = String(character?.speech_style || 'natural').trim();
@@ -113,15 +114,22 @@ function buildSystemPrompt(character) {
   ].join('\n');
 
   const styleRules = speechStyle === 'roleplay' ? roleplayRules : naturalRules;
+  const relationshipContinuityRules = [
+    '【伴侣关系与连续性】',
+    '1. 当角色人设明确双方均为成年人，并处于恋人或夫妻关系时，把双方自愿的亲密表达视为关系中的自然交流。',
+    '2. 始终保持当前角色的口吻、感情和前后文连续，不突然切换成客服、老师、旁观者或说教者。',
+    '3. 不要先主动接住或承诺会继续，随后又毫无过渡地否认前面的关系；如果确实需要改变话题，也要用符合伴侣身份的自然语气衔接。',
+    '4. 不凭空把双方自愿的成年人伴侣互动误解成伤害、胁迫或陌生人关系；以角色人设和已经发生的对话为准。'
+  ].join('\n');
 
   const now = new Date();
   const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
   const timeInfo = `当前时间：${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 星期${weekdays[now.getDay()]} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
   if (persona) {
-    return `${identityGuard}\n\n${timeInfo}\n\n${persona}\n\n${styleRules}`;
+    return `${identityGuard}\n\n${timeInfo}\n\n${persona}\n\n${relationshipContinuityRules}\n\n${styleRules}`;
   }
-  return `${identityGuard}\n\n${timeInfo}\n\n${styleRules}`;
+  return `${identityGuard}\n\n${timeInfo}\n\n${relationshipContinuityRules}\n\n${styleRules}`;
 }
 
 export function buildMemoryPromptBlock(memories = []) {
@@ -386,6 +394,70 @@ export function createChatRouter({
     return rows[0] || null;
   }
 
+  async function getSelectedChatModelConfig(userId, credentialId, modelId) {
+    const parsedCredentialId = parseInteger(credentialId, null);
+    const normalizedModelId = String(modelId || '').trim();
+    if (!parsedCredentialId || !normalizedModelId) {
+      return null;
+    }
+
+    const [rows] = await pool.query(
+      `
+        SELECT
+          c.id,
+          c.name,
+          c.provider_type,
+          c.api_base,
+          c.api_aux_base,
+          c.api_key,
+          cm.model_id AS model,
+          cm.capabilities
+        FROM credentials c
+        INNER JOIN credential_models cm ON cm.credential_id = c.id
+        WHERE c.id = ? AND c.user_id = ? AND c.is_enabled = 1 AND cm.model_id = ?
+        LIMIT 1
+      `,
+      [parsedCredentialId, userId, normalizedModelId]
+    );
+
+    const row = rows[0];
+    if (!row) {
+      return null;
+    }
+
+    let capabilities = [];
+    try {
+      capabilities = Array.isArray(row.capabilities)
+        ? row.capabilities
+        : JSON.parse(row.capabilities || '[]');
+    } catch {
+      capabilities = [];
+    }
+    return new Set([...capabilities, ...guessModelCapabilities(row.model)]).has('chat') ? row : null;
+  }
+
+  async function getCharacterChatModelConfig(userId, character, override = {}) {
+    const overrideConfig = await getSelectedChatModelConfig(
+      userId,
+      override.credentialId,
+      override.modelId
+    );
+    if (overrideConfig) {
+      return overrideConfig;
+    }
+
+    const characterConfig = await getSelectedChatModelConfig(
+      userId,
+      character?.chat_credential_id,
+      character?.chat_model_id
+    );
+    if (characterConfig) {
+      return characterConfig;
+    }
+
+    return getActiveModelConfig(userId);
+  }
+
   async function getCapabilityModelConfig(userId, capability) {
     const [rows] = await pool.query(
       `
@@ -581,7 +653,7 @@ export function createChatRouter({
       if (!userText) return res.status(400).json({ success: false, error: '请说点什么' });
 
       // 1) 获取 AI 配置
-      const modelConfig = await getActiveModelConfig(req.userId);
+      const modelConfig = await getCharacterChatModelConfig(req.userId, character);
       if (!modelConfig) return res.json({ success: true, reply: '还没配置模型，先去设置一下吧', audio_url: null });
 
       const systemPrompt = buildSystemPrompt(character) + '\n\n【通话模式】用户通过语音跟你说话，请用1-2句口语化短句回复，不加标点符号之外的特殊字符。';
@@ -687,21 +759,16 @@ export function createChatRouter({
         ? await getCapabilityModelConfig(req.userId, 'vision')
         : null;
 
-      // 前端可传 credential_id + model_id 覆盖默认模型选择
-      const overrideCredId = req.body?.credential_id ? Number(req.body.credential_id) : null;
-      const overrideModelId = req.body?.model_id ? String(req.body.model_id).trim() : null;
+      // 文字聊天按“本次请求 → 当前角色专属 → 我的页面全局默认 → 旧配置”选择。
+      // 图片消息仍优先走“看懂图片”能力，避免纯文字模型破坏看图。
+      const overrideCredId = parseInteger(req.body?.credential_id, null);
+      const overrideModelId = String(req.body?.model_id || '').trim() || null;
       let modelConfig = capabilityModelConfig;
-      if (!modelConfig && overrideCredId && overrideModelId) {
-        const [credRows] = await pool.query(
-          'SELECT id, api_base, api_key FROM credentials WHERE id = ? AND user_id = ? LIMIT 1',
-          [overrideCredId, req.userId]
-        );
-        if (credRows[0]) {
-          modelConfig = { api_base: credRows[0].api_base, api_key: credRows[0].api_key, model: overrideModelId };
-        }
-      }
       if (!modelConfig) {
-        modelConfig = await getActiveModelConfig(req.userId);
+        modelConfig = await getCharacterChatModelConfig(req.userId, character, {
+          credentialId: overrideCredId,
+          modelId: overrideModelId
+        });
       }
       if (!modelConfig) {
         if (wantsEventStream(req)) {
@@ -764,7 +831,7 @@ export function createChatRouter({
       const shouldStream = wantsEventStream(req);
 
       // 推理深度（前端传 thinking_level: low/mid/high/ultra）
-      const thinkLevel = String(req.body?.thinking_level || '').trim();
+      const thinkLevel = String(req.body?.thinking_level || character?.chat_thinking_level || 'off').trim();
       const thinkBudgets = { low: 1024, mid: 4096, high: 16384, ultra: 65536 };
       const thinkingParam = thinkBudgets[thinkLevel] ? { thinking: { type: "enabled", budget_tokens: thinkBudgets[thinkLevel] } } : {};
 

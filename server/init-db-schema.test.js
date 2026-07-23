@@ -45,3 +45,10 @@ test('init-db schema allows personal moments without a character', () => {
     /ALTER TABLE `?\$\{fixup\.table\}`? MODIFY COLUMN `?\$\{fixup\.column\}`? \$\{fixup\.definition\}/
   );
 });
+
+
+test('characters schema stores a dedicated chat model and thinking level per role', () => {
+  assert.match(initDbSource, /chat_credential_id INT DEFAULT NULL/);
+  assert.match(initDbSource, /chat_model_id VARCHAR\(100\) DEFAULT NULL/);
+  assert.match(initDbSource, /chat_thinking_level VARCHAR\(20\) DEFAULT 'off'/);
+});
