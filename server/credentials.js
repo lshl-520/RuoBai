@@ -10,6 +10,7 @@ const TASK_IMAGE_MODEL = 'task-image-default';
 const VOLC_REALTIME_PROVIDER = 'volc-realtime';
 const VOLC_REALTIME_MODEL = '2.2.0.0';
 const VOLC_TTS_MODEL = 'seed-tts-2.0';
+const CAPABILITIES = ['chat', 'vision', 'image', 'tts', 'realtime'];
 
 function buildModelsUrl(apiBase) {
   const base = String(apiBase || '').trim().replace(/\/+$/, '');
@@ -53,7 +54,8 @@ function sanitizeCredential(body = {}) {
     provider_type: String(body.provider_type || 'openai-compatible').trim() || 'openai-compatible',
     api_base: String(body.api_base || '').trim().replace(/\/+$/, ''),
     api_aux_base: String(body.api_aux_base || '').trim().replace(/\/+$/, ''),
-    api_key: String(body.api_key || '').trim()
+    api_key: String(body.api_key || '').trim(),
+    is_enabled: body.is_enabled === undefined ? null : (body.is_enabled ? 1 : 0)
   };
 }
 
@@ -70,7 +72,9 @@ function presentCredential(row) {
     api_aux_base: row.api_aux_base || '',
     created_at: row.created_at,
     api_key_masked: maskSecret(row.api_key),
-    models_count: Number(row.models_count || 0)
+    models_count: Number(row.models_count || 0),
+    key_configured: Boolean(row.api_key) || isTaskImageProvider(row.provider_type),
+    is_enabled: row.is_enabled === undefined ? true : Boolean(row.is_enabled)
   };
 }
 
@@ -97,7 +101,7 @@ function summarizeCapabilities(items = []) {
 async function loadCredentialRow(queryable, credentialId, userId) {
   const [rows] = await queryable.query(
     `
-      SELECT id, user_id, name, provider_type, api_base, api_aux_base, api_key, created_at
+      SELECT id, user_id, name, provider_type, api_base, api_aux_base, api_key, is_enabled, created_at
       FROM credentials
       WHERE id = ? AND user_id = ?
       LIMIT 1
@@ -119,12 +123,13 @@ async function loadCredentials(queryable, userId) {
         c.api_base,
         c.api_aux_base,
         c.api_key,
+        c.is_enabled,
         c.created_at,
         COUNT(cm.id) AS models_count
       FROM credentials c
       LEFT JOIN credential_models cm ON cm.credential_id = c.id
       WHERE c.user_id = ?
-      GROUP BY c.id, c.user_id, c.name, c.provider_type, c.api_base, c.api_aux_base, c.api_key, c.created_at
+      GROUP BY c.id, c.user_id, c.name, c.provider_type, c.api_base, c.api_aux_base, c.api_key, c.is_enabled, c.created_at
       ORDER BY c.id DESC
     `,
     [userId]
@@ -133,12 +138,105 @@ async function loadCredentials(queryable, userId) {
   return rows;
 }
 
+
+function normalizePurposes(value) {
+  const source = Array.isArray(value) ? value : [];
+  return [...new Set(source.map(item => String(item || '').trim()).filter(item => CAPABILITIES.includes(item)))];
+}
+
+function connectivityError(status, raw = '') {
+  if (status === 401 || status === 403) return { code: 'auth_error', message: '密钥不正确，或这个密钥没有访问权限' };
+  if (status === 404) return { code: 'address_error', message: '接口地址或路径不对，服务器没有找到模型列表' };
+  if (status === 429) return { code: 'rate_limited', message: '密钥已经被识别，但额度不足或请求太频繁' };
+  if (status >= 500) return { code: 'upstream_error', message: '中转站或上游服务暂时故障，不一定是密钥填错' };
+  return { code: 'request_error', message: `连接失败（${status}）${raw ? `：${String(raw).slice(0, 120)}` : ''}` };
+}
+
+async function testCredentialConnection(credential, fetchImpl) {
+  if (isVolcRealtimeProvider(credential.provider_type)) {
+    await testVolcRealtimeCredential(credential);
+    return { success: true, code: 'ok', message: '豆包语音 Key 和连接正常' };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const testUrl = isTaskImageProvider(credential.provider_type)
+      ? `${String(credential.api_aux_base || '').replace(/\/+$/, '')}/system_stats`
+      : buildModelsUrl(credential.api_base);
+    const headers = isTaskImageProvider(credential.provider_type)
+      ? { Accept: 'application/json' }
+      : { Authorization: `Bearer ${credential.api_key}` };
+    const response = await fetchImpl(testUrl, { method: 'GET', headers, signal: controller.signal });
+    const raw = await response.text();
+    if (!response.ok) {
+      const detail = connectivityError(response.status, raw);
+      return { success: false, status: response.status, ...detail };
+    }
+    let modelCount = null;
+    if (!isTaskImageProvider(credential.provider_type)) {
+      try {
+        const payload = raw ? JSON.parse(raw) : {};
+        modelCount = Array.isArray(payload?.data) ? payload.data.length : 0;
+      } catch {
+        return { success: false, status: 400, code: 'invalid_response', message: '地址能连上，但返回的不是正常模型列表' };
+      }
+    }
+    return {
+      success: true,
+      code: 'ok',
+      message: isTaskImageProvider(credential.provider_type)
+        ? '任务式图片接口连通正常'
+        : `连通正常：密钥和地址可用${modelCount === null ? '' : `，发现 ${modelCount} 个模型`}`,
+      models_count: modelCount
+    };
+  } catch (error) {
+    const timeoutError = error?.name === 'AbortError';
+    return {
+      success: false,
+      status: timeoutError ? 408 : 400,
+      code: timeoutError ? 'timeout' : 'network_error',
+      message: timeoutError ? '连接超时，可能是线路慢或中转站暂时没有响应' : `连接失败：${error.message}`
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export function createCredentialsRouter({
   pool = defaultPool,
   withTransaction = defaultWithTransaction,
   fetchImpl = fetch
 } = {}) {
   const router = express.Router();
+
+  router.post('/test-draft', asyncHandler(async (req, res) => {
+    const draft = sanitizeCredential(req.body);
+    const credentialId = parseInteger(req.body?.credential_id);
+    let credential = draft;
+    if (credentialId) {
+      const saved = await loadCredentialRow(pool, credentialId, req.userId);
+      if (!saved) return res.status(404).json({ success: false, code: 'not_found', error: '渠道不存在' });
+      credential = {
+        ...saved,
+        ...draft,
+        api_key: draft.api_key || saved.api_key,
+        api_aux_base: req.body?.api_aux_base !== undefined ? draft.api_aux_base : saved.api_aux_base
+      };
+    }
+    const taskImageProvider = isTaskImageProvider(credential.provider_type);
+    if (!credential.api_base || (!credential.api_key && !taskImageProvider)) {
+      return res.status(400).json({ success: false, code: 'missing_fields', error: '请先填写地址和密钥' });
+    }
+    if (taskImageProvider && !credential.api_aux_base) {
+      return res.status(400).json({ success: false, code: 'missing_fields', error: '还需要填写任务查询 / 图片地址' });
+    }
+    const result = await testCredentialConnection(credential, fetchImpl);
+    return res.status(result.success ? 200 : (result.status === 408 ? 408 : 400)).json({
+      ...result,
+      ...(result.success ? {} : { error: result.message })
+    });
+  }));
 
   router.get('/', asyncHandler(async (req, res) => {
     const rows = await loadCredentials(pool, req.userId);
@@ -169,10 +267,10 @@ export function createCredentialsRouter({
     const item = await withTransaction(async connection => {
       const [result] = await connection.query(
         `
-          INSERT INTO credentials (user_id, name, provider_type, api_base, api_aux_base, api_key, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, NOW())
+          INSERT INTO credentials (user_id, name, provider_type, api_base, api_aux_base, api_key, is_enabled, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
         `,
-        [req.userId, payload.name, payload.provider_type, payload.api_base, payload.api_aux_base, payload.api_key]
+        [req.userId, payload.name, payload.provider_type, payload.api_base, payload.api_aux_base, payload.api_key, payload.is_enabled ?? 1]
       );
 
       const fixedModels = isTaskImageProvider(payload.provider_type)
@@ -218,7 +316,8 @@ export function createCredentialsRouter({
             provider_type = COALESCE(?, provider_type),
             api_base = COALESCE(?, api_base),
             api_aux_base = COALESCE(?, api_aux_base),
-            api_key = COALESCE(?, api_key)
+            api_key = COALESCE(?, api_key),
+            is_enabled = COALESCE(?, is_enabled)
           WHERE id = ? AND user_id = ?
         `,
         [
@@ -227,10 +326,18 @@ export function createCredentialsRouter({
           req.body?.api_base !== undefined ? payload.api_base : null,
           req.body?.api_aux_base !== undefined ? payload.api_aux_base : null,
           req.body?.api_key !== undefined ? payload.api_key : null,
+          req.body?.is_enabled !== undefined ? payload.is_enabled : null,
           credentialId,
           req.userId
         ]
       );
+
+      if (req.body?.is_enabled !== undefined && !payload.is_enabled) {
+        await connection.query(
+          'UPDATE capability_assignments SET enabled = 0, updated_at = NOW() WHERE credential_id = ? AND user_id = ?',
+          [credentialId, req.userId]
+        );
+      }
 
       return loadCredentialRow(connection, credentialId, req.userId);
     });
@@ -272,6 +379,76 @@ export function createCredentialsRouter({
       success: true,
       disabled_capabilities: result.disabled_capabilities
     });
+  }));
+
+  router.post('/:id/apply', asyncHandler(async (req, res) => {
+    const credentialId = parseInteger(req.params.id);
+    if (!credentialId) return res.status(400).json({ success: false, error: '凭证 ID 非法' });
+
+    const credential = await loadCredentialRow(pool, credentialId, req.userId);
+    if (!credential) return res.status(404).json({ success: false, error: '凭证不存在' });
+    if (credential.is_enabled === 0 || credential.is_enabled === false) return res.status(400).json({ success: false, error: '这个渠道当前已停用' });
+
+    const purposes = normalizePurposes(req.body?.purposes);
+    const defaultModel = String(req.body?.model_id || '').trim();
+    const modelMap = req.body?.models && typeof req.body.models === 'object' ? req.body.models : {};
+    if (!purposes.length) return res.json({ success: true, applied: [] });
+
+    const applied = await withTransaction(async connection => {
+      const result = [];
+      const omitted = CAPABILITIES.filter(capability => !purposes.includes(capability));
+      if (omitted.length) {
+        await connection.query(
+          `UPDATE capability_assignments SET enabled = 0, updated_at = NOW()
+           WHERE user_id = ? AND credential_id = ? AND capability IN (${omitted.map(() => '?').join(', ')})`,
+          [req.userId, credentialId, ...omitted]
+        );
+      }
+      for (const capability of purposes) {
+        if (capability === 'realtime' && !isVolcRealtimeProvider(credential.provider_type)) {
+          throw new Error('当前实时通话只支持豆包语音渠道');
+        }
+        const modelId = String(modelMap[capability] || defaultModel || '').trim();
+        if (!modelId) throw new Error(`“${capability}”还没有选择模型`);
+
+        const [modelRows] = await connection.query(
+          'SELECT id, capabilities FROM credential_models WHERE credential_id = ? AND model_id = ? LIMIT 1',
+          [credentialId, modelId]
+        );
+        const currentCapabilities = modelRows[0]?.capabilities;
+        let list = [];
+        try { list = Array.isArray(currentCapabilities) ? currentCapabilities : JSON.parse(currentCapabilities || '[]'); } catch { list = []; }
+        const merged = [...new Set([...list, capability])];
+        if (modelRows.length) {
+          await connection.query('UPDATE credential_models SET capabilities = ?, discovered_at = NOW() WHERE id = ?', [JSON.stringify(merged), modelRows[0].id]);
+        } else {
+          await connection.query(
+            'INSERT INTO credential_models (credential_id, model_id, capabilities, discovered_at) VALUES (?, ?, ?, NOW())',
+            [credentialId, modelId, JSON.stringify(merged)]
+          );
+        }
+
+        const [assignmentRows] = await connection.query(
+          'SELECT id FROM capability_assignments WHERE user_id = ? AND capability = ? LIMIT 1',
+          [req.userId, capability]
+        );
+        if (assignmentRows.length) {
+          await connection.query(
+            'UPDATE capability_assignments SET credential_id = ?, model_id = ?, enabled = 1, updated_at = NOW() WHERE user_id = ? AND capability = ?',
+            [credentialId, modelId, req.userId, capability]
+          );
+        } else {
+          await connection.query(
+            'INSERT INTO capability_assignments (user_id, capability, credential_id, model_id, enabled, updated_at) VALUES (?, ?, ?, ?, 1, NOW())',
+            [req.userId, capability, credentialId, modelId]
+          );
+        }
+        result.push({ capability, model_id: modelId });
+      }
+      return result;
+    });
+
+    return res.json({ success: true, applied });
   }));
 
   router.post('/:id/refresh-models', asyncHandler(async (req, res) => {
@@ -360,55 +537,14 @@ export function createCredentialsRouter({
 
   router.post('/:id/test', asyncHandler(async (req, res) => {
     const credentialId = parseInteger(req.params.id);
-    if (!credentialId) {
-      return res.status(400).json({ success: false, error: '凭证 ID 非法' });
-    }
-
+    if (!credentialId) return res.status(400).json({ success: false, error: '凭证 ID 非法' });
     const credential = await loadCredentialRow(pool, credentialId, req.userId);
-    if (!credential) {
-      return res.status(404).json({ success: false, error: '凭证不存在' });
-    }
-
-    if (isVolcRealtimeProvider(credential.provider_type)) {
-      try {
-        await testVolcRealtimeCredential(credential);
-        return res.json({ success: true, message: '豆包语音连接正常' });
-      } catch (error) {
-        return res.status(400).json({ success: false, error: error.message });
-      }
-    }
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-
-    try {
-      const testUrl = isTaskImageProvider(credential.provider_type)
-        ? `${String(credential.api_aux_base || '').replace(/\/+$/, '')}/system_stats`
-        : buildModelsUrl(credential.api_base);
-      const headers = isTaskImageProvider(credential.provider_type)
-        ? { Accept: 'application/json' }
-        : { Authorization: `Bearer ${credential.api_key}` };
-      const response = await fetchImpl(testUrl, {
-        method: 'GET',
-        headers,
-        signal: controller.signal
-      });
-
-      const raw = await response.text();
-      if (!response.ok) {
-        return res.status(400).json({
-          success: false,
-          error: `连通失败：${response.status} ${raw.slice(0, 200)}`
-        });
-      }
-
-      return res.json({
-        success: true,
-        message: '连通正常'
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
+    if (!credential) return res.status(404).json({ success: false, error: '凭证不存在' });
+    const result = await testCredentialConnection(credential, fetchImpl);
+    return res.status(result.success ? 200 : (result.status === 408 ? 408 : 400)).json({
+      ...result,
+      ...(result.success ? {} : { error: result.message })
+    });
   }));
 
   router.get('/:id/models', asyncHandler(async (req, res) => {

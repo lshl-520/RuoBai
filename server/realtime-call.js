@@ -274,7 +274,7 @@ export async function loadRealtimeConfig(pool, userId) {
         c.api_key
       FROM capability_assignments ca
       INNER JOIN credentials c ON c.id = ca.credential_id
-      WHERE ca.user_id = ? AND ca.capability = 'realtime' AND ca.enabled = 1
+      WHERE ca.user_id = ? AND ca.capability = 'realtime' AND ca.enabled = 1 AND c.is_enabled = 1
       ORDER BY ca.id DESC
       LIMIT 1
     `,

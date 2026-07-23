@@ -51,6 +51,11 @@ const CREDENTIAL_RUNTIME_COLUMNS = [
     name: 'api_aux_base',
     definition: "VARCHAR(500) DEFAULT ''",
     after: 'api_base'
+  },
+  {
+    name: 'is_enabled',
+    definition: 'TINYINT(1) DEFAULT 1',
+    after: 'api_key'
   }
 ];
 

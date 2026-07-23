@@ -23,7 +23,7 @@ test('ensureCharacterRuntimeColumns adds missing role-page columns once', async 
   assert.match(alterCalls[0].sql, /ADD COLUMN portrait_id INT DEFAULT NULL AFTER avatar/i);
 });
 
-test('ensureCredentialRuntimeColumns adds the auxiliary task address once', async () => {
+test('ensureCredentialRuntimeColumns adds channel runtime columns once', async () => {
   const calls = [];
   const db = {
     query: async (sql, params = []) => {
@@ -36,8 +36,9 @@ test('ensureCredentialRuntimeColumns adds the auxiliary task address once', asyn
   await ensureCredentialRuntimeColumns(db);
 
   const alterCalls = calls.filter(call => /^ALTER TABLE credentials/i.test(call.sql));
-  assert.equal(alterCalls.length, 1);
+  assert.equal(alterCalls.length, 2);
   assert.match(alterCalls[0].sql, /ADD COLUMN api_aux_base VARCHAR\(500\) DEFAULT '' AFTER api_base/i);
+  assert.match(alterCalls[1].sql, /ADD COLUMN is_enabled TINYINT\(1\) DEFAULT 1 AFTER api_key/i);
 });
 
 test('ensurePushRuntimeTables creates FCM and proactive-message tables', async () => {

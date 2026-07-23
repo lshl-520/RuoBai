@@ -1,6 +1,6 @@
 import React from "react";
 import { Icon, CHANNEL_TYPES, VOICE_ENGINES, useLockBody } from "../store.jsx";
-import { getCredentials, createCredential, updateCredential, deleteCredential, refreshCredentialModels, discoverModelConfigs, getCapabilities, updateCapability } from "../lib/profile.js";
+import { getCredentials, createCredential, updateCredential, deleteCredential, refreshCredentialModels, discoverModelConfigs, getCapabilities, updateCapability, testCredentialDraft, applyCredential } from "../lib/profile.js";
 import { loadVoiceSettings, saveVoiceSettings } from "../lib/voice-settings.js";
 import { previewTts } from "../lib/chat.js";
 import { Toggle, StatusDot, Row } from "./profile.jsx";
@@ -76,7 +76,7 @@ function CapPicker({ cap, options, current, onClose, onPick }) {
 }
 
 /* ====== 渠道配置 Sheet ====== */
-function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
+function ChannelSheet({ channel, isNew, onClose, onSave, onDelete, onTest }) {
   useLockBody();
   const [type, setType] = useStateMo(channel?.type || "openai");
   const preset = CHANNEL_TYPES[type] || CHANNEL_TYPES.custom;
@@ -93,6 +93,10 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
   const [model, setModel] = useStateMo(channel?.model || (realtimeMode ? VOLC_REALTIME_MODEL : ""));
   const [fetchState, setFetchState] = useStateMo(realtimeMode ? "done" : "idle");
   const [purposes, setPurposes] = useStateMo(channel?.purposes?.length ? channel.purposes : (realtimeMode ? ["realtime", "tts"] : ["chat"]));
+  const [testState, setTestState] = useStateMo(channel?.testState || "idle");
+  const [testMessage, setTestMessage] = useStateMo(channel?.testMessage || "");
+  const [saving, setSaving] = useStateMo(false);
+  const [saveError, setSaveError] = useStateMo("");
 
   const togglePurpose = (p) => {
     if (taskImageMode || realtimeMode) return;
@@ -174,14 +178,59 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
       }
     } catch (err) {
       setFetchState("fail");
+      setTestMessage(err?.message || "获取模型失败");
       setModels([]);
+    }
+  };
+
+  const buildDraft = () => ({
+    id: channel?.id,
+    type,
+    providerType: taskImageMode ? TASK_IMAGE_PROVIDER : type,
+    name,
+    base,
+    taskBase,
+    apiKey: taskImageMode ? "" : apiKey,
+    enabled,
+    model: taskImageMode ? TASK_IMAGE_MODEL : realtimeMode ? VOLC_REALTIME_MODEL : model,
+    fetched: models,
+    purposes: taskImageMode ? ["image"] : realtimeMode ? ["realtime", "tts"] : purposes,
+  });
+
+  const runTest = async () => {
+    if (testState === "loading") return;
+    setTestState("loading");
+    setTestMessage("正在核对地址和密钥...");
+    try {
+      const result = await onTest(buildDraft());
+      if (!result?.success) throw new Error(result?.error || result?.message || "连接测试失败");
+      setTestState("ok");
+      setTestMessage(result.message || "密钥和连接正常");
+      if (Number.isFinite(result.models_count)) setModels((prev) => prev);
+    } catch (error) {
+      setTestState("fail");
+      setTestMessage(error?.message || String(error));
+    }
+  };
+
+  const save = async () => {
+    if (saving) return;
+    setSaving(true);
+    setSaveError("");
+    try {
+      await onSave(buildDraft());
+    } catch (error) {
+      setSaveError(error?.message || String(error));
+    } finally {
+      setSaving(false);
     }
   };
 
   const canSave = (isNew ? name.trim() : true)
     && base.trim()
     && (!taskImageMode || taskBase.trim())
-    && (noKeyRequired || apiKey.trim() || (!!channel?._backendId && channel?.providerType !== TASK_IMAGE_PROVIDER));
+    && (noKeyRequired || apiKey.trim() || (!!channel?._backendId && channel?.providerType !== TASK_IMAGE_PROVIDER))
+    && ((taskImageMode || realtimeMode) || purposes.length === 0 || model.trim());
 
   const PURPOSE_OPTS = [
     { key: "chat", icon: "chat", label: "聊天" },
@@ -250,12 +299,20 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
             ))}
           </div>
 
+          <button className={"test-btn " + testState} onClick={runTest} disabled={testState === "loading"} style={{ marginTop: 16 }}>
+            {testState === "loading" ? <><span className="test-spin" /> 正在测试...</>
+              : testState === "ok" ? <><Icon name="check" /> 密钥和连接可用</>
+              : testState === "fail" ? <><Icon name="alert" /> 测试失败，点此重试</>
+              : <><Icon name="cpu" /> 测试密钥和连接</>}
+          </button>
+          {testMessage && <div className={"channel-feedback " + testState}>{testMessage}</div>}
+
           <div className="model-head">
             <label className="field-label" style={{ margin: 0 }}>模型</label>
             <button className={"fetch-btn " + fetchState} onClick={fetchModels}>
               {fetchState === "loading" ? <><span className="test-spin" /> 获取中...</>
                 : fetchState === "done" ? <><Icon name="check" /> 已更新 {models.length} 个</>
-                : fetchState === "fail" ? <><Icon name="alert" /> 需先填密钥</>
+                : fetchState === "fail" ? <><Icon name="alert" /> 获取失败</>
                 : <><Icon name="refresh" /> 获取模型列表</>}
             </button>
           </div>
@@ -288,10 +345,12 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete }) {
         </div>
         <div className="sheet-foot">
           {!isNew && <button className="icon-btn det-del" onClick={() => onDelete(channel.id)}><Icon name="trash" /></button>}
-          <button className="pill pill-primary grow" disabled={!canSave} style={!canSave ? { opacity: 0.5 } : null}
-            onClick={() => onSave({ id: channel?.id, type, providerType: taskImageMode ? TASK_IMAGE_PROVIDER : type, name, base, taskBase, apiKey: taskImageMode ? "" : apiKey, enabled, model: taskImageMode ? TASK_IMAGE_MODEL : realtimeMode ? VOLC_REALTIME_MODEL : model, fetched: models, purposes: taskImageMode ? ["image"] : realtimeMode ? ["realtime", "tts"] : purposes })}>
-            {isNew ? "添加渠道" : "保存"}
-          </button>
+          <div className="grow">
+            {saveError && <div className="channel-feedback fail" style={{ marginBottom: 8 }}>{saveError}</div>}
+            <button className="pill pill-primary" style={{ width: "100%", opacity: !canSave || saving ? 0.5 : 1 }} disabled={!canSave || saving} onClick={save}>
+              {saving ? "保存并应用中..." : isNew ? "添加并应用到所选能力" : "保存并应用到所选能力"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -449,6 +508,7 @@ function ModelsSection() {
   const [chSheet, setChSheet] = useStateMo(undefined);
   const [voiceSheet, setVoiceSheet] = useStateMo(false);
   const [voiceConfig, setVoiceConfig] = useStateMo(loadVoiceSettings);
+  const [channelTests, setChannelTests] = useStateMo({});
 
   // 能力面板（真实数据）
   const [capabilities, setCaps] = useStateMo([]);
@@ -461,11 +521,10 @@ function ModelsSection() {
     }).catch(() => {}).finally(() => setCapLoading(false));
   }, []);
 
-  const refreshCaps = () => {
-    getCapabilities().then((res) => {
-      if (res?.success && Array.isArray(res.items)) setCaps(res.items);
-    }).catch(() => {});
-  };
+  const refreshCaps = () => getCapabilities().then((res) => {
+    if (res?.success && Array.isArray(res.items)) setCaps(res.items);
+    return res;
+  }).catch(() => null);
 
   const toggleCap = async (capKey, currentEnabled) => {
     if (!currentEnabled) {
@@ -515,9 +574,10 @@ function ModelsSection() {
         apiAuxBase: cfg.api_aux_base || "",
         apiKey: "",
         apiKeyMasked: cfg.api_key_masked || "",
+        keyConfigured: cfg.key_configured !== false,
         model: "",
         modelsCount: cfg.models_count || 0,
-        enabled: true,
+        enabled: cfg.is_enabled !== false,
         fetched: [],
         _backendId: cfg.id,
       }));
@@ -533,8 +593,20 @@ function ModelsSection() {
     return () => { cancelled = true; };
   }, []);
 
-  const refreshChannels = () => {
-    getCredentials().then((payload) => {
+  React.useEffect(() => {
+    if (!capabilities.length) return;
+    setChannels((prev) => prev.map((channel) => {
+      if (!channel._backendId) return channel;
+      const assigned = capabilities.filter((item) => Number(item.current?.credential_id) === Number(channel._backendId));
+      return {
+        ...channel,
+        purposes: assigned.map((item) => item.capability),
+        model: assigned[0]?.current?.model_id || channel.model || "",
+      };
+    }));
+  }, [capabilities]);
+
+  const refreshChannels = () => getCredentials().then((payload) => {
       const raw = Array.isArray(payload?.items) ? payload.items : [];
       const converted = raw.map((cfg) => ({
         id: String(cfg.id),
@@ -545,15 +617,15 @@ function ModelsSection() {
         apiAuxBase: cfg.api_aux_base || "",
         apiKey: "",
         apiKeyMasked: cfg.api_key_masked || "",
+        keyConfigured: cfg.key_configured !== false,
         model: "",
         modelsCount: cfg.models_count || 0,
-        enabled: true,
+        enabled: cfg.is_enabled !== false,
         fetched: [],
         _backendId: cfg.id,
       }));
       setChannels(converted);
     }).catch(() => {});
-  };
 
   const saveChannel = async (d) => {
     const payload = {
@@ -561,25 +633,57 @@ function ModelsSection() {
       provider_type: d.providerType,
       api_base: d.base,
       api_aux_base: d.taskBase || "",
+      is_enabled: d.enabled,
     };
-    if (d.providerType === TASK_IMAGE_PROVIDER || d.apiKey) {
-      payload.api_key = d.apiKey;
+    if (d.providerType === TASK_IMAGE_PROVIDER || d.apiKey) payload.api_key = d.apiKey;
+
+    let backendId = d.id && channels.find((c) => c.id === d.id)?._backendId;
+    let result;
+    if (backendId) {
+      result = await updateCredential(backendId, payload);
+    } else {
+      result = await createCredential(payload);
+      backendId = result?.item?.id;
     }
-    try {
-      if (d.id && channels.find((c) => c.id === d.id)?._backendId) {
-        const backendId = channels.find((c) => c.id === d.id)._backendId;
-        await updateCredential(backendId, payload);
-        await refreshCredentialModels(backendId).catch(() => {});
-      } else {
-        const res = await createCredential(payload);
-        if (res?.success && res.item?.id) {
-          await refreshCredentialModels(res.item.id).catch(() => {});
-        }
-      }
-    } catch (e) {}
-    refreshChannels();
-    refreshCaps();
+    if (!result?.success || !backendId) throw new Error(result?.error || "渠道保存失败");
+
+    await refreshCredentialModels(backendId).catch(() => null);
+    if (d.enabled && d.purposes?.length) {
+      const models = d.providerType === VOLC_REALTIME_PROVIDER
+        ? { realtime: VOLC_REALTIME_MODEL, tts: VOLC_TTS_MODEL }
+        : {};
+      const applied = await applyCredential(backendId, {
+        purposes: d.purposes,
+        model_id: d.model,
+        models,
+      });
+      if (!applied?.success) throw new Error(applied?.error || "渠道已保存，但应用到能力失败");
+    }
+
+    await Promise.all([refreshChannels(), refreshCaps()]);
     setChSheet(undefined);
+    return { success: true };
+  };
+
+  const testChannel = async (d) => {
+    let result;
+    const backendId = d.id && channels.find((c) => c.id === d.id)?._backendId;
+    result = await testCredentialDraft({
+      credential_id: backendId || undefined,
+      provider_type: d.providerType,
+      api_base: d.base,
+      api_aux_base: d.taskBase || "",
+      api_key: d.apiKey || "",
+    });
+    const state = result?.success ? "ok" : "fail";
+    if (backendId) {
+      setChannelTests((prev) => ({
+        ...prev,
+        [backendId]: { state, message: result?.message || result?.error || "测试失败", at: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }) },
+      }));
+    }
+    if (!result?.success) throw new Error(result?.error || result?.message || "测试失败");
+    return result;
   };
 
   const delChannel = async (id) => {
@@ -690,7 +794,7 @@ function ModelsSection() {
               <span className={"prow-ic on"}><Icon name="cpu" /></span>
               <span className="prow-main">
                 <span className="prow-t">{c.name}</span>
-                <span className="prow-s">{c.base}{c.modelsCount > 0 ? ` · 已发现 ${c.modelsCount} 个模型` : ""}</span>
+                <span className="prow-s">{c.enabled ? "已启用" : "已停用"} · {c.providerType === TASK_IMAGE_PROVIDER ? "无需密钥" : c.keyConfigured ? "密钥已填写" : "密钥未填写"} · {channelTests[c._backendId]?.state === "ok" ? `连接可用（${channelTests[c._backendId].at}）` : channelTests[c._backendId]?.state === "fail" ? "测试失败" : "尚未测试"}{c.modelsCount > 0 ? ` · ${c.modelsCount} 个模型` : ""}</span>
               </span>
               <Icon name="chevron" className="row-chev" />
             </button>
@@ -704,8 +808,8 @@ function ModelsSection() {
       </div>
 
       {chSheet !== undefined && (
-        <ChannelSheet channel={chSheet.channel} isNew={chSheet.isNew}
-          onClose={() => setChSheet(undefined)} onSave={saveChannel} onDelete={delChannel} />
+        <ChannelSheet channel={chSheet.channel ? { ...chSheet.channel, testState: channelTests[chSheet.channel._backendId]?.state, testMessage: channelTests[chSheet.channel._backendId]?.message } : null} isNew={chSheet.isNew}
+          onClose={() => setChSheet(undefined)} onSave={saveChannel} onDelete={delChannel} onTest={testChannel} />
       )}
       {capPicker && (() => {
         const capData = capabilities.find((c) => c.capability === capPicker);

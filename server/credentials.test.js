@@ -528,3 +528,90 @@ test('doubao voice credential registers realtime and tts models with the same ke
     ]);
   });
 });
+
+
+test('POST /api/credentials/test-draft explains an invalid key in plain language', async () => {
+  const router = createCredentialsRouter({
+    fetchImpl: async () => ({ ok: false, status: 401, text: async () => 'unauthorized' })
+  });
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials/test-draft`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider_type: 'openai-compatible', api_base: 'https://example.com', api_key: 'bad-key' })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 400);
+    assert.equal(payload.code, 'auth_error');
+    assert.match(payload.error, /密钥不正确/);
+  });
+});
+
+test('POST /api/credentials/:id/apply saves selected model and switches selected capabilities', async () => {
+  const calls = [];
+  const router = createCredentialsRouter({
+    pool: {
+      query: async sql => {
+        if (sql.includes('FROM credentials') && sql.includes('WHERE id = ? AND user_id = ?')) {
+          return [[{ id: 8, user_id: 7, name: '中转', provider_type: 'openai-compatible', api_base: 'https://example.com', api_aux_base: '', api_key: 'key', is_enabled: 1 }]];
+        }
+        throw new Error(`Unexpected pool query: ${sql}`);
+      }
+    },
+    withTransaction: async work => work({
+      query: async (sql, params) => {
+        calls.push({ sql, params });
+        if (sql.includes('SELECT id, capabilities FROM credential_models')) return [[{ id: 30, capabilities: '["chat"]' }]];
+        if (sql.includes('SELECT id FROM capability_assignments')) return [[{ id: 40 }]];
+        if (sql.includes('UPDATE credential_models') || sql.includes('UPDATE capability_assignments')) return [{ affectedRows: 1 }];
+        throw new Error(`Unexpected tx query: ${sql}`);
+      }
+    })
+  });
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials/8/apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ purposes: ['chat', 'vision'], model_id: 'gpt-5.6-terra' })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(payload.applied.map(item => item.capability), ['chat', 'vision']);
+    assert.equal(calls.filter(call => call.sql.includes('UPDATE capability_assignments') && call.sql.includes('enabled = 1')).length, 2);
+    assert.ok(calls.some(call => call.sql.includes('SET enabled = 0') && call.params?.includes('image')));
+    assert.ok(calls.some(call => String(call.params?.[0]).includes('vision')));
+  });
+});
+
+
+test('POST /api/credentials/test-draft tests edited address with the saved key', async () => {
+  let requestedUrl = '';
+  let authorization = '';
+  const router = createCredentialsRouter({
+    pool: {
+      query: async sql => {
+        if (sql.includes('FROM credentials') && sql.includes('WHERE id = ? AND user_id = ?')) {
+          return [[{ id: 8, user_id: 7, name: '旧渠道', provider_type: 'openai-compatible', api_base: 'https://old.example.com', api_aux_base: '', api_key: 'saved-key', is_enabled: 1 }]];
+        }
+        throw new Error(`Unexpected pool query: ${sql}`);
+      }
+    },
+    fetchImpl: async (url, options) => {
+      requestedUrl = url;
+      authorization = options.headers.Authorization;
+      return { ok: true, status: 200, text: async () => JSON.stringify({ data: [{ id: 'model-a' }] }) };
+    }
+  });
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials/test-draft`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential_id: 8, provider_type: 'openai-compatible', api_base: 'https://new.example.com/v1', api_key: '' })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(payload.models_count, 1);
+    assert.equal(requestedUrl, 'https://new.example.com/v1/models');
+    assert.equal(authorization, 'Bearer saved-key');
+  });
+});
