@@ -1222,17 +1222,17 @@ function ChatRoom({ agent, onBack }) {
       )}
 
       <header className="chat-top">
-        <button className="ct-back" onClick={onBack}><Icon name="back" /></button>
-        <div className="ct-avatar" onClick={() => setBig(true)}><img src={agent.avatar} alt="" onError={fallbackToDefaultRoleAvatar} />{agent.online && <span className="cl-online" />}</div>
+        <button className="ct-back" onClick={onBack} aria-label="返回聊天列表" title="返回聊天列表"><Icon name="back" /></button>
+        <div className="ct-avatar" role="button" tabIndex={0} aria-label={`查看${agent.name}的立绘`} onClick={() => setBig(true)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setBig(true); }}><img src={agent.avatar} alt="" onError={fallbackToDefaultRoleAvatar} />{agent.online && <span className="cl-online" />}</div>
         <div className="ct-info">
           <div className="ct-name">{agent.name}<TempDot temp={agent.temp} /></div>
-          <button className="ct-model" onClick={() => setModelOpen(!modelOpen)}>
+          <button className="ct-model" onClick={() => setModelOpen(!modelOpen)} aria-label="切换聊天模型">
             <Icon name="cpu" /> {modelLabel}<Icon name="chevronD" className={"cm-chev" + (modelOpen ? " open" : "")} />
           </button>
         </div>
-        <button className="ct-ic" onClick={() => setSearching(!searching)} style={searching ? { color: "var(--rose)" } : null}><Icon name="search" /></button>
-        <button className="ct-ic" onClick={() => setShowFig(!showFig)} style={showFig ? { color: "var(--rose)" } : null}><Icon name="flower" /></button>
-        <button className="ct-ic" onClick={() => setMoreOpen(!moreOpen)} style={moreOpen ? { color: "var(--rose)" } : null}><Icon name="more" /></button>
+        <button className="ct-ic" onClick={() => setSearching(!searching)} style={searching ? { color: "var(--rose)" } : null} aria-label="搜索聊天记录" title="搜索聊天记录"><Icon name="search" /></button>
+        <button className="ct-ic" onClick={() => setShowFig(!showFig)} style={showFig ? { color: "var(--rose)" } : null} aria-label={showFig ? "隐藏常驻立绘" : "显示常驻立绘"} title={showFig ? "隐藏常驻立绘" : "显示常驻立绘"}><Icon name="flower" /></button>
+        <button className="ct-ic" onClick={() => setMoreOpen(!moreOpen)} style={moreOpen ? { color: "var(--rose)" } : null} aria-label="更多聊天操作" title="更多聊天操作"><Icon name="more" /></button>
       </header>
 
       {moreOpen && (
@@ -1251,7 +1251,7 @@ function ChatRoom({ agent, onBack }) {
         <div className="chat-search">
           <Icon name="search" />
           <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索和她的聊天记录…" />
-          {q && <button onClick={() => setQ("")}>×</button>}
+          {q && <button onClick={() => setQ("")} aria-label="清空搜索">×</button>}
         </div>
       )}
 
@@ -1282,7 +1282,7 @@ function ChatRoom({ agent, onBack }) {
             {atts.map((src, i) => (
               <div className="att-thumb" key={i}>
                 <img src={src} alt="" />
-                <button className="att-x" onClick={() => removeAtt(i)}>×</button>
+                <button className="att-x" onClick={() => removeAtt(i)} aria-label={`移除第${i + 1}张图片`}>×</button>
               </div>
             ))}
             <div className="att-hint">{uploading ? "图片上传中…" : `配好图,再打字,一起发给${agent.name}`}</div>
@@ -1294,6 +1294,7 @@ function ChatRoom({ agent, onBack }) {
             className={"ib-tool" + (voiceMode ? " on" : "")}
             onClick={() => { setVoiceMode(!voiceMode); setStickerOpen(false); }}
             title={voiceMode ? "切换到文字" : "切换到语音"}
+            aria-label={voiceMode ? "切换到文字" : "切换到语音"}
           >
             <Icon name={voiceMode ? "keyboard" : "mic"} />
           </button>
@@ -1309,15 +1310,15 @@ function ChatRoom({ agent, onBack }) {
                 <Icon name="mic" />
                 <span>{typing ? `${agent.name}正在回复…` : "点击录音"}</span>
               </button>
-              <button className="ib-tool" onClick={() => setStickerOpen(!stickerOpen)} style={stickerOpen ? { color: "var(--rose)" } : null}><Icon name="star" /></button>
+              <button className="ib-tool" onClick={() => setStickerOpen(!stickerOpen)} style={stickerOpen ? { color: "var(--rose)" } : null} aria-label="打开表情包" title="打开表情包"><Icon name="star" /></button>
             </>
           ) : (
             /* 文字模式：原有布局 */
             <>
-              <button className="ib-tool" onClick={() => setCalling(true)}><Icon name="phone" /></button>
-              <button className="ib-tool" onClick={openPicker} disabled={uploading} style={(atts.length || uploading) ? { color: "var(--rose)" } : null}><Icon name="image" /></button>
+              <button className="ib-tool" onClick={() => setCalling(true)} aria-label="开始实时通话" title="开始实时通话"><Icon name="phone" /></button>
+              <button className="ib-tool" onClick={openPicker} disabled={uploading} style={(atts.length || uploading) ? { color: "var(--rose)" } : null} aria-label="选择图片" title="选择图片"><Icon name="image" /></button>
               <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={onPickImage} />
-              <button className="ib-tool" onClick={() => setStickerOpen(!stickerOpen)} style={stickerOpen ? { color: "var(--rose)" } : null}><Icon name="star" /></button>
+              <button className="ib-tool" onClick={() => setStickerOpen(!stickerOpen)} style={stickerOpen ? { color: "var(--rose)" } : null} aria-label="打开表情包" title="打开表情包"><Icon name="star" /></button>
               <div className="ib-field">
                 <textarea value={draft} rows={1} onFocus={() => setStickerOpen(false)}
                   onChange={(e) => setDraft(e.target.value)}
@@ -1325,7 +1326,7 @@ function ChatRoom({ agent, onBack }) {
                   placeholder={typing ? `${agent.name}正在回复…` : `和${agent.name}说点什么…`} />
               </div>
               {(draft.trim() || atts.length > 0)
-                ? <button className={"ib-send on" + (typing ? " busy" : "")} onClick={send} disabled={typing || uploading}><Icon name="send" /></button>
+                ? <button className={"ib-send on" + (typing ? " busy" : "")} onClick={send} disabled={typing || uploading} aria-label="发送消息" title="发送消息"><Icon name="send" /></button>
                 : null}
             </>
           )}
