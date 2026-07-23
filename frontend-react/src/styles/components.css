@@ -199,7 +199,6 @@
 .ct-avatar .cl-online { width: 10px; height: 10px; border-width: 2px; }
 .ct-info { flex: 1; min-width: 0; }
 .ct-name { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
-.ct-status { margin-top: 2px; font-size: 11px; color: var(--ink-faint); }
 .temp-dot { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 600; color: var(--rose); }
 .temp-dot svg { width: 11px; height: 11px; animation: flicker 2.4s ease-in-out infinite; }
 @keyframes flicker { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.18); opacity: 0.82; } }
@@ -332,7 +331,6 @@
 .model-panel-mask { position: fixed; inset: 0; z-index: 200; background: rgba(40,28,32,0.35); animation: fadeIn 0.18s ease; display: flex; align-items: flex-end; justify-content: center; }
 .model-panel { width: 100%; max-width: 480px; max-height: 72vh; background: var(--card); border-radius: 20px 20px 0 0; padding: 6px 0 20px; animation: slideUp 0.28s cubic-bezier(0.22, 1, 0.36, 1); overflow-y: auto; }
 @keyframes slideUp { from { transform: translateY(100%); opacity: 0.5; } to { transform: translateY(0); opacity: 1; } }
-.mp-scope { margin: 2px 16px 8px; padding: 8px 10px; border-radius: 11px; background: var(--rose-tint); color: var(--rose-deep); font-size: 11px; line-height: 1.45; }
 .mp-cols { display: flex; gap: 0; padding: 4px 16px 0; }
 .mp-left { flex: 1; min-width: 0; padding-right: 14px; }
 .mp-divider { width: 1px; background: var(--line); margin: 8px 0; flex-shrink: 0; }

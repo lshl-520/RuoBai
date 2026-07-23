@@ -4,16 +4,29 @@ import fs from "node:fs";
 
 const source = fs.readFileSync(new URL("./pages/chat.jsx", import.meta.url), "utf8");
 
-test("聊天室顶部恢复清爽状态，不显示复杂模型入口", () => {
-  assert.match(source, /className="ct-status"/);
-  assert.doesNotMatch(source, /className="ct-model"/);
-  assert.doesNotMatch(source, /function ModelPanel/);
+test("聊天室保留清爽的模型入口和推理深度", () => {
+  assert.match(source, /className="ct-model"/);
+  assert.match(source, /function ModelPanel/);
+  assert.match(source, /推理深度/);
+  assert.match(source, /关闭/);
+  assert.match(source, /超高/);
+  assert.doesNotMatch(source, /这里的选择仅用于/);
   assert.doesNotMatch(source, /跟随“我的”默认模型/);
+  assert.doesNotMatch(source, /· 仅\$\{agent\.name\}/);
 });
 
-test("聊天请求交给后端选择模型", () => {
-  assert.match(source, /const streamPayload = basePayload/);
+test("角色模型选择仍保存到当前角色", () => {
+  assert.match(source, /updateRole\(roleId, \{/);
+  assert.match(source, /chat_credential_id:/);
+  assert.match(source, /chat_model_id:/);
+  assert.match(source, /chat_thinking_level:/);
+  assert.doesNotMatch(source, /updateCapability\("chat"/);
+  assert.doesNotMatch(source, /ruobai_model_/);
+});
+
+test("聊天请求继续支持当前角色模型和推理深度", () => {
+  assert.match(source, /modelChoice\.credentialId/);
+  assert.match(source, /modelChoice\.modelId/);
+  assert.match(source, /modelChoice\.thinkLevel/);
   assert.match(source, /streamAssistantReply\(roleId, streamPayload/);
-  assert.doesNotMatch(source, /modelChoice\.credentialId/);
-  assert.doesNotMatch(source, /modelChoice\.modelId/);
 });
