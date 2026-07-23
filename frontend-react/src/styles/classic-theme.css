@@ -1,0 +1,480 @@
+/* ============================================================
+   若白 · 原版 3.13
+   与微光 2.0 共用 React 功能和真实数据，但拥有独立的页面布局、
+   卡片、标题、背景、间距、导航和交互外观。
+   ============================================================ */
+
+html[data-theme="classic"] {
+  --paper: #fff8fb;
+  --paper-2: #fff0f6;
+  --card: #fffdfd;
+  --card-warm: #fff9fc;
+  --ink: #56162f;
+  --ink-soft: #a0345b;
+  --ink-faint: #c45f82;
+  --ink-ghost: #e6a8bd;
+  --line: rgba(229, 90, 139, 0.2);
+  --line-strong: rgba(229, 90, 139, 0.42);
+  --rose: #e45186;
+  --rose-deep: #c83469;
+  --rose-tint: #fff0f6;
+  --rose-soft: #ffd9e7;
+  --lav: #986cff;
+  --lav-deep: #7745e0;
+  --lav-tint: #f3eeff;
+  --sage: #69a97f;
+  --shadow-sm: 0 2px 8px rgba(178, 54, 101, 0.05);
+  --shadow: 0 8px 24px rgba(178, 54, 101, 0.08);
+  --shadow-lg: 0 18px 48px rgba(143, 35, 78, 0.16);
+  --shadow-rose: 0 10px 24px rgba(228, 81, 134, 0.24);
+  --r-sm: 10px;
+  --r: 16px;
+  --r-lg: 20px;
+  --r-xl: 24px;
+  --serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif;
+}
+
+html[data-theme="classic"],
+html[data-theme="classic"] body {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(255, 219, 235, .8), transparent 31%),
+    radial-gradient(circle at 92% 8%, rgba(226, 217, 255, .72), transparent 32%),
+    linear-gradient(145deg, #fff5fa 0%, #f5efff 54%, #fffafd 100%);
+}
+
+html[data-theme="classic"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: .3;
+  background-image:
+    linear-gradient(rgba(255,255,255,.45) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.45) 1px, transparent 1px);
+  background-size: 26px 26px;
+}
+
+/* ===== 原版应用外壳 / 导航 ===== */
+html[data-theme="classic"] .rb-app {
+  max-width: 440px;
+  background: rgba(255, 249, 252, .96);
+  border-left: 1px solid rgba(219, 105, 145, .18);
+  border-right: 1px solid rgba(219, 105, 145, .18);
+  box-shadow: 0 0 44px rgba(112, 43, 91, .12);
+}
+html[data-theme="classic"] .rb-app .viewport { background: #fff9fb; }
+html[data-theme="classic"] .screen { scrollbar-width: thin; scrollbar-color: rgba(228,81,134,.3) transparent; }
+html[data-theme="classic"] .screen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, rgba(255,245,250,.76), #fffdfd 50%);
+}
+html[data-theme="classic"] .tabbar {
+  height: 68px;
+  padding: 8px 7px calc(env(safe-area-inset-bottom, 0px) + 7px);
+  background: rgba(255,255,255,.97);
+  border-top: 1px solid #f3c8d7;
+  box-shadow: 0 -5px 18px rgba(177, 61, 105, .05);
+  backdrop-filter: none;
+}
+html[data-theme="classic"] .tab { color: #b84b72; gap: 3px; }
+html[data-theme="classic"] .tab.active { color: #e1457e; }
+html[data-theme="classic"] .tab svg { width: 23px; height: 23px; stroke-width: 1.7; }
+html[data-theme="classic"] .tab.active svg { transform: none; }
+html[data-theme="classic"] .tab .lbl { font-size: 11px; font-weight: 500; }
+html[data-theme="classic"] .tab.active::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  width: 28px;
+  height: 3px;
+  border-radius: 99px;
+  background: #e45186;
+}
+
+html[data-theme="classic"] .topbar {
+  min-height: 98px;
+  padding: 30px 16px 14px;
+  align-items: flex-start;
+  background: transparent;
+}
+html[data-theme="classic"] .topbar h1 {
+  color: #651933;
+  font-size: 27px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+html[data-theme="classic"] .topbar .sub { color: #d14a76; font-size: 12px; }
+html[data-theme="classic"] .icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  color: #db4678;
+  background: rgba(255,255,255,.86);
+  border: 1px solid #f6d5e1;
+  box-shadow: none;
+}
+html[data-theme="classic"] .pad { padding-left: 16px; padding-right: 16px; }
+html[data-theme="classic"] .section-label { color: #7e2344; font-family: var(--serif); font-size: 14px; }
+html[data-theme="classic"] .sl-line { background: #f2d4df; }
+
+/* ===== 聊天列表：旧版描边卡 + 亲密度条 ===== */
+html[data-theme="classic"] .cl-screen .cl-topbar { padding-bottom: 8px; }
+html[data-theme="classic"] .cl-screen .cl-topbar h1::first-letter { color: #8b294b; }
+html[data-theme="classic"] .chat-list { padding-top: 7px; padding-bottom: 24px; }
+html[data-theme="classic"] .cl-card,
+html[data-theme="classic"] .cl-card.cl-primary {
+  min-height: 86px;
+  margin-bottom: 10px;
+  padding: 12px 12px 11px;
+  gap: 12px;
+  border-radius: 18px;
+  border: 1.5px solid #f2bfd1;
+  background:
+    linear-gradient(120deg, rgba(255,255,255,.98), rgba(255,244,249,.94));
+  box-shadow: none;
+  animation-name: classicCardIn;
+}
+@keyframes classicCardIn {
+  from { opacity: 0; transform: translateX(10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+html[data-theme="classic"] .cl-card.cl-primary {
+  border-color: #ef88ad;
+  background: linear-gradient(125deg, #fff7fb 0%, #fff0f6 62%, #fff9fc 100%);
+}
+html[data-theme="classic"] .cl-card::before { display: none; }
+html[data-theme="classic"] .cl-avatar { width: 58px; height: 58px; flex: 0 0 58px; }
+html[data-theme="classic"] .cl-avatar img { border-radius: 18px; border: 1px solid #f1c2d3; }
+html[data-theme="classic"] .cl-online { border-color: #fff; }
+html[data-theme="classic"] .cl-glow { display: none; }
+html[data-theme="classic"] .cl-main { min-width: 0; }
+html[data-theme="classic"] .cl-name { color: #59172f; font-family: var(--serif); font-size: 16px; }
+html[data-theme="classic"] .cl-star {
+  color: #df4b7d;
+  background: #ffe3ed;
+  border-radius: 99px;
+  padding: 2px 7px;
+}
+html[data-theme="classic"] .cl-msg { color: #c04c75; }
+html[data-theme="classic"] .cl-arrow { display: none; }
+html[data-theme="classic"] .cl-classic-meter {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 7px;
+}
+html[data-theme="classic"] .cl-classic-meter > span {
+  height: 4px;
+  border-radius: 99px;
+  background: #f7dbe5;
+  flex: 1;
+  overflow: hidden;
+}
+html[data-theme="classic"] .cl-classic-meter i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #f18bad, #df4b7d);
+}
+html[data-theme="classic"] .cl-classic-meter b { color: #e15a87; font-size: 10px; font-weight: 600; }
+.cl-classic-meter { display: none; }
+
+/* ===== 角色页：旧版信息主卡 + 横向角色列表 ===== */
+html[data-theme="classic"] .hero {
+  height: 262px;
+  margin: 0 16px 16px;
+  border: 1px solid #f2c0d2;
+  border-radius: 20px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: none;
+}
+html[data-theme="classic"] .hero-bg {
+  inset: 0 auto 0 0;
+  width: 50%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+html[data-theme="classic"] .hero-scrim {
+  background: linear-gradient(90deg, transparent 36%, rgba(255,250,252,.78) 49%, #fff9fc 61%);
+}
+html[data-theme="classic"] .hero-top { left: 12px; right: 12px; top: 12px; }
+html[data-theme="classic"] .hero-edit { color: #df4b7d; background: #fff; border: 1px solid #f3cedb; }
+html[data-theme="classic"] .hero-body {
+  left: 50%;
+  right: 10px;
+  bottom: 11px;
+  top: 49px;
+  padding: 10px 7px 5px 15px;
+  color: #621a35;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+html[data-theme="classic"] .hero-name { font-size: 22px; color: #741f40; }
+html[data-theme="classic"] .hero-quote { color: #bd3f6b; font-size: 12px; line-height: 1.55; max-height: 58px; overflow: hidden; }
+html[data-theme="classic"] .hero-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 8px 0 6px;
+}
+html[data-theme="classic"] .hero-stats .hs {
+  min-width: 0;
+  padding: 7px 3px;
+  border: 1px solid #f5d6e1;
+  border-radius: 10px;
+  background: rgba(255,255,255,.88);
+}
+html[data-theme="classic"] .hero-stats .hs:first-child { display: none; }
+html[data-theme="classic"] .hs-div { display: none; }
+html[data-theme="classic"] .hs b { color: #e04e80; font-size: 17px; }
+html[data-theme="classic"] .hs span { color: #c36182; font-size: 9px; }
+html[data-theme="classic"] .hero-temp { margin: 0 2px; }
+html[data-theme="classic"] .temp-bar { background: #f6d8e3; }
+html[data-theme="classic"] .temp-bar i { background: #e45186; }
+html[data-theme="classic"] .hero-cta-row { margin-top: 7px; }
+html[data-theme="classic"] .hero-cta { min-height: 34px; padding: 7px 10px; font-size: 12px; }
+html[data-theme="classic"] .hero-info-btn { width: 34px; height: 34px; border: 1px solid #f2ccda; background: #fff; color: #dc4b7c; }
+html[data-theme="classic"] .agent-grid { display: grid; grid-template-columns: 1fr; gap: 9px; }
+html[data-theme="classic"] .agent-card {
+  min-height: 92px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #f2c2d3;
+  border-radius: 17px;
+  background: linear-gradient(110deg, #fff, #fff6fa);
+  box-shadow: none;
+}
+html[data-theme="classic"] .ac-photo { width: 62px; height: 62px; flex: 0 0 62px; border-radius: 50%; }
+html[data-theme="classic"] .ac-photo img { border-radius: 50%; }
+html[data-theme="classic"] .ac-scrim { display: none; }
+html[data-theme="classic"] .ac-overlay { inset: auto; position: static; color: #651a35; }
+html[data-theme="classic"] .ac-name { color: #651a35; font-size: 16px; }
+html[data-theme="classic"] .ac-temp { color: #b9436b; }
+html[data-theme="classic"] .ac-meta { flex: 1; padding: 0; border: 0; }
+html[data-theme="classic"] .agent-new { min-height: 86px; border-color: #efabc3; background: #fffafd; }
+
+/* ===== 动态页：去掉封面，恢复旧版标题与粉色动态卡 ===== */
+html[data-theme="classic"] .moments-cover {
+  height: 178px;
+  margin: 0;
+  padding: 30px 16px 0;
+  border-radius: 0;
+  background: #fff9fb;
+  box-shadow: none;
+}
+html[data-theme="classic"] .mc-bg,
+html[data-theme="classic"] .mc-scrim { display: none; }
+html[data-theme="classic"] .mc-title { color: #681b37; font-family: var(--serif); font-size: 27px; text-shadow: none; }
+html[data-theme="classic"] .mc-title::after { content: "  ♥"; color: #ed4f86; font-size: 14px; }
+html[data-theme="classic"] .mc-sub { color: #cb4774; text-shadow: none; }
+html[data-theme="classic"] .mc-user { display: none; }
+html[data-theme="classic"] .moments-cover + .mem-roles,
+html[data-theme="classic"] .moments-cover .mem-roles { margin-top: 18px; }
+html[data-theme="classic"] .mem-role-av { border-color: #ec759e; box-shadow: none; }
+html[data-theme="classic"] .mem-role.on .mem-role-av { border-color: #e3427b; box-shadow: 0 0 0 3px #ffd8e6; }
+html[data-theme="classic"] .moments-list { padding-top: 8px; }
+html[data-theme="classic"] .moment {
+  margin-bottom: 11px;
+  padding: 14px 14px 12px;
+  border: 1px solid #f3bfd1;
+  border-left: 3px solid #e55185;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #fff 0%, #fff5f9 100%);
+  box-shadow: none !important;
+}
+html[data-theme="classic"] .moment:hover { transform: none !important; }
+html[data-theme="classic"] .m-avatar { width: 42px; height: 42px; }
+html[data-theme="classic"] .m-name { color: #711e3c; font-family: var(--serif); }
+html[data-theme="classic"] .m-body { color: #651a35; }
+html[data-theme="classic"] .m-imgs img { border-radius: 13px; }
+html[data-theme="classic"] .m-time,
+html[data-theme="classic"] .m-act { color: #d35a82; }
+html[data-theme="classic"] .fab { background: linear-gradient(135deg, #ef6794, #d94176); box-shadow: 0 8px 22px rgba(212,55,112,.28); }
+
+/* ===== 记忆页：旧版虚线入口 + 粉色描边记忆卡 ===== */
+html[data-theme="classic"] .mem-roles { padding-left: 16px; padding-right: 16px; justify-content: space-between; }
+html[data-theme="classic"] .mem-role { flex: 0 0 64px; }
+html[data-theme="classic"] .memory-empty-full { margin-left: -16px; margin-right: -16px; }
+html[data-theme="classic"] .history-entry {
+  margin: 5px 16px 16px;
+  padding: 15px;
+  border: 1.5px dashed #ed8dae;
+  border-radius: 17px;
+  background: linear-gradient(135deg, #fff, #fff4f8);
+  box-shadow: none;
+}
+html[data-theme="classic"] .he-ic { color: #b76feb; background: #f3ebff; }
+html[data-theme="classic"] .he-t { color: #6d1b38; font-family: var(--serif); }
+html[data-theme="classic"] .he-s { color: #cf507b; }
+html[data-theme="classic"] .mem-list { gap: 10px; }
+html[data-theme="classic"] .mem-card {
+  padding: 15px;
+  border: 1px solid #f1bfd0;
+  border-left: 3px solid #e24e82;
+  border-radius: 17px;
+  background: linear-gradient(135deg, #fff 0%, #fff4f8 100%);
+  box-shadow: none;
+}
+html[data-theme="classic"] .mem-card.pinned { border-color: #ed88ab; border-left-color: #d93b73; }
+html[data-theme="classic"] .mem-tag { color: #651a36; }
+html[data-theme="classic"] .mem-content { color: #b43d67; }
+html[data-theme="classic"] .mem-meta,
+html[data-theme="classic"] .mem-actions button { color: #d45780; }
+
+/* ===== 我的页：旧版账户面板与分组卡 ===== */
+html[data-theme="classic"] .me-hero {
+  margin: 0 0 16px;
+  padding: 18px;
+  border: 1px solid #f1bfd0;
+  border-radius: 20px;
+  background: linear-gradient(120deg, #fff, #fff5f9);
+  box-shadow: none;
+}
+html[data-theme="classic"] .me-avatar { width: 70px; height: 70px; border-radius: 50%; }
+html[data-theme="classic"] .me-avatar img { border-radius: 50%; }
+html[data-theme="classic"] .me-name { color: #651a35; font-family: var(--serif); font-size: 21px; }
+html[data-theme="classic"] .me-handle { color: #d14e78; }
+html[data-theme="classic"] .me-pill { background: #ffe8f0; color: #ce4775; }
+html[data-theme="classic"] .me-stats { gap: 10px; }
+html[data-theme="classic"] .ms {
+  min-height: 82px;
+  border: 1px solid #f0c3d3;
+  border-radius: 17px;
+  background: linear-gradient(150deg, #fff, #fff7fa);
+  box-shadow: none;
+}
+html[data-theme="classic"] .ms b { color: #e34b80; font-family: var(--serif); }
+html[data-theme="classic"] .ms span { color: #c5577c; }
+html[data-theme="classic"] .cap-card {
+  border: 1px solid #f1c5d5;
+  border-radius: 19px;
+  background: rgba(255,255,255,.94);
+  box-shadow: none;
+  overflow: hidden;
+}
+html[data-theme="classic"] .prow { min-height: 62px; border-bottom-color: #f5dce5; }
+html[data-theme="classic"] .prow-ic { background: #ffe5ee; color: #e14b7f; border-radius: 12px; }
+html[data-theme="classic"] .prow-ic.lav { background: #f2ebff; color: #9364eb; }
+html[data-theme="classic"] .prow-t { color: #6b1b37; }
+html[data-theme="classic"] .prow-s { color: #c05a7c; }
+html[data-theme="classic"] .logout-btn { border-color: #efb8cb; color: #cf3f70; background: #fff7fa; }
+html[data-theme="classic"] .profile-foot { color: #c9849d; }
+
+/* ===== 聊天室：原版轻粉对话，不显示微光常驻立绘 ===== */
+html[data-theme="classic"] .chat-screen { background: linear-gradient(180deg, #fff6fa, #fffdfd 44%); }
+html[data-theme="classic"] .chat-figure { display: none; }
+html[data-theme="classic"] .chat-top {
+  background: rgba(255,255,255,.96);
+  border-bottom: 1px solid #f2c8d7;
+  box-shadow: none;
+}
+html[data-theme="classic"] .ct-name { color: #651a35; font-family: var(--serif); }
+html[data-theme="classic"] .ct-model { color: #d14c78; }
+html[data-theme="classic"] .msg-area { padding-left: 12px; padding-right: 12px; }
+html[data-theme="classic"] .her-bubble {
+  color: #651a35;
+  background: #fff;
+  border: 1px solid #f0bfd0;
+  border-radius: 6px 18px 18px 18px;
+  box-shadow: none;
+}
+html[data-theme="classic"] .me-bubble {
+  color: #fff;
+  background: linear-gradient(135deg, #ed6794, #d74176);
+  border-radius: 18px 6px 18px 18px;
+  box-shadow: none;
+}
+html[data-theme="classic"] .think { border-color: #e4d2f8; background: #faf6ff; }
+html[data-theme="classic"] .input-bar { background: rgba(255,255,255,.98); border-top-color: #f1c5d5; box-shadow: none; }
+html[data-theme="classic"] .input-row { background: #fff7fa; border: 1px solid #f0c7d6; border-radius: 17px; }
+html[data-theme="classic"] .ib-send { background: #e45186; }
+
+/* ===== 弹窗、表单、按钮 ===== */
+html[data-theme="classic"] .sheet-mask,
+html[data-theme="classic"] .model-panel-mask { background: rgba(83, 24, 53, .34); backdrop-filter: blur(7px); }
+html[data-theme="classic"] .sheet,
+html[data-theme="classic"] .model-panel {
+  background: #fffafd;
+  border: 1px solid #f3c4d5;
+  border-radius: 25px 25px 0 0;
+  box-shadow: 0 -12px 42px rgba(116, 31, 69, .18);
+}
+html[data-theme="classic"] .sheet-head { border-bottom-color: #f4d8e2; }
+html[data-theme="classic"] .sheet-head h2 { color: #641a35; }
+html[data-theme="classic"] .sheet-grip { background: #e9c5d3; }
+html[data-theme="classic"] .fld {
+  color: #651a35;
+  background: #fff;
+  border: 1px solid #efc7d5;
+  border-radius: 13px;
+  box-shadow: none;
+}
+html[data-theme="classic"] .fld:focus { border-color: #e75a8a; box-shadow: 0 0 0 3px rgba(231,90,138,.1); }
+html[data-theme="classic"] .pill-primary { background: linear-gradient(135deg, #ed6593, #d84075); box-shadow: var(--shadow-rose); }
+html[data-theme="classic"] .pill-ghost { border-color: #efb8cb; color: #c93e6e; background: #fff; }
+html[data-theme="classic"] .toggle.on { background: #e45186; }
+html[data-theme="classic"] .theme-row {
+  border: 1px solid #f1ceda;
+  border-radius: 16px;
+  box-shadow: none;
+}
+html[data-theme="classic"] .theme-row.on { border-color: #e45186; background: #fff4f8; }
+
+/* ===== 登录注册：原版粉紫玻璃入口 ===== */
+html[data-theme="classic"] .auth {
+  max-width: 440px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(155deg, #fff3f8 0%, #f3edff 58%, #fffafd 100%);
+  box-shadow: 0 0 44px rgba(112,43,91,.12);
+}
+html[data-theme="classic"] .auth-hero {
+  min-height: 250px;
+  flex: 0 0 250px;
+  margin: 14px 14px 0;
+  border-radius: 24px;
+  overflow: hidden;
+  border: 1px solid rgba(235,119,161,.36);
+}
+html[data-theme="classic"] .auth-hero-scrim {
+  background: linear-gradient(180deg, rgba(92,16,58,.08), rgba(93,16,55,.62));
+}
+html[data-theme="classic"] .auth-badge { background: rgba(255,247,251,.9); color: #c7386b; border: 1px solid rgba(255,255,255,.7); }
+html[data-theme="classic"] .auth-hl { color: #fff; text-shadow: 0 2px 14px rgba(71,12,45,.35); }
+html[data-theme="classic"] .auth-body {
+  position: relative;
+  margin: -18px 14px 18px;
+  padding: 25px 20px 20px;
+  border: 1px solid #f1c5d5;
+  border-radius: 23px;
+  background: rgba(255,255,255,.96);
+  box-shadow: 0 18px 42px rgba(137,39,81,.12);
+}
+html[data-theme="classic"] .auth-cta { background: linear-gradient(135deg, #ed6694, #d83f75); }
+html[data-theme="classic"] .auth-chip { color: #b83d69; background: #fff1f6; }
+
+/* ===== 桌面端保持“手机窗口”感，和 3.13 原版一致 ===== */
+@media (min-width: 700px) {
+  html[data-theme="classic"] .rb-app,
+  html[data-theme="classic"] .auth {
+    border-radius: 0;
+  }
+}
+
+@media (max-width: 430px) {
+  html[data-theme="classic"] .topbar { min-height: 91px; padding-top: 25px; }
+  html[data-theme="classic"] .topbar h1 { font-size: 25px; }
+  html[data-theme="classic"] .hero { height: 250px; margin-left: 12px; margin-right: 12px; }
+  html[data-theme="classic"] .hero-body { left: 48%; }
+  html[data-theme="classic"] .moment { padding-left: 11px; padding-right: 11px; }
+}

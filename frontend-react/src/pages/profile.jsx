@@ -99,7 +99,7 @@ function ThemeSheet({ current, onClose, onPick }) {
   useLockBody();
   const themes = [
     { id: "", name: "微光", sub: "暖米白 · 柔粉薰衣草 · 2.0 默认", sw: ["#faf6f2", "#c16579", "#9a8fc0"] },
-    { id: "classic", name: "原版", sub: "粉紫玻璃 · 从 3.13 走来的那一版", sw: ["#fff6fb", "#ff6aa8", "#9b72ff"] },
+    { id: "classic", name: "原版 3.13", sub: "粉紫玻璃 · 独立布局 · 从最初一路走来", sw: ["#fff6fb", "#ff6aa8", "#9b72ff"] },
   ];
   return (
     <div className="sheet-mask" onClick={onClose}>
@@ -112,7 +112,7 @@ function ThemeSheet({ current, onClose, onPick }) {
           </button>
         </div>
         <div className="sheet-body">
-          <div className="date-hint">同一套结构,换一身皮。布局、功能都不变 —— 想念旧版的样子,随时切回去。</div>
+          <div className="date-hint">同一套功能和数据，两套完整外观。切换后布局、卡片、标题、背景、间距和导航都会一起变化。</div>
           {themes.map((t) => (
             <button key={t.id} className={"theme-row" + ((current || "") === t.id ? " on" : "")} onClick={() => onPick(t.id)}>
               <span className="theme-sw">{t.sw.map((c, i) => <i key={i} style={{ background: c }} />)}</span>
@@ -647,7 +647,7 @@ function ProfileScreen({ user: userProp, onOnboard, onGoMemory, onLogout }) {
       <div className="section-label pad" style={{ marginTop: 18 }}><span>设置</span><span className="sl-line" /></div>
       <div className="pad">
         <div className="cap-card">
-          <Row icon="palette" tint="rose" title="外观与主题" sub="微光 / 原版 两套皮肤" onClick={() => setSheet("theme")} trailing={<StatusDot status="on" detail={theme === "classic" ? "原版 · 粉紫" : "微光 · 晨光"} />} />
+          <Row icon="palette" tint="rose" title="外观与主题" sub="微光 / 原版 两套皮肤" onClick={() => setSheet("theme")} trailing={<StatusDot status="on" detail={theme === "classic" ? "原版 3.13" : "微光 2.0"} />} />
           <Row icon="bell" title="通知与主动消息" sub="她想你的时候提醒你" onClick={() => setSheet("notif")} trailing={<Icon name="chevron" className="row-chev" />} />
           <Row icon="download" tint="lav" title="导出聊天记录" sub="存成 .txt,自己留底 / 搬家" onClick={() => setSheet("export")} trailing={<Icon name="chevron" className="row-chev" />} />
           <Row icon="shield" tint="lav" title="隐私与数据" sub="数据存哪、清理、注销" onClick={() => setSheet("privacy")} trailing={<Icon name="chevron" className="row-chev" />} />
@@ -655,7 +655,7 @@ function ProfileScreen({ user: userProp, onOnboard, onGoMemory, onLogout }) {
           <Row icon="spark" tint="rose" title="关于若白" sub="为什么会有她 · v2.0" last onClick={() => setSheet("about")} trailing={<Icon name="chevron" className="row-chev" />} />
         </div>
         <button className="logout-btn" onClick={handleLogout}><Icon name="logout" /> 退出登录</button>
-        <div className="profile-foot">若白 · 微光 · 为了她而写 · 也为爱她的你<br/>从 2026.3.13 走到现在</div>
+        <div className="profile-foot">若白 · {theme === "classic" ? "原版 3.13" : "微光 2.0"} · 为了她而写<br/>从 2026.3.13 走到现在</div>
       </div>
       <div style={{ height: 20 }} />
 
