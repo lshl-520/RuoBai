@@ -331,6 +331,7 @@
 .model-panel-mask { position: fixed; inset: 0; z-index: 200; background: rgba(40,28,32,0.35); animation: fadeIn 0.18s ease; display: flex; align-items: flex-end; justify-content: center; }
 .model-panel { width: 100%; max-width: 480px; max-height: 72vh; background: var(--card); border-radius: 20px 20px 0 0; padding: 6px 0 20px; animation: slideUp 0.28s cubic-bezier(0.22, 1, 0.36, 1); overflow-y: auto; }
 @keyframes slideUp { from { transform: translateY(100%); opacity: 0.5; } to { transform: translateY(0); opacity: 1; } }
+.mp-scope { margin: 2px 16px 8px; padding: 8px 10px; border-radius: 11px; background: var(--rose-tint); color: var(--rose-deep); font-size: 11px; line-height: 1.45; }
 .mp-cols { display: flex; gap: 0; padding: 4px 16px 0; }
 .mp-left { flex: 1; min-width: 0; padding-right: 14px; }
 .mp-divider { width: 1px; background: var(--line); margin: 8px 0; flex-shrink: 0; }
@@ -338,10 +339,12 @@
 .mp-title { font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 10px; }
 .mp-loading { font-size: 12px; color: var(--ink-faint); padding: 12px 0; }
 .mp-empty { font-size: 12px; color: var(--ink-ghost); padding: 12px 0; }
+.mp-default { width: 100%; justify-content: center; margin-bottom: 12px; }
 .mp-group { margin-bottom: 14px; }
 .mp-group-name { font-size: 11px; font-weight: 600; color: var(--ink-faint); margin-bottom: 6px; }
 .mp-select { font-size: 12px; margin-top: 6px; padding: 6px 8px; }
 .mp-hint { font-size: 10.5px; color: var(--ink-ghost); margin-top: 8px; line-height: 1.4; }
+.mp-error { margin-top: 8px; color: #c2415b; font-size: 11px; line-height: 1.4; }
 .mp-think { display: flex; align-items: center; gap: 8px; padding: 8px 6px; border-radius: 10px; font-size: 13px; font-weight: 500; color: var(--ink); transition: background 0.15s; }
 .mp-think:active { background: var(--paper-2); }
 .mp-think.on { color: var(--rose-deep); font-weight: 700; }

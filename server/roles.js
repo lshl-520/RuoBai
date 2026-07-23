@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pool as defaultPool, withTransaction as defaultWithTransaction } from './db.js';
 import { asyncHandler, clamp, getActiveCharacter, parseInteger, toBoolean } from './helpers.js';
+import { guessModelCapabilities } from './model-capabilities.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -72,6 +73,23 @@ async function ensureUniqueCharacterKey(connection, userId, preferredKey, exclud
     const suffix = `-${attempt}`;
     candidate = `${candidate.slice(0, 50 - suffix.length)}${suffix}`;
   }
+}
+
+const CHAT_THINKING_LEVELS = new Set(['off', 'low', 'mid', 'high', 'ultra']);
+
+function normalizeChatThinkingLevel(value, fallback = 'off') {
+  const level = String(value ?? fallback).trim().toLowerCase();
+  return CHAT_THINKING_LEVELS.has(level) ? level : fallback;
+}
+
+function modelSupportsChat(capabilities, modelId) {
+  let values = [];
+  try {
+    values = Array.isArray(capabilities) ? capabilities : JSON.parse(capabilities || '[]');
+  } catch {
+    values = [];
+  }
+  return new Set([...values, ...guessModelCapabilities(modelId)]).has('chat');
 }
 
 function sanitizeCharacterPayload(body = {}) {
@@ -217,7 +235,7 @@ async function loadRoles(userId, { includeDeleted = false } = {}, connection = p
 
   const [rows] = await connection.query(
     `
-      SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, speech_style, first_chat_at,
+      SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
              auto_moments_enabled, auto_moments_daily_min, auto_moments_daily_max,
              auto_moments_min_interval_hours, auto_moments_last_posted_at,
              is_active, is_deleted, delete_after, created_at
@@ -292,7 +310,7 @@ router.post('/', asyncHandler(async (req, res) => {
 
     const [rows] = await connection.query(
       `
-        SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, speech_style, first_chat_at,
+        SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
                auto_moments_enabled, auto_moments_daily_min, auto_moments_daily_max,
                auto_moments_min_interval_hours, auto_moments_last_posted_at,
                is_active, is_deleted, delete_after, created_at
@@ -338,7 +356,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   const updated = await withTransaction(async connection => {
     const [rows] = await connection.query(
       `
-        SELECT id
+        SELECT id, chat_credential_id, chat_model_id, chat_thinking_level
         FROM characters
         WHERE id = ? AND user_id = ? AND is_deleted = 0
         LIMIT 1
@@ -355,6 +373,57 @@ router.patch('/:id', asyncHandler(async (req, res) => {
         ? await ensureUniqueCharacterKey(connection, req.userId, payload.char_key, characterId)
         : null;
 
+    const chatCredentialProvided = Object.prototype.hasOwnProperty.call(req.body || {}, 'chat_credential_id');
+    const chatModelProvided = Object.prototype.hasOwnProperty.call(req.body || {}, 'chat_model_id');
+    const chatThinkingProvided = Object.prototype.hasOwnProperty.call(req.body || {}, 'chat_thinking_level');
+    const chatModelSelectionProvided = chatCredentialProvided || chatModelProvided;
+    let nextChatCredentialId = rows[0].chat_credential_id ?? null;
+    let nextChatModelId = rows[0].chat_model_id ?? null;
+    let nextChatThinkingLevel = normalizeChatThinkingLevel(rows[0].chat_thinking_level, 'off');
+
+    if (chatThinkingProvided) {
+      const requestedLevel = String(req.body?.chat_thinking_level ?? '').trim().toLowerCase();
+      if (!CHAT_THINKING_LEVELS.has(requestedLevel)) {
+        throw new Error('推理深度设置无效');
+      }
+      nextChatThinkingLevel = requestedLevel;
+    }
+
+    if (chatModelSelectionProvided) {
+      const requestedCredentialId = chatCredentialProvided
+        ? parseInteger(req.body?.chat_credential_id, null)
+        : nextChatCredentialId;
+      const requestedModelId = chatModelProvided
+        ? String(req.body?.chat_model_id || '').trim() || null
+        : nextChatModelId;
+
+      if (!requestedCredentialId && !requestedModelId) {
+        nextChatCredentialId = null;
+        nextChatModelId = null;
+      } else {
+        if (!requestedCredentialId || !requestedModelId) {
+          throw new Error('请选择完整的聊天渠道和模型');
+        }
+
+        const [modelRows] = await connection.query(
+          `
+            SELECT c.id, cm.model_id, cm.capabilities
+            FROM credentials c
+            INNER JOIN credential_models cm ON cm.credential_id = c.id
+            WHERE c.id = ? AND c.user_id = ? AND c.is_enabled = 1 AND cm.model_id = ?
+            LIMIT 1
+          `,
+          [requestedCredentialId, req.userId, requestedModelId]
+        );
+        if (!modelRows[0] || !modelSupportsChat(modelRows[0].capabilities, modelRows[0].model_id)) {
+          throw new Error('这个聊天模型不存在、已停用，或不属于当前用户');
+        }
+
+        nextChatCredentialId = requestedCredentialId;
+        nextChatModelId = requestedModelId;
+      }
+    }
+
     await connection.query(
       `
         UPDATE characters
@@ -369,6 +438,9 @@ router.patch('/:id', asyncHandler(async (req, res) => {
           mood = COALESCE(?, mood),
           intimacy = COALESCE(?, intimacy),
           speech_style = COALESCE(?, speech_style),
+          chat_credential_id = CASE WHEN ? = 1 THEN ? ELSE chat_credential_id END,
+          chat_model_id = CASE WHEN ? = 1 THEN ? ELSE chat_model_id END,
+          chat_thinking_level = CASE WHEN ? = 1 THEN ? ELSE chat_thinking_level END,
           auto_moments_enabled = COALESCE(?, auto_moments_enabled),
           auto_moments_daily_min = COALESCE(?, auto_moments_daily_min),
           auto_moments_daily_max = COALESCE(?, auto_moments_daily_max),
@@ -389,6 +461,12 @@ router.patch('/:id', asyncHandler(async (req, res) => {
         req.body?.mood !== undefined ? payload.mood : null,
         req.body?.intimacy !== undefined ? payload.intimacy : null,
         req.body?.speech_style !== undefined ? payload.speech_style : null,
+        chatModelSelectionProvided ? 1 : 0,
+        nextChatCredentialId,
+        chatModelSelectionProvided ? 1 : 0,
+        nextChatModelId,
+        chatThinkingProvided ? 1 : 0,
+        nextChatThinkingLevel,
         req.body?.auto_moments_enabled !== undefined ? payload.auto_moments_enabled : null,
         req.body?.auto_moments_daily_min !== undefined ? payload.auto_moments_daily_min : null,
         req.body?.auto_moments_daily_max !== undefined ? payload.auto_moments_daily_max : null,
@@ -402,7 +480,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
 
     const [updatedRows] = await connection.query(
       `
-        SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, speech_style, first_chat_at,
+        SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
                auto_moments_enabled, auto_moments_daily_min, auto_moments_daily_max,
                auto_moments_min_interval_hours, auto_moments_last_posted_at,
                is_active, is_deleted, delete_after, created_at
@@ -571,7 +649,7 @@ router.post('/:id/restore', asyncHandler(async (req, res) => {
 
     const [updatedRows] = await connection.query(
       `
-        SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, speech_style, first_chat_at,
+        SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
                auto_moments_enabled, auto_moments_daily_min, auto_moments_daily_max,
                auto_moments_min_interval_hours, auto_moments_last_posted_at,
                is_active, is_deleted, delete_after, created_at
