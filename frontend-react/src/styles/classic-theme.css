@@ -219,8 +219,8 @@ html[data-theme="classic"] .hero-name { font-size: 22px; color: #741f40; }
 html[data-theme="classic"] .hero-quote { color: #bd3f6b; font-size: 12px; line-height: 1.55; max-height: 58px; overflow: hidden; }
 html[data-theme="classic"] .hero-stats {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
   margin: 8px 0 6px;
 }
 html[data-theme="classic"] .hero-stats .hs {
@@ -230,10 +230,9 @@ html[data-theme="classic"] .hero-stats .hs {
   border-radius: 10px;
   background: rgba(255,255,255,.88);
 }
-html[data-theme="classic"] .hero-stats .hs:first-child { display: none; }
 html[data-theme="classic"] .hs-div { display: none; }
-html[data-theme="classic"] .hs b { color: #e04e80; font-size: 17px; }
-html[data-theme="classic"] .hs span { color: #c36182; font-size: 9px; }
+html[data-theme="classic"] .hs b { color: #e04e80; font-size: 15px; }
+html[data-theme="classic"] .hs span { color: #c36182; font-size: 8px; white-space: nowrap; }
 html[data-theme="classic"] .hero-temp { margin: 0 2px; }
 html[data-theme="classic"] .temp-bar { background: #f6d8e3; }
 html[data-theme="classic"] .temp-bar i { background: #e45186; }
@@ -243,6 +242,7 @@ html[data-theme="classic"] .hero-info-btn { width: 34px; height: 34px; border: 1
 html[data-theme="classic"] .agent-grid { display: grid; grid-template-columns: 1fr; gap: 9px; }
 html[data-theme="classic"] .agent-card {
   min-height: 92px;
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -252,13 +252,36 @@ html[data-theme="classic"] .agent-card {
   background: linear-gradient(110deg, #fff, #fff6fa);
   box-shadow: none;
 }
-html[data-theme="classic"] .ac-photo { width: 62px; height: 62px; flex: 0 0 62px; border-radius: 50%; }
-html[data-theme="classic"] .ac-photo img { border-radius: 50%; }
+html[data-theme="classic"] .ac-photo { display: contents; }
+html[data-theme="classic"] .ac-photo > img {
+  width: 62px;
+  height: 62px;
+  flex: 0 0 62px;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: top center;
+}
 html[data-theme="classic"] .ac-scrim { display: none; }
-html[data-theme="classic"] .ac-overlay { inset: auto; position: static; color: #651a35; }
-html[data-theme="classic"] .ac-name { color: #651a35; font-size: 16px; }
-html[data-theme="classic"] .ac-temp { color: #b9436b; }
-html[data-theme="classic"] .ac-meta { flex: 1; padding: 0; border: 0; }
+html[data-theme="classic"] .ac-online { top: 17px; left: 61px; }
+html[data-theme="classic"] .ac-overlay {
+  inset: auto;
+  position: static;
+  min-width: 0;
+  flex: 1;
+  align-self: center;
+  padding-bottom: 20px;
+  color: #651a35;
+}
+html[data-theme="classic"] .ac-name { color: #651a35; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html[data-theme="classic"] .ac-temp { color: #b9436b; white-space: nowrap; }
+html[data-theme="classic"] .ac-meta {
+  position: absolute;
+  left: 86px;
+  right: 12px;
+  bottom: 12px;
+  padding: 0;
+  border: 0;
+}
 html[data-theme="classic"] .agent-new { min-height: 86px; border-color: #efabc3; background: #fffafd; }
 
 /* ===== 动态页：去掉封面，恢复旧版标题与粉色动态卡 ===== */
