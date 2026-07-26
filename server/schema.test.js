@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ensureCharacterRuntimeColumns, ensureCredentialRuntimeColumns, ensurePersonaRuntimeTables, ensurePushRuntimeTables } from './schema.js';
+import { ensureCharacterRuntimeColumns, ensureCredentialRuntimeColumns, ensureMemoryRuntimeColumns, ensurePersonaRuntimeTables, ensurePushRuntimeTables } from './schema.js';
 
 test('ensureCharacterRuntimeColumns adds missing role-page columns once', async () => {
   const calls = [];
@@ -39,6 +39,23 @@ test('ensureCredentialRuntimeColumns adds channel runtime columns once', async (
   assert.equal(alterCalls.length, 2);
   assert.match(alterCalls[0].sql, /ADD COLUMN api_aux_base VARCHAR\(500\) DEFAULT '' AFTER api_base/i);
   assert.match(alterCalls[1].sql, /ADD COLUMN is_enabled TINYINT\(1\) DEFAULT 1 AFTER api_key/i);
+});
+
+test('ensureMemoryRuntimeColumns adds layered memory and appointment fields', async () => {
+  const calls = [];
+  const db = {
+    query: async (sql, params = []) => {
+      calls.push({ sql, params });
+      if (sql.includes('information_schema.COLUMNS')) return [params[1] === 'memory_type' ? [] : [{ COLUMN_NAME: params[1] }]];
+      return [{ affectedRows: 0 }];
+    }
+  };
+
+  await ensureMemoryRuntimeColumns(db);
+
+  const alterCalls = calls.filter(call => /^ALTER TABLE memories/i.test(call.sql));
+  assert.equal(alterCalls.length, 1);
+  assert.match(alterCalls[0].sql, /ADD COLUMN memory_type VARCHAR\(32\) DEFAULT 'life' AFTER category/i);
 });
 
 test('ensurePushRuntimeTables creates FCM and proactive-message tables', async () => {

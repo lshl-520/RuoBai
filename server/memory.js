@@ -2,6 +2,7 @@ import express from 'express';
 import { pool } from './db.js';
 import { getRequestCharacterId } from './middleware.js';
 import { normalizeLimit, requireCharacterForUser, toBoolean } from './helpers.js';
+import { memoryTypeLabel, normalizeMemoryFields } from './memory-fields.js';
 
 const router = express.Router();
 
@@ -16,6 +17,11 @@ function mapMemory(row) {
 
   return {
     ...row,
+    memory_type: row.memory_type || 'life',
+    memory_type_label: memoryTypeLabel(row.memory_type || 'life'),
+    source_type: row.source_type || 'manual',
+    confidence: Number(row.confidence ?? 1),
+    weight: Number(row.weight ?? 50),
     is_important: Boolean(row.is_important),
     is_deleted: Boolean(row.is_deleted)
   };
@@ -24,7 +30,8 @@ function mapMemory(row) {
 async function getOwnedMemory(memoryId, userId) {
   const [rows] = await pool.query(
     `
-      SELECT id, user_id, character_id, content, tag, category, is_important, is_deleted, created_at
+      SELECT id, user_id, character_id, content, tag, category, memory_type, source_type, source_id,
+             occurred_at, confidence, weight, appointment_at, appointment_status, is_important, is_deleted, created_at, updated_at
       FROM memories
       WHERE id = ? AND user_id = ?
       LIMIT 1
@@ -56,10 +63,11 @@ router.get('/', async (req, res) => {
 
     const [rows] = await pool.query(
       `
-        SELECT id, user_id, character_id, content, tag, category, is_important, is_deleted, created_at
+        SELECT id, user_id, character_id, content, tag, category, memory_type, source_type, source_id,
+               occurred_at, confidence, weight, appointment_at, appointment_status, is_important, is_deleted, created_at, updated_at
         FROM memories
         WHERE user_id = ? AND character_id = ? ${whereDeletedClause}
-        ORDER BY is_important DESC, created_at DESC, id DESC
+        ORDER BY is_important DESC, weight DESC, created_at DESC, id DESC
         LIMIT ?
       `,
       [userId, characterId, limit]
@@ -89,7 +97,7 @@ router.post('/', async (req, res) => {
     const content = String(req.body?.content || '').trim();
     const tag = String(req.body?.tag || '普通记忆').trim() || '普通记忆';
     const category = String(req.body?.category || '').trim();
-    const isImportant = toBoolean(req.body?.is_important) ? 1 : 0;
+    const fields = normalizeMemoryFields(req.body, {});
 
     if (!content) {
       return res.status(400).json({ success: false, error: '记忆内容不能为空' });
@@ -98,10 +106,12 @@ router.post('/', async (req, res) => {
     const [result] = await pool.query(
       `
         INSERT INTO memories
-          (user_id, character_id, content, tag, category, is_important, is_deleted, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, 0, NOW())
+          (user_id, character_id, content, tag, category, memory_type, source_type, source_id, occurred_at,
+           confidence, weight, appointment_at, appointment_status, is_important, is_deleted, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NOW())
       `,
-      [userId, characterId, content, tag, category, isImportant]
+      [userId, characterId, content, tag, category, fields.memory_type, fields.source_type, fields.source_id,
+        fields.occurred_at, fields.confidence, fields.weight, fields.appointment_at, fields.appointment_status, fields.is_important]
     );
 
     const memory = await getOwnedMemory(result.insertId, userId);
@@ -135,12 +145,10 @@ router.patch('/:id', async (req, res) => {
     const hasContent = Object.prototype.hasOwnProperty.call(req.body || {}, 'content');
     const hasTag = Object.prototype.hasOwnProperty.call(req.body || {}, 'tag');
     const hasCategory = Object.prototype.hasOwnProperty.call(req.body || {}, 'category');
-    const hasImportant = Object.prototype.hasOwnProperty.call(req.body || {}, 'is_important');
-
     const content = hasContent ? String(req.body.content || '').trim() : memory.content;
     const tag = hasTag ? String(req.body.tag || '').trim() : memory.tag;
     const category = hasCategory ? String(req.body.category || '').trim() : memory.category;
-    const isImportant = hasImportant ? (toBoolean(req.body?.is_important) ? 1 : 0) : memory.is_important;
+    const fields = normalizeMemoryFields(req.body, memory);
 
     if (hasContent && !content) {
       return res.status(400).json({ success: false, error: '记忆内容不能为空' });
@@ -149,10 +157,12 @@ router.patch('/:id', async (req, res) => {
     await pool.query(
       `
         UPDATE memories
-        SET character_id = ?, content = ?, tag = ?, category = ?, is_important = ?
+        SET character_id = ?, content = ?, tag = ?, category = ?, memory_type = ?, occurred_at = ?, weight = ?,
+            appointment_at = ?, appointment_status = ?, is_important = ?
         WHERE id = ? AND user_id = ? AND is_deleted = 0
       `,
-      [nextCharacterId, content, tag, category, isImportant, memoryId, userId]
+      [nextCharacterId, content, tag, category, fields.memory_type, fields.occurred_at, fields.weight,
+        fields.appointment_at, fields.appointment_status, fields.is_important, memoryId, userId]
     );
 
     const updated = await getOwnedMemory(memoryId, userId);
