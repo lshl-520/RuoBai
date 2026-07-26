@@ -7,6 +7,7 @@ import {
   normalizeVoiceSettings,
   speechRecognitionErrorMessage,
 } from './lib/voice-settings.js';
+import { friendlyStreamHttpError } from './lib/chat.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,4 +36,22 @@ test('voice controls use local TTS settings and wait for recognition to finish',
   assert.match(chat, /convertToVoice: true/);
   assert.match(chat, /type: "voice"/);
   assert.match(chat, /她的文字回复已经保留，但生成语音失败/);
+});
+
+test('实时通话只在识别到有效语音后才打断，并在断线时停掉录音', async () => {
+  const chat = await readFile(path.join(__dirname, 'pages', 'chat.jsx'), 'utf8');
+  const realtime = await readFile(path.join(__dirname, 'lib', 'realtime-call.js'), 'utf8');
+
+  assert.match(chat, /火山的 450 只是“疑似听到声音”/);
+  assert.match(chat, /if \(!speech\) return;/);
+  assert.match(chat, /socket\.interrupt\(\)/);
+  assert.match(chat, /const markDisconnected =/);
+  assert.match(chat, /setPhase\("error"\)/);
+  assert.match(realtime, /echoCancellation: true/);
+  assert.match(realtime, /noiseSuppression: true/);
+});
+
+test('聊天超时会显示大白话，而不是英文技术报错', () => {
+  assert.match(friendlyStreamHttpError(504), /不是她故意不理你/);
+  assert.match(friendlyStreamHttpError(502), /中转暂时没接通/);
 });
