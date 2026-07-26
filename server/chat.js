@@ -16,6 +16,7 @@ import { getCityWeatherText } from './weather.js';
 import { detectDrawIntent, generateImage } from './image-gen.js';
 import { guessModelCapabilities } from './model-capabilities.js';
 import { buildPersonaRuntimePrompt, loadPersonaRuntime, recordPersonaRuntimeTurn } from './persona-runtime.js';
+import { recordExplicitChatMemory } from './memory-extractor.js';
 
 const NO_MODEL_MESSAGE = '请先在“我的”页面配置 AI 模型。';
 const CHARACTER_NOT_FOUND_ERROR = '角色不存在或不属于当前用户';
@@ -1024,6 +1025,12 @@ export function createChatRouter({
           characterId,
           content,
           messageType
+        });
+        await recordExplicitChatMemory(pool, {
+          userId: req.userId,
+          characterId,
+          messageId: saved.id,
+          content
         });
       }
 
