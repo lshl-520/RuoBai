@@ -7,9 +7,30 @@ import {
   buildRealtimeCharacterPrompt,
   buildVolcEventPacket,
   buildVolcStartSessionPayload,
+  buildVolcRealtimeHeaders,
   parseVolcFrame,
   testVolcRealtimeCredential
 } from './realtime-call.js';
+
+
+test('新版豆包实时语音握手使用 App ID 和 Access Token，不再发送旧 x-api-key', () => {
+  const headers = buildVolcRealtimeHeaders({
+    api_aux_base: '9635508820',
+    api_key: 'access-token-for-test',
+    extras: { resource_id: 'volc.speech.dialog', app_key: 'PlgvMymc7f3tQnJ6' }
+  }, { connectId: 'connect-test' });
+  assert.equal(headers['X-Api-App-ID'], '9635508820');
+  assert.equal(headers['X-Api-Access-Key'], 'access-token-for-test');
+  assert.equal(headers['X-Api-Connect-Id'], 'connect-test');
+  assert.equal(headers['x-api-key'], undefined);
+});
+
+test('新版豆包实时语音缺少 App ID 时给出明确提示', () => {
+  assert.throws(
+    () => buildVolcRealtimeHeaders({ api_key: 'access-token-for-test' }),
+    /缺少 App ID/
+  );
+});
 
 test('火山实时事件封包和解析可以往返', () => {
   const packet = buildVolcEventPacket(100, { dialog: { extra: { model: '2.2.0.0' } } }, { sessionId: 'session-1' });
@@ -119,7 +140,8 @@ test('实时语音握手失败会保留火山的安全错误说明', async () =>
   await assert.rejects(
     testVolcRealtimeCredential({
       api_base: 'wss://example.test/realtime',
-      api_key: 'test-key'
+      api_aux_base: 'test-app-id',
+      api_key: 'test-access-token'
     }, { WebSocketImpl: HandshakeFailureSocket, timeoutMs: 1000 }),
     /HTTP 400：invalid request: app_key does not match/
   );
@@ -129,7 +151,8 @@ test('实时语音凭证测试会建立完整会话而不只检查 WebSocket 握
   SuccessfulRealtimeSocket.instances = [];
   await testVolcRealtimeCredential({
     api_base: 'wss://example.test/realtime',
-    api_key: 'test-key',
+    api_aux_base: 'test-app-id',
+    api_key: 'test-access-token',
     model_id: '2.2.0.0'
   }, { WebSocketImpl: SuccessfulRealtimeSocket, timeoutMs: 1000 });
 
@@ -141,7 +164,8 @@ test('实时语音对象错误会显示具体 JSON 而不是 object Object', asy
   await assert.rejects(
     testVolcRealtimeCredential({
       api_base: 'wss://example.test/realtime',
-      api_key: 'bad-key'
+      api_aux_base: 'test-app-id',
+      api_key: 'bad-access-token'
     }, { WebSocketImpl: FailedRealtimeSocket, timeoutMs: 1000 }),
     /"error":"bad key or session"/
   );

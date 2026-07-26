@@ -55,6 +55,27 @@ function normalizeWsUrl(value) {
   return VOLC_REALTIME_URL;
 }
 
+/**
+ * 豆包端到端实时语音（新版）握手必须带 App ID + Access Token。
+ * 历史版本误把 API Key 放在 x-api-key，火山网关不会识别这个请求头。
+ * 为兼容现有表结构：api_key 保存 Access Token，api_aux_base 保存 App ID。
+ */
+export function buildVolcRealtimeHeaders(config, { connectId = randomUUID() } = {}) {
+  const extras = parseExtras(config?.extras);
+  const appId = cleanText(extras.app_id || extras.appId || config?.api_aux_base, 120);
+  const accessKey = cleanText(extras.access_key || extras.accessKey || config?.api_key, 512);
+  if (!appId) throw new Error('豆包语音缺少 App ID。请打开“我的 → 添加接口渠道 → 豆包语音”，填写火山控制台里的 APP ID 后重新获取模型。');
+  if (!accessKey) throw new Error('豆包语音缺少 Access Token。请在渠道里粘贴火山控制台的 Access Token 后重新获取模型。');
+
+  return {
+    'X-Api-App-ID': appId,
+    'X-Api-Access-Key': accessKey,
+    'X-Api-Resource-Id': cleanText(extras.resource_id, 120) || VOLC_RESOURCE_ID,
+    'X-Api-App-Key': cleanText(extras.app_key, 120) || VOLC_APP_KEY,
+    'X-Api-Connect-Id': connectId
+  };
+}
+
 export function buildVolcEventPacket(event, payload = {}, { sessionId = '', audio = false } = {}) {
   const payloadBuffer = Buffer.isBuffer(payload)
     ? payload
@@ -271,6 +292,7 @@ export async function loadRealtimeConfig(pool, userId) {
         c.name,
         c.provider_type,
         c.api_base,
+        c.api_aux_base,
         c.api_key
       FROM capability_assignments ca
       INNER JOIN credentials c ON c.id = ca.credential_id
@@ -290,6 +312,7 @@ export async function loadRealtimeConfig(pool, userId) {
       name: '火山端到端实时语音',
       provider_type: 'volcengine_realtime',
       api_base: process.env.VOLC_REALTIME_URL || VOLC_REALTIME_URL,
+      api_aux_base: process.env.VOLC_REALTIME_APP_ID || '',
       api_key: process.env.VOLC_REALTIME_API_KEY,
       model_id: process.env.VOLC_REALTIME_MODEL || DEFAULT_REALTIME_MODEL,
       extras: {
@@ -353,15 +376,9 @@ function readHandshakeErrorBody(response) {
 
 export function testVolcRealtimeCredential(config, { WebSocketImpl = WebSocket, timeoutMs = 10000 } = {}) {
   return new Promise((resolve, reject) => {
-    const extras = parseExtras(config?.extras);
     const sessionId = randomUUID();
     const socket = new WebSocketImpl(normalizeWsUrl(config?.api_base), {
-      headers: {
-        'x-api-key': String(config?.api_key || '').trim(),
-        'X-Api-Resource-Id': cleanText(extras.resource_id, 120) || VOLC_RESOURCE_ID,
-        'X-Api-App-Key': cleanText(extras.app_key, 120) || VOLC_APP_KEY,
-        'X-Api-Connect-Id': randomUUID()
-      }
+      headers: buildVolcRealtimeHeaders(config)
     });
     let settled = false;
     const timeout = setTimeout(() => {
@@ -444,10 +461,11 @@ function sendJson(socket, payload) {
 
 function safeClientError(error) {
   const message = String(error?.message || error || '实时通话连接失败');
-  if (/401|Invalid X-Api-Key/i.test(message)) return '火山实时通话 API Key 不对或已经失效';
-  if (/403/i.test(message)) return '火山实时通话服务还没开通，或当前 Key 没有权限';
+  if (/401|access[_ -]?key|access token/i.test(message)) return '火山豆包语音的 Access Token 不对或已经失效';
+  if (/app[ _-]?id|缺少 App ID/i.test(message)) return '火山豆包语音缺少或填写错了 App ID';
+  if (/403/i.test(message)) return '火山实时通话服务还没开通，或当前 Access Token 没有权限';
   if (/HTTP 400/i.test(message)) {
-    return '火山实时通话配置没有通过（HTTP 400）。请在“我的 → 她的能力”里打开这条渠道，点“获取模型列表”重新检查。';
+    return '火山实时通话配置没有通过（HTTP 400）。请检查 App ID 和 Access Token 后，再点“获取模型列表”。';
   }
   if (/实时通话渠道/.test(message)) return message;
   return `实时通话暂时没有接通：${message.slice(0, 160)}`;
@@ -480,14 +498,8 @@ class RealtimeCallBridge {
     }
 
     this.context = await loadRecentDialogContext(this.pool, this.userId, this.characterId);
-    const extras = parseExtras(this.config.extras);
     const upstreamUrl = normalizeWsUrl(this.config.api_base);
-    const headers = {
-      'x-api-key': this.config.api_key,
-      'X-Api-Resource-Id': cleanText(extras.resource_id, 120) || VOLC_RESOURCE_ID,
-      'X-Api-App-Key': cleanText(extras.app_key, 120) || VOLC_APP_KEY,
-      'X-Api-Connect-Id': randomUUID()
-    };
+    const headers = buildVolcRealtimeHeaders(this.config);
 
     this.upstream = new this.WebSocketImpl(upstreamUrl, { headers });
     this.upstream.binaryType = 'arraybuffer';
