@@ -212,6 +212,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete, onTest }) {
   const canSave = (isNew ? name.trim() : true)
     && base.trim()
     && (!taskImageMode || taskBase.trim())
+    && (!realtimeMode || taskBase.trim())
     && hasUsableKey
     && connectionReady
     && model.trim();
@@ -263,7 +264,12 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete, onTest }) {
             <input className="fld" value={taskBase} onChange={(e) => { setTaskBase(e.target.value); setFetchState("idle"); setFetchMessage(""); }} placeholder="https://tasks.example.com" />
           </>)}
 
-          <label className="field-label">API 密钥 <span className="lbl-hint">{noKeyRequired ? "这个渠道无需填写" : realtimeMode ? "填写新版 API Key，不是旧版 Access Token" : "只存你本地"}</span></label>
+          {realtimeMode && (<>
+            <label className="field-label">APP ID <span className="lbl-hint">火山控制台“端到端实时语音”的 APP ID</span></label>
+            <input className="fld" value={taskBase} onChange={(e) => { setTaskBase(e.target.value.replace(/\s/g, "")); setFetchState("idle"); setFetchMessage(""); }} placeholder="例如：1234567890" inputMode="numeric" />
+          </>)}
+
+          <label className="field-label">{realtimeMode ? "Access Token" : "API 密钥"} <span className="lbl-hint">{noKeyRequired ? "这个渠道无需填写" : realtimeMode ? "火山控制台里的 Access Token，不是 API Key" : "只存你本地"}</span></label>
           {noKeyRequired ? (
             <div className="model-empty" style={{ marginTop: 0 }}>无需密钥，点击下方“获取模型列表”检查接口。</div>
           ) : !replacingKey && channel?.keyConfigured ? (
