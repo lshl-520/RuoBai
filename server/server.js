@@ -6,7 +6,8 @@ import express from 'express';
 import compression from 'compression';
 import session from 'express-session';
 import MySQLStoreFactory from 'express-mysql-session';
-import firebaseAdmin from 'firebase-admin';
+import { cert, getApps, initializeApp } from 'firebase-admin/app';
+import { getMessaging } from 'firebase-admin/messaging';
 import { dbConfig, pool, testDatabaseConnection } from './db.js';
 import { ensureRuntimeSchema } from './schema.js';
 import { requireAuth, requireOwner } from './middleware.js';
@@ -44,6 +45,15 @@ const requestedPort = Number(process.env.PORT) || 3000;
 const updateService = createUpdateService();
 const adminRoutes = createAdminRouter({ updateService });
 const pushRoutes = createPushRouter({ pool });
+// Keep the push module independent from the Firebase Admin SDK's ESM export shape.
+const firebaseAdmin = {
+  get apps() {
+    return getApps();
+  },
+  credential: { cert },
+  initializeApp,
+  messaging: getMessaging,
+};
 const fcmSender = createFcmSender({ admin: firebaseAdmin });
 const SKIP_COMPRESSION_EXTENSIONS = /\.(?:avif|webp|png|jpe?g|gif|ico|svg|mp3|mp4|webm|ogg|zip|apk)$/i;
 
