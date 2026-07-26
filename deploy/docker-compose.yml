@@ -47,6 +47,8 @@ services:
     image: qdrant/qdrant:latest
     profiles: ["vector"]
     restart: unless-stopped
+    ports:
+      - "${VECTOR_QDRANT_BIND:-127.0.0.1}:${VECTOR_QDRANT_PORT:-6333}:6333"
     volumes:
       - ruobai_qdrant:/qdrant/storage
 
@@ -55,6 +57,8 @@ services:
     profiles: ["vector"]
     restart: unless-stopped
     command: ["--model-id", "BAAI/bge-small-zh-v1.5", "--port", "80"]
+    ports:
+      - "${VECTOR_EMBEDDING_BIND:-127.0.0.1}:${VECTOR_EMBEDDING_PORT:-8090}:80"
 
 volumes:
   ruobai_db:
