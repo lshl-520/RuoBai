@@ -34,9 +34,9 @@
 
 ```powershell
 $env:JAVA_HOME="E:\Program Files\Android Studio\jbr"
-$env:ANDROID_HOME="C:\Users\lshl\AppData\Local\Android\Sdk"
-$env:ANDROID_SDK_ROOT="C:\Users\lshl\AppData\Local\Android\Sdk"
-$env:PATH="E:\Program Files\Android Studio\jbr\bin;C:\Users\lshl\AppData\Local\Android\Sdk\platform-tools;" + $env:PATH
+$env:ANDROID_HOME="E:\Ai\nvyou\Android\Sdk"
+$env:ANDROID_SDK_ROOT="E:\Ai\nvyou\Android\Sdk"
+$env:PATH="E:\Program Files\Android Studio\jbr\bin;E:\Ai\nvyou\Android\Sdk\platform-tools;" + $env:PATH
 npm run build
 npx cap sync android
 ```

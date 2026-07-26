@@ -315,6 +315,42 @@ function buildVolcFrameError(frame) {
   return new Error(`火山实时语音错误 ${frame.errorCode ?? 'unknown'}: ${formatVolcPayload(frame.payload)}`);
 }
 
+function redactVolcErrorDetail(value) {
+  return String(value || '')
+    .replace(/(?:x-api-key|api[_ -]?key|authorization|token)\s*[:=]\s*[^\s,;]+/gi, secret => {
+      const separator = Math.max(secret.lastIndexOf(':'), secret.lastIndexOf('='));
+      return separator >= 0 ? `${secret.slice(0, separator + 1)} [已隐藏]` : '[已隐藏]';
+    })
+    .replace(/\b[A-Za-z0-9_-]{32,}\b/g, '[已隐藏]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 240);
+}
+
+function readHandshakeErrorBody(response) {
+  return new Promise(resolve => {
+    if (!response?.on) {
+      resolve('');
+      return;
+    }
+
+    const chunks = [];
+    let total = 0;
+    const finish = () => resolve(redactVolcErrorDetail(Buffer.concat(chunks).toString('utf8')));
+    response.on('data', chunk => {
+      if (total >= 2048) return;
+      const buffer = Buffer.from(chunk);
+      const remaining = 2048 - total;
+      chunks.push(buffer.subarray(0, remaining));
+      total += Math.min(buffer.length, remaining);
+    });
+    response.once('end', finish);
+    response.once('error', finish);
+    response.once('close', finish);
+    response.resume?.();
+  });
+}
+
 export function testVolcRealtimeCredential(config, { WebSocketImpl = WebSocket, timeoutMs = 10000 } = {}) {
   return new Promise((resolve, reject) => {
     const extras = parseExtras(config?.extras);
@@ -388,8 +424,11 @@ export function testVolcRealtimeCredential(config, { WebSocketImpl = WebSocket, 
     socket.once('close', (code, reason) => {
       if (!settled) finish(new Error(Buffer.from(reason || '').toString('utf8') || `火山实时语音提前断开：${code}`));
     });
-    socket.once('unexpected-response', (_request, response) => {
-      finish(new Error(`火山实时语音握手失败：HTTP ${response?.statusCode || 'unknown'}`));
+    socket.once('unexpected-response', async (_request, response) => {
+      const detail = await readHandshakeErrorBody(response);
+      finish(new Error(
+        `火山实时语音握手失败：HTTP ${response?.statusCode || 'unknown'}${detail ? `：${detail}` : ''}`
+      ));
     });
   });
 }
@@ -407,6 +446,9 @@ function safeClientError(error) {
   const message = String(error?.message || error || '实时通话连接失败');
   if (/401|Invalid X-Api-Key/i.test(message)) return '火山实时通话 API Key 不对或已经失效';
   if (/403/i.test(message)) return '火山实时通话服务还没开通，或当前 Key 没有权限';
+  if (/HTTP 400/i.test(message)) {
+    return '火山实时通话配置没有通过（HTTP 400）。请在“我的 → 她的能力”里打开这条渠道，点“获取模型列表”重新检查。';
+  }
   if (/实时通话渠道/.test(message)) return message;
   return `实时通话暂时没有接通：${message.slice(0, 160)}`;
 }
@@ -427,6 +469,7 @@ class RealtimeCallBridge {
     this.config = null;
     this.context = [];
     this.pendingAudio = [];
+    this.interrupting = false;
   }
 
   async start() {
@@ -501,6 +544,7 @@ class RealtimeCallBridge {
     }
 
     if (message.type === 'interrupt') {
+      this.interrupting = true;
       this.sendUpstream(515, {});
       sendJson(this.client, { type: 'interrupted' });
       return;
@@ -563,7 +607,9 @@ class RealtimeCallBridge {
     }
 
     if (event === 352) {
-      if (socketIsOpen(this.client)) this.client.send(payloadBuffer, { binary: true });
+      // 用户的有效语音已确认并请求打断时，丢弃上一个回答残留的音频帧，
+      // 避免出现“明明被打断了又继续自顾自说”的感觉。
+      if (!this.interrupting && socketIsOpen(this.client)) this.client.send(payloadBuffer, { binary: true });
       return;
     }
 
@@ -598,6 +644,8 @@ class RealtimeCallBridge {
     }
 
     if (event === 350) {
+      // 新一轮 TTS 开始，说明火山已经处理完上次打断。
+      this.interrupting = false;
       sendJson(this.client, {
         type: 'tts_start',
         text: payload?.text || '',

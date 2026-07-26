@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { Readable } from 'node:stream';
 import {
   buildDialogContext,
   buildRealtimeCharacterPrompt,
@@ -99,6 +100,30 @@ class FailedRealtimeSocket extends SuccessfulRealtimeSocket {
     }
   }
 }
+
+
+class HandshakeFailureSocket extends SuccessfulRealtimeSocket {
+  send(data) {
+    const frame = parseVolcFrame(data);
+    this.sentEvents.push(frame.event);
+    if (frame.event === 1) {
+      const response = Readable.from([Buffer.from('invalid request: app_key does not match')]);
+      response.statusCode = 400;
+      queueMicrotask(() => this.emit('unexpected-response', {}, response));
+    }
+  }
+}
+
+test('实时语音握手失败会保留火山的安全错误说明', async () => {
+  SuccessfulRealtimeSocket.instances = [];
+  await assert.rejects(
+    testVolcRealtimeCredential({
+      api_base: 'wss://example.test/realtime',
+      api_key: 'test-key'
+    }, { WebSocketImpl: HandshakeFailureSocket, timeoutMs: 1000 }),
+    /HTTP 400：invalid request: app_key does not match/
+  );
+});
 
 test('实时语音凭证测试会建立完整会话而不只检查 WebSocket 握手', async () => {
   SuccessfulRealtimeSocket.instances = [];

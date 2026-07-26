@@ -1384,7 +1384,7 @@ function TempDot({ temp }) {
 /* ---------------- 火山端到端实时语音通话 ---------------- */
 function CallScreen({ agent, figSrc, onClose }) {
   const [sec, setSec] = useStateC(0);
-  const [phase, setPhase] = useStateC("connecting"); // connecting | live | recording | thinking | speaking
+  const [phase, setPhase] = useStateC("connecting"); // connecting | live | recording | thinking | speaking | error
   const [transcript, setTranscript] = useStateC("");
   const [reply, setReply] = useStateC("");
   const [err, setErr] = useStateC("");
@@ -1394,6 +1394,8 @@ function CallScreen({ agent, figSrc, onClose }) {
   const microphoneRef = useRefC(null);
   const playerRef = useRefC(null);
   const closingRef = useRefC(false);
+  const transcriptRef = useRefC("");
+  const assistantSpeakingRef = useRefC(false);
   const roleId = agent.id;
 
   useEffectC(() => {
@@ -1401,12 +1403,25 @@ function CallScreen({ agent, figSrc, onClose }) {
     const player = new RealtimePcmPlayer();
     playerRef.current = player;
 
+    const stopRealtimeMedia = () => {
+      const microphone = microphoneRef.current;
+      microphoneRef.current = null;
+      Promise.resolve(microphone?.stop?.()).catch(() => {});
+      player.interrupt();
+    };
+    const markDisconnected = (message) => {
+      stopRealtimeMedia();
+      setErr((current) => current || message);
+      setPhase("error");
+    };
+
     const socket = createRealtimeCallSocket(roleId, {
       onOpen: () => {
         if (active) setPhase("connecting");
       },
       onAudio: (audio) => {
         if (!active) return;
+        assistantSpeakingRef.current = true;
         player.enqueue(audio);
         setPhase("speaking");
       },
@@ -1418,18 +1433,26 @@ function CallScreen({ agent, figSrc, onClose }) {
           return;
         }
         if (event.type === "user_speaking") {
-          player.interrupt();
-          setReply("");
-          setPhase("recording");
+          // 火山的 450 只是“疑似听到声音”，模拟器的回声或底噪也会触发。
+          // 等拿到非空识别文字后才真打断，避免用户没说话也把她的声音掐掉。
           return;
         }
         if (event.type === "asr") {
-          setTranscript(event.text || "");
+          const speech = String(event.text || "").trim();
+          if (!speech) return;
+          if (assistantSpeakingRef.current) {
+            assistantSpeakingRef.current = false;
+            player.interrupt();
+            socket.interrupt();
+            setReply("");
+          }
+          transcriptRef.current = speech;
+          setTranscript(speech);
           setPhase("recording");
           return;
         }
         if (event.type === "asr_end") {
-          setPhase("thinking");
+          if (transcriptRef.current) setPhase("thinking");
           return;
         }
         if (event.type === "assistant_text") {
@@ -1438,33 +1461,34 @@ function CallScreen({ agent, figSrc, onClose }) {
           return;
         }
         if (event.type === "tts_start") {
+          assistantSpeakingRef.current = true;
+          transcriptRef.current = "";
+          setTranscript("");
           setPhase("speaking");
           return;
         }
         if (event.type === "tts_end") {
+          assistantSpeakingRef.current = false;
+          transcriptRef.current = "";
           setPhase("live");
           setTranscript("");
           return;
         }
         if (event.type === "interrupted") {
-          player.interrupt();
-          setPhase("recording");
+          // 真实语音识别分支已经切到“正在听你说”，这里不再二次改变状态。
           return;
         }
         if (event.type === "error") {
-          setErr(event.message || "实时通话暂时没有接通");
-          setPhase("live");
+          markDisconnected(event.message || "实时通话暂时没有接通");
         }
       },
       onError: (error) => {
         if (!active) return;
-        setErr(error.message || "实时通话连接失败");
-        setPhase("live");
+        markDisconnected(error.message || "实时通话连接失败");
       },
       onClose: () => {
         if (!active || closingRef.current) return;
-        setErr((current) => current || "通话连接断开了，挂断后再重试一次");
-        setPhase("live");
+        markDisconnected("通话连接断开了，挂断后再重试一次");
       },
     });
     socketRef.current = socket;
@@ -1480,8 +1504,7 @@ function CallScreen({ agent, figSrc, onClose }) {
         microphoneRef.current = microphone;
       } catch (error) {
         if (!active) return;
-        setErr(error?.name === "NotAllowedError" ? "请允许麦克风权限后再拨一次" : "麦克风启动失败，请重试");
-        setPhase("live");
+        markDisconnected(error?.name === "NotAllowedError" ? "请允许麦克风权限后再拨一次" : "麦克风启动失败，请重试");
       }
     };
     start();
@@ -1505,7 +1528,8 @@ function CallScreen({ agent, figSrc, onClose }) {
 
   const mm = String(Math.floor(sec / 60)).padStart(2, "0");
   const ss = String(sec % 60).padStart(2, "0");
-  const isLive = phase !== "connecting";
+  const isConnected = phase !== "connecting";
+  const isLive = phase !== "connecting" && phase !== "error";
 
   const toggleMic = () => {
     const next = !micMuted;
@@ -1538,6 +1562,7 @@ function CallScreen({ agent, figSrc, onClose }) {
     recording: "正在听你说…",
     thinking: "她在回应…",
     speaking: "她在说…",
+    error: "通话没有接通",
   }[phase] || "通话中";
   const bars = Array.from({ length: 30 });
 
@@ -1548,17 +1573,17 @@ function CallScreen({ agent, figSrc, onClose }) {
       <div className="call-scrim" />
       <div className="call-top">
         <div className="call-status">
-          {!isLive ? <><Icon name="phone" /> 正在接通…</> : <><span className="live-dot" /> {phaseLabel}</>}
+          {phase === "connecting" ? <><Icon name="phone" /> 正在接通…</> : phase === "error" ? <><Icon name="phone" /> {phaseLabel}</> : <><span className="live-dot" /> {phaseLabel}</>}
         </div>
         <div className="call-name serif">{agent.name}</div>
-        <div className="call-timer">{!isLive ? "她正赶来接电话" : `${mm}:${ss}`}</div>
+        <div className="call-timer">{phase === "connecting" ? "她正赶来接电话" : phase === "error" ? "请挂断后重试" : `${mm}:${ss}`}</div>
       </div>
-      {isLive && (
+      {isConnected && (
         <div className="call-wave">
           {bars.map((_, i) => <i key={i} style={{ height: (8 + Math.abs(Math.sin(i * 1.3) * 28)) + "px", animationDelay: `${i * 50}ms`, opacity: phase === "recording" || phase === "speaking" ? 1 : 0.4 }} />)}
         </div>
       )}
-      {isLive && (
+      {isConnected && (
         <div className="call-caption">
           {phase === "recording" && transcript && `「${transcript}」`}
           {phase !== "recording" && reply && `「${reply}」`}

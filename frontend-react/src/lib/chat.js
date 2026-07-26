@@ -142,6 +142,16 @@ export async function callReply(roleId, text) {
   return data; // { reply, audio_url }
 }
 
+export function friendlyStreamHttpError(status) {
+  if (status === 504) {
+    return '聊天渠道等太久没有返回（504）。不是你消息发错了，也不是她故意不理你，等一会儿再试或换个模型。';
+  }
+  if (status === 502 || status === 503) {
+    return `聊天中转暂时没接通（${status}），稍后再试或换个模型。`;
+  }
+  return `聊天请求暂时失败（${status}），请稍后重试。`;
+}
+
 export async function streamAssistantReply(roleId, payload, handlers = {}) {
   const response = await fetch("/api/chat", {
     method: "POST",
@@ -160,7 +170,7 @@ export async function streamAssistantReply(roleId, payload, handlers = {}) {
   if (!response.ok || !response.body) {
     const data = await parseJson(response).catch(() => null);
     throw new Error(
-      data?.error || `Stream request failed with status ${response.status}`,
+      data?.error || friendlyStreamHttpError(response.status),
     );
   }
 
