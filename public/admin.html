@@ -589,7 +589,10 @@
           <span class="info-key">服务状态</span><span class="info-val" id="sysStatus">--</span>
           <span class="info-key">运行时长</span><span class="info-val" id="sysUptime">--</span>
           <span class="info-key">数据库连接</span><span class="info-val" id="sysDbStatus">--</span>
+          <span class="info-key">旧聊天回忆</span><span class="info-val" id="sysVectorMemory">--</span>
+          <span class="info-key">历史片段</span><span class="info-val" id="sysVectorChunks">--</span>
         </div>
+        <div class="muted-note" id="sysVectorDetail">正在检查旧聊天回忆服务...</div>
       </div>
 
       <div class="card">
@@ -839,6 +842,21 @@
 
     const dbOk = s.database.status === 'normal';
     document.getElementById('sysDbStatus').innerHTML = `<span class="badge ${dbOk ? 'badge-green' : 'badge-red'}">${dbOk ? '正常 ✓' : '异常'}</span>`;
+
+    const vector = s.vector_memory;
+    const vectorStatus = document.getElementById('sysVectorMemory');
+    const vectorChunks = document.getElementById('sysVectorChunks');
+    const vectorDetail = document.getElementById('sysVectorDetail');
+    if (vector) {
+      const enabled = vector.status === 'enabled';
+      vectorStatus.innerHTML = `<span class="badge ${enabled ? 'badge-green' : 'badge-yellow'}">${enabled ? '已启用 ✓' : '已降级'}</span>`;
+      vectorChunks.textContent = Number.isFinite(vector.history?.chunks) ? `${vector.history.chunks} 段` : '--';
+      vectorDetail.textContent = vector.summary || '旧聊天回忆状态暂时无法确认。';
+    } else {
+      vectorStatus.innerHTML = '<span class="badge badge-yellow">未检查</span>';
+      vectorChunks.textContent = '--';
+      vectorDetail.textContent = '旧聊天回忆状态暂时无法确认。';
+    }
 
     document.getElementById('sysMemory').textContent = `${s.memory.used_mb}MB / ${s.memory.total_mb}MB`;
 

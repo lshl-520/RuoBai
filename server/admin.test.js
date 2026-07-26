@@ -162,3 +162,30 @@ test('owner can revoke invite', async () => {
     assert.equal(payload.success, true);
   });
 });
+
+test('owner system status includes an honest vector memory diagnostic', async () => {
+  const router = createAdminRouter({
+    pool: {
+      query: async (sql) => {
+        if (sql.includes('SELECT VERSION()')) return [[{ version: '8.0' }]];
+        if (sql.includes('COUNT(*) as count FROM users')) return [[{ count: 2 }]];
+        if (sql.includes('COUNT(*) as count FROM characters')) return [[{ count: 3 }]];
+        throw new Error(`Unexpected query: ${sql}`);
+      }
+    },
+    vectorMemoryStatus: async () => ({
+      status: 'degraded',
+      summary: '已降级，向量库没有启动，聊天不会使用旧回忆。',
+      history: { status: 'unknown', chunks: null }
+    })
+  });
+
+  await withServer(createApp({ router }), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/admin/system/status`);
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.data.vector_memory.status, 'degraded');
+    assert.match(payload.data.vector_memory.summary, /聊天不会使用旧回忆/);
+  });
+});

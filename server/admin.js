@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { pool, withTransaction } from './db.js';
 import { asyncHandler, parseInteger } from './helpers.js';
 import { createUpdateService } from './admin-update.js';
+import { getVectorMemoryStatus } from './vector-memory/status.js';
 
 function buildInviteCode(now = new Date()) {
   const year = now.getFullYear();
@@ -47,7 +48,8 @@ export function createAdminRouter({
   pool: db = pool,
   withTransaction: transaction = withTransaction,
   now = () => new Date(),
-  updateService = createUpdateService()
+  updateService = createUpdateService(),
+  vectorMemoryStatus = getVectorMemoryStatus
 } = {}) {
   const router = express.Router();
 
@@ -248,8 +250,11 @@ export function createAdminRouter({
       dbStatus = 'error';
     }
 
-    const [[userCount]] = await db.query('SELECT COUNT(*) as count FROM users');
-    const [[characterCount]] = await db.query('SELECT COUNT(*) as count FROM characters WHERE is_deleted = 0');
+    const [[userCount], [characterCount], vectorMemory] = await Promise.all([
+      db.query('SELECT COUNT(*) as count FROM users'),
+      db.query('SELECT COUNT(*) as count FROM characters WHERE is_deleted = 0'),
+      vectorMemoryStatus()
+    ]);
 
     return res.json({
       success: true,
@@ -277,6 +282,7 @@ export function createAdminRouter({
           total_users: userCount.count,
           total_characters: characterCount.count
         },
+        vector_memory: vectorMemory,
         version: 'v1.0.0'
       }
     });
