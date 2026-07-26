@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ensureCharacterRuntimeColumns, ensureCredentialRuntimeColumns, ensurePushRuntimeTables } from './schema.js';
+import { ensureCharacterRuntimeColumns, ensureCredentialRuntimeColumns, ensurePersonaRuntimeTables, ensurePushRuntimeTables } from './schema.js';
 
 test('ensureCharacterRuntimeColumns adds missing role-page columns once', async () => {
   const calls = [];
@@ -57,6 +57,18 @@ test('ensurePushRuntimeTables creates FCM and proactive-message tables', async (
   assert.match(joined, /CREATE TABLE IF NOT EXISTS push_preferences/i);
   assert.match(joined, /CREATE TABLE IF NOT EXISTS proactive_events/i);
   assert.match(joined, /UNIQUE KEY unique_fcm_token/i);
+});
+
+test('ensurePersonaRuntimeTables creates one persistent state per user character', async () => {
+  const calls = [];
+  const db = { query: async (sql) => { calls.push(sql); return [{ affectedRows: 0 }]; } };
+
+  await ensurePersonaRuntimeTables(db);
+
+  const joined = calls.join('\n');
+  assert.match(joined, /CREATE TABLE IF NOT EXISTS character_runtime_states/i);
+  assert.match(joined, /state_json JSON NOT NULL/i);
+  assert.match(joined, /UNIQUE KEY unique_character_runtime_state \(user_id, character_id\)/i);
 });
 
 

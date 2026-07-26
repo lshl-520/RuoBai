@@ -84,6 +84,19 @@ const statements = [
       INDEX idx_user_char_mem (user_id, character_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `,
+  `
+    CREATE TABLE IF NOT EXISTS character_runtime_states (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      character_id INT NOT NULL,
+      state_json JSON NOT NULL,
+      relationship_json JSON NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+      UNIQUE KEY unique_character_runtime_state (user_id, character_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `,
   // ⚠️ 旧版动态系统，新功能请用 moments 系列。
   // 保留是为了兼容前端旧调用，等前端切完再删。
   `

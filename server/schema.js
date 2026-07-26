@@ -125,6 +125,22 @@ const PUSH_RUNTIME_TABLES = [
   `
 ];
 
+const PERSONA_RUNTIME_TABLES = [
+  `
+    CREATE TABLE IF NOT EXISTS character_runtime_states (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      character_id INT NOT NULL,
+      state_json JSON NOT NULL,
+      relationship_json JSON NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+      UNIQUE KEY unique_character_runtime_state (user_id, character_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `
+];
+
 async function columnExists(db, tableName, columnName) {
   const [rows] = await db.query(
     `
@@ -168,8 +184,15 @@ export async function ensurePushRuntimeTables(db) {
   }
 }
 
+export async function ensurePersonaRuntimeTables(db) {
+  for (const statement of PERSONA_RUNTIME_TABLES) {
+    await db.query(statement);
+  }
+}
+
 export async function ensureRuntimeSchema(db) {
   await ensureCharacterRuntimeColumns(db);
   await ensureCredentialRuntimeColumns(db);
   await ensurePushRuntimeTables(db);
+  await ensurePersonaRuntimeTables(db);
 }

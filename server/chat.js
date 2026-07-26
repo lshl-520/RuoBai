@@ -15,6 +15,7 @@ import { extractVideoShareContext, buildVideoShareHint } from './link-parser.js'
 import { getCityWeatherText } from './weather.js';
 import { detectDrawIntent, generateImage } from './image-gen.js';
 import { guessModelCapabilities } from './model-capabilities.js';
+import { buildPersonaRuntimePrompt, loadPersonaRuntime, recordPersonaRuntimeTurn } from './persona-runtime.js';
 
 const NO_MODEL_MESSAGE = '请先在“我的”页面配置 AI 模型。';
 const CHARACTER_NOT_FOUND_ERROR = '角色不存在或不属于当前用户';
@@ -785,7 +786,7 @@ export function createChatRouter({
         });
       }
 
-      const [[userRow], [recent, activeMemories, vectorMemoryBlock]] = await Promise.all([
+      const [[userRow], [recent, activeMemories, vectorMemoryBlock, personaRuntime]] = await Promise.all([
         pool.query('SELECT city FROM users WHERE id = ? LIMIT 1', [req.userId]),
         Promise.all([
           loadRecentMessages(req.userId, characterId, 20),
@@ -795,7 +796,8 @@ export function createChatRouter({
             characterId,
             recentMessages: [],
             currentContent: content
-          }).catch(() => '')
+          }).catch(() => ''),
+          loadPersonaRuntime(pool, { userId: req.userId, characterId })
         ])
       ]);
       const weatherText = await getCityWeatherText(userRow?.[0]?.city || '').catch(() => null);
@@ -807,7 +809,8 @@ export function createChatRouter({
         ? '\n\n用户给你看了一张图，但你现在没有看图能力。请自然地告诉她你暂时看不到图，并温柔地请她描述一下图里是什么。'
         : '';
 
-      messages.push({ role: 'system', content: buildSystemPrompt(character) + buildMemoryPromptBlock(activeMemories) + vectorMemoryBlock + weatherBlock + downgradeHint });
+      const personaRuntimeBlock = `\n\n${buildPersonaRuntimePrompt(personaRuntime, { content, messageType })}`;
+      messages.push({ role: 'system', content: buildSystemPrompt(character) + personaRuntimeBlock + buildMemoryPromptBlock(activeMemories) + vectorMemoryBlock + weatherBlock + downgradeHint });
 
       messages.push(
         ...recent
@@ -1014,6 +1017,15 @@ export function createChatRouter({
         messageType,
         mediaUrl
       });
+
+      if (role === 'user') {
+        await recordPersonaRuntimeTurn(pool, {
+          userId: req.userId,
+          characterId,
+          content,
+          messageType
+        });
+      }
 
       return res.status(201).json({
         success: true,

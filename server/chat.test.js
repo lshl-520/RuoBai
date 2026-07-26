@@ -586,6 +586,8 @@ test('POST /api/chat includes active memories and anti-roleplay rules in the sys
     assert.match(systemPrompt, /说话风格/);
     assert.match(systemPrompt, /禁止动作描写/);
     assert.match(systemPrompt, /只输出可直接发送的聊天回复/);
+    assert.match(systemPrompt, /本轮陪伴上下文/);
+    assert.match(systemPrompt, /场景：/);
   });
 });
 
