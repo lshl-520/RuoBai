@@ -3,6 +3,7 @@ import { Icon, CHANNEL_TYPES, VOICE_ENGINES, useLockBody } from "../store.jsx";
 import { getCredentials, createCredential, updateCredential, deleteCredential, refreshCredentialModels, getCapabilities, updateCapability, testCredentialDraft, applyCredential } from "../lib/profile.js";
 import { loadVoiceSettings, saveVoiceSettings } from "../lib/voice-settings.js";
 import { previewTts } from "../lib/chat.js";
+import { speakTextWithSystemVoice } from "../lib/native-tts.js";
 import { Toggle, StatusDot, Row } from "./profile.jsx";
 
 const { useState: useStateMo } = React;
@@ -382,19 +383,11 @@ function VoiceSheet({ voice, capabilities, onClose, onSave, onPrepareCloud }) {
     volcVoice: volcVoice.trim() || DEFAULT_VOLC_VOICE,
   });
 
-  const speakInBrowser = () => new Promise((resolve, reject) => {
-    if (!("speechSynthesis" in window)) {
-      reject(new Error("当前浏览器不支持语音朗读"));
-      return;
-    }
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance("我在呢。今天也会好好陪着你。");
-    u.lang = "zh-CN"; u.rate = Number(rate); u.pitch = 1.1;
-    const sel = browserVoices.find((v) => v.voiceURI === browserVoiceURI);
-    if (sel) u.voice = sel;
-    u.onend = resolve;
-    u.onerror = () => reject(new Error("浏览器语音播放失败"));
-    window.speechSynthesis.speak(u);
+  const speakInBrowser = () => speakTextWithSystemVoice("我在呢。今天也会好好陪着你。", {
+    language: "zh-CN",
+    rate: Number(rate),
+    pitch: 1.1,
+    browserVoiceURI,
   });
 
   const test = async () => {
@@ -465,7 +458,7 @@ function VoiceSheet({ voice, capabilities, onClose, onSave, onPrepareCloud }) {
               <option value="">系统默认</option>
               {browserVoices.map((v) => <option key={v.voiceURI} value={v.voiceURI}>{v.name} ({v.lang})</option>)}
             </select>
-            <div className="voice-tip">浏览器自带，免费、即开即用。它只能临时朗读，不能保存成角色语音气泡。</div>
+            <div className="voice-tip">免费、即开即用；Android APP 会优先使用手机自带朗读，网页使用浏览器朗读。它只能临时播放，不能保存成角色语音气泡。</div>
           </>)}
 
           {engine === "qwen" && (<>
