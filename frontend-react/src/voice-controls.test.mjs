@@ -35,7 +35,7 @@ test('voice controls use local TTS settings and wait for recognition to finish',
   assert.match(chat, /secondsRef\.current/);
   assert.match(chat, /convertToVoice: true/);
   assert.match(chat, /type: "voice"/);
-  assert.match(chat, /她的文字回复已经保留，但生成语音失败/);
+  assert.match(chat, /她的文字回复已经保留，但云端和手机朗读都失败了/);
 });
 
 test('实时通话只在识别到有效语音后才打断，并在断线时停掉录音', async () => {

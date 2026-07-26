@@ -11,6 +11,7 @@ import {
 } from "../lib/default-assets.js";
 import { publishGeneratedSelfieMoment, shouldPublishGeneratedSelfie } from "../lib/moments.js";
 import { loadVoiceSettings, speechRecognitionErrorMessage } from "../lib/voice-settings.js";
+import { speakTextWithSystemVoice, stopSystemTextSpeech } from "../lib/native-tts.js";
 /* 聊天列表 + 聊天室(沉浸: 常驻立绘随情绪变化 / 全屏立绘 / 语音 / 表情包 / 思考过程 / 搜索) */
 const { useState: useStateC, useRef: useRefC, useEffect: useEffectC } = React;
 
@@ -333,36 +334,34 @@ function TTSButton({ messageId, text, voice }) {
   const [status, setStatus] = useStateC("idle");
   const audioRef = useRefC(null);
 
-  const speakInBrowser = () => {
-    if (!("speechSynthesis" in window)) throw new Error("当前浏览器不支持朗读");
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = "zh-CN"; u.pitch = 1.1; u.rate = Number(voice?.rate) || 0.95;
-    if (voice?.browserVoiceURI) {
-      const selected = window.speechSynthesis.getVoices().find((x) => x.voiceURI === voice.browserVoiceURI);
-      if (selected) u.voice = selected;
-    }
-    u.onend = () => setStatus("idle");
-    u.onerror = () => setStatus("error");
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(u);
+  const speakWithFreeSystemVoice = async () => {
     setStatus("playing");
+    await speakTextWithSystemVoice(text, {
+      language: "zh-CN",
+      pitch: 1.1,
+      rate: Number(voice?.rate) || 0.95,
+      browserVoiceURI: voice?.browserVoiceURI,
+    });
+    setStatus("idle");
   };
 
   const speak = async (e) => {
     e.stopPropagation();
     if (status === "loading") return;
     if (status === "playing") {
-      window.speechSynthesis?.cancel();
+      await stopSystemTextSpeech();
       audioRef.current?.pause();
       setStatus("idle");
       return;
     }
 
     try {
+      // 免费语音在 Android APP 里优先使用系统原生朗读，网页里继续使用浏览器朗读。
       if (voice?.engine === "browser") {
-        speakInBrowser();
+        await speakWithFreeSystemVoice();
         return;
       }
+
       if (!messageId) throw new Error("这条消息还没有保存，稍后再试");
       setStatus("loading");
       const result = await speakMessage(messageId, {
@@ -371,17 +370,22 @@ function TTSButton({ messageId, text, voice }) {
       });
       if (!result?.success) throw new Error(result?.error || "语音生成失败");
       if (result.use_browser_tts) {
-        speakInBrowser();
+        await speakWithFreeSystemVoice();
         return;
       }
       const audio = new Audio(result.audio_url);
       audioRef.current = audio;
       audio.onended = () => setStatus("idle");
-      audio.onerror = () => setStatus("error");
+      audio.onerror = async () => {
+        try { await speakWithFreeSystemVoice(); }
+        catch { setStatus("error"); }
+      };
       await audio.play();
       setStatus("playing");
     } catch {
-      setStatus("error");
+      // 云端语音或音频播放临时失败时，APP 会退回 Android 原生朗读，网页退回浏览器朗读。
+      try { await speakWithFreeSystemVoice(); }
+      catch { setStatus("error"); }
     }
   };
 
@@ -1187,22 +1191,30 @@ function ChatRoom({ agent, onBack }) {
       if (!voiceMode || !voiceSettings.enabled) return;
 
       if (voiceSettings.engine === "browser") {
-        if (!("speechSynthesis" in window)) {
-          setChatError("当前浏览器不支持语音朗读，她的文字回复已经保留。");
-          return;
+        try {
+          await speakTextWithSystemVoice(fullReply, {
+            language: "zh-CN",
+            rate: Number(voiceSettings.rate) || 0.95,
+            pitch: 1.1,
+            browserVoiceURI: voiceSettings.browserVoiceURI,
+          });
+        } catch {
+          setChatError("手机和网页朗读都没有成功，她的文字回复已经保留。");
         }
-        const u = new SpeechSynthesisUtterance(fullReply.replace(/<[^>]+>/g, ""));
-        u.lang = "zh-CN"; u.rate = Number(voiceSettings.rate) || 0.95;
-        if (voiceSettings.browserVoiceURI) {
-          const selectedVoice = window.speechSynthesis.getVoices().find((item) => item.voiceURI === voiceSettings.browserVoiceURI);
-          if (selectedVoice) u.voice = selectedVoice;
-        }
-        window.speechSynthesis.cancel();
-        window.speechSynthesis.speak(u);
         return;
       }
 
-      if (!savedReply?.item?.id) return;
+      if (!savedReply?.item?.id) {
+        try {
+          await speakTextWithSystemVoice(fullReply, {
+            language: "zh-CN",
+            rate: Number(voiceSettings.rate) || 0.95,
+            pitch: 1.1,
+            browserVoiceURI: voiceSettings.browserVoiceURI,
+          });
+        } catch {}
+        return;
+      }
 
       try {
         const speech = await speakMessage(savedReply.item.id, {
@@ -1224,8 +1236,17 @@ function ChatRoom({ agent, onBack }) {
           _streaming: false,
         } : m));
       } catch (speechError) {
-        const detail = speechError instanceof Error ? speechError.message : String(speechError);
-        setChatError(`她的文字回复已经保留，但生成语音失败：${detail}`);
+        try {
+          await speakTextWithSystemVoice(fullReply, {
+            language: "zh-CN",
+            rate: Number(voiceSettings.rate) || 0.95,
+            pitch: 1.1,
+            browserVoiceURI: voiceSettings.browserVoiceURI,
+          });
+        } catch {
+          const detail = speechError instanceof Error ? speechError.message : String(speechError);
+          setChatError(`她的文字回复已经保留，但云端和手机朗读都失败了：${detail}`);
+        }
       }
     } catch (err) { setTyping(false); setChatError(String(err)); }
   };
