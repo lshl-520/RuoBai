@@ -1,4 +1,4 @@
-﻿import test from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { runProactiveScan } from './proactive.js';
@@ -53,10 +53,14 @@ function createRepo({ candidateOverrides = {}, existingEvents = [] } = {}) {
       const event = events.find((item) => item.id === eventId);
       if (event) event.status = 'sent';
     },
-    async markEventFailed(eventId, errorMessage) {
+    async markEventStored(eventId) {
+      const event = events.find((item) => item.id === eventId);
+      if (event) event.status = 'stored';
+    },
+    async markEventNotificationFailed(eventId, errorMessage) {
       const event = events.find((item) => item.id === eventId);
       if (event) {
-        event.status = 'failed';
+        event.status = 'notification_failed';
         event.errorMessage = errorMessage;
       }
     },
@@ -82,6 +86,22 @@ test('runProactiveScan sends one idle message after 3 hours without user chat', 
   assert.equal(sent[0].tokens[0], 'token-1');
   assert.equal(sent[0].data.character_id, '12');
   assert.equal(repo.events[0].status, 'sent');
+});
+
+test('runProactiveScan stores the message when no FCM device or sender exists', async () => {
+  const repo = createRepo({ candidateOverrides: { tokens: [] } });
+
+  const result = await runProactiveScan({
+    repository: repo,
+    now: new Date('2026-06-21T12:30:00.000Z'),
+    generateMessage: async () => '我先给你留句话，忙完再看也没关系。',
+    logger: { info() {}, warn() {}, error() {} },
+  });
+
+  assert.equal(result.created, 1);
+  assert.equal(result.notified, 0);
+  assert.equal(repo.messages.length, 1);
+  assert.equal(repo.events[0].status, 'stored');
 });
 
 test('runProactiveScan does not duplicate idle message after same user silence window', async () => {
@@ -138,6 +158,6 @@ test('runProactiveScan keeps saved message when push delivery fails', async () =
 
   assert.equal(result.created, 1);
   assert.equal(repo.messages.length, 1);
-  assert.equal(repo.events[0].status, 'failed');
+  assert.equal(repo.events[0].status, 'notification_failed');
   assert.equal(repo.events[0].errorMessage, 'FCM unavailable');
 });

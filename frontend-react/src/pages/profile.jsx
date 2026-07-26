@@ -133,7 +133,7 @@ function NotifSheet({ onClose }) {
   const [saving, setSaving] = useStateP("");
   const [error, setError] = useStateP("");
   const [items, setItems] = useStateP([
-    { k: "proactive_enabled", t: "她主动找你", s: "超过 3 小时没聊天时,她会先开口", on: true },
+    { k: "proactive_enabled", t: "她主动找你", s: "超过 3 小时没聊天时,她会先留消息;下次打开也能看到", on: true },
     { k: "bedtime_enabled", t: "深夜提醒睡觉", s: "23:30 还在线时,她会温柔催你休息", on: true },
     { k: "quiet_night_enabled", t: "深夜不打扰", s: "保留设置入口,后续细化安静时段", on: false },
   ]);

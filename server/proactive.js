@@ -117,15 +117,22 @@ async function processCandidate({ repository, candidate, trigger, generateMessag
     createdAt: now.toISOString(),
   });
 
+  const canNotify = typeof sendPush === 'function' && candidate.tokens?.length;
+  if (!canNotify) {
+    await repository.markEventStored(event.id);
+    return { skipped: 0, created: 1, notified: 0 };
+  }
+
   try {
     await sendPush(buildNotificationPayload({ candidate, content, messageId: saved.id }));
     await repository.markEventSent(event.id);
+    return { skipped: 0, created: 1, notified: 1 };
   } catch (error) {
-    logger.warn?.(`[proactive] FCM 推送失败：${error.message}`);
-    await repository.markEventFailed(event.id, error.message);
+    logger.warn?.(`[proactive] 通知失败，但主动消息已保留：${error.message}`);
+    await repository.markEventNotificationFailed(event.id, error.message);
   }
 
-  return { skipped: 0, created: 1 };
+  return { skipped: 0, created: 1, notified: 0 };
 }
 
 export async function runProactiveScan({
@@ -135,15 +142,15 @@ export async function runProactiveScan({
   now = new Date(),
   logger = console,
 } = {}) {
-  if (!repository || !generateMessage || !sendPush) {
+  if (!repository || !generateMessage) {
     throw new Error('runProactiveScan 缺少必要依赖');
   }
 
   const candidates = await repository.listCandidates();
-  const summary = { scanned: candidates.length, created: 0, skipped: 0 };
+  const summary = { scanned: candidates.length, created: 0, skipped: 0, notified: 0 };
 
   for (const candidate of candidates) {
-    if (!candidate.tokens?.length || !candidate.characterId) {
+    if (!candidate.characterId) {
       summary.skipped += 1;
       continue;
     }
@@ -165,6 +172,7 @@ export async function runProactiveScan({
     });
     summary.created += result.created;
     summary.skipped += result.skipped;
+    summary.notified += result.notified || 0;
   }
 
   return summary;
@@ -249,7 +257,7 @@ export function createMysqlProactiveRepository(pool) {
             ON c.user_id = u.id
            AND c.is_active = 1
            AND c.is_deleted = 0
-          INNER JOIN push_devices pd
+          LEFT JOIN push_devices pd
             ON pd.user_id = u.id
            AND pd.enabled = 1
           LEFT JOIN push_preferences pp
@@ -376,9 +384,16 @@ export function createMysqlProactiveRepository(pool) {
       );
     },
 
-    async markEventFailed(eventId, errorMessage) {
+    async markEventStored(eventId) {
       await pool.query(
-        "UPDATE proactive_events SET status = 'failed', error_message = ? WHERE id = ?",
+        "UPDATE proactive_events SET status = 'stored', sent_at = NULL, error_message = '' WHERE id = ?",
+        [eventId],
+      );
+    },
+
+    async markEventNotificationFailed(eventId, errorMessage) {
+      await pool.query(
+        "UPDATE proactive_events SET status = 'notification_failed', error_message = ? WHERE id = ?",
         [String(errorMessage || '').slice(0, 500), eventId],
       );
     },
@@ -419,15 +434,19 @@ export function createFcmSender({ admin, logger = console } = {}) {
 }
 
 export function startProactiveScheduler({ pool, sendPush, logger = console, fetchImpl = fetch } = {}) {
-  if (process.env.PROACTIVE_PUSH_ENABLED !== 'true' || !sendPush) {
-    logger.info?.('[proactive] 主动推送未启用');
+  const messagesEnabled = process.env.PROACTIVE_MESSAGES_ENABLED === 'true'
+    || process.env.PROACTIVE_PUSH_ENABLED === 'true';
+  if (!messagesEnabled) {
+    logger.info?.('[proactive] 主动留言未启用');
     return { stop() {} };
   }
+
+  const notificationSender = process.env.PROACTIVE_PUSH_ENABLED === 'true' ? sendPush : null;
 
   const repository = createMysqlProactiveRepository(pool);
   const run = () => runProactiveScan({
     repository,
-    sendPush,
+    sendPush: notificationSender,
     logger,
     generateMessage: (args) => generateProactiveMessage({ repository, fetchImpl, ...args }),
   }).catch((error) => logger.error?.(`[proactive] 扫描失败：${error.message}`));
