@@ -6,6 +6,20 @@ import { ChatHistoryView } from "./history.jsx";
 import { DEFAULT_ROLE_AVATAR, fallbackToDefaultRoleAvatar } from "../lib/default-assets.js";
 /* 记忆页 — 多角色记忆管理 + 完整聊天记录 */
 const { useState: useStateMem, useEffect: useEffectMem } = React;
+const MEMORY_TYPES = [
+  ["life", "普通生活"], ["important_event", "重要事件"], ["shared_experience", "共同经历"],
+  ["emotional", "情感记忆"], ["core", "核心记忆"], ["appointment", "未来约定"],
+];
+const APPOINTMENT_STATUSES = [["pending", "待发生"], ["completed", "已完成"], ["cancelled", "已取消"]];
+
+function fromApiMemory(m) {
+  return {
+    id: m.id, content: m.content || "", tag: m.tag || "", category: m.category || "",
+    memoryType: m.memory_type || "life", memoryTypeLabel: m.memory_type_label || "普通生活",
+    weight: Number(m.weight ?? 50), appointmentAt: m.appointment_at || "", appointmentStatus: m.appointment_status || "pending",
+    isImportant: !!m.is_important, dateText: m.created_at ? new Date(m.created_at).toLocaleDateString("zh-CN") : "",
+  };
+}
 
 /* 记忆编辑/新建 */
 function MemoryEditor({ agent, memory, onClose, onSave }) {
@@ -13,6 +27,10 @@ function MemoryEditor({ agent, memory, onClose, onSave }) {
   const [content, setContent] = useStateMem(memory?.content || "");
   const [tag, setTag] = useStateMem(memory?.tag || "");
   const [category, setCategory] = useStateMem(memory?.category || "");
+  const [memoryType, setMemoryType] = useStateMem(memory?.memoryType || "life");
+  const [weight, setWeight] = useStateMem(memory?.weight ?? 50);
+  const [appointmentAt, setAppointmentAt] = useStateMem(memory?.appointmentAt ? String(memory.appointmentAt).slice(0, 16).replace(" ", "T") : "");
+  const [appointmentStatus, setAppointmentStatus] = useStateMem(memory?.appointmentStatus || "pending");
   const [important, setImportant] = useStateMem(memory?.isImportant || false);
   return (
     <div className="sheet-mask" onClick={onClose}>
@@ -31,6 +49,18 @@ function MemoryEditor({ agent, memory, onClose, onSave }) {
           <input className="fld" value={tag} onChange={(e) => setTag(e.target.value)} placeholder="例如:他撑不住的样子" />
           <label className="field-label">分类 <span className="lbl-hint">喜好 / 约定 / 底色…</span></label>
           <input className="fld" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="在意" />
+          <label className="field-label">记忆类型</label>
+          <select className="fld" value={memoryType} onChange={(e) => setMemoryType(e.target.value)}>
+            {MEMORY_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+          {memoryType === "appointment" && <>
+            <label className="field-label">约定时间 <span className="lbl-hint">可稍后补充</span></label>
+            <input className="fld" type="datetime-local" value={appointmentAt} onChange={(e) => setAppointmentAt(e.target.value)} />
+            <label className="field-label">约定状态</label>
+            <select className="fld" value={appointmentStatus} onChange={(e) => setAppointmentStatus(e.target.value)}>
+              {APPOINTMENT_STATUSES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </>}
           <div className="switch-row">
             <div>
               <div className="sr-t">置顶这条记忆</div>
@@ -40,7 +70,7 @@ function MemoryEditor({ agent, memory, onClose, onSave }) {
           </div>
         </div>
         <div className="sheet-foot">
-          <button className="pill pill-primary grow" onClick={() => onSave({ id: memory?.id, content, tag, category, isImportant: important })}>
+          <button className="pill pill-primary grow" onClick={() => onSave({ id: memory?.id, content, tag, category, memoryType, weight, appointmentAt, appointmentStatus, isImportant: important })}>
             {editing ? "保存" : "记住它"}
           </button>
         </div>
@@ -53,12 +83,12 @@ function MemoryCard({ m, onPin, onEdit, onDelete }) {
   return (
     <div className={"mem-card" + (m.isImportant ? " pinned" : "")}>
       <div className="mem-top">
-        <span className="mem-tag serif">{m.tag}</span>
+        <span className="mem-tag serif">{m.tag || m.memoryTypeLabel}</span>
         {m.isImportant && <span className="mem-pin"><Icon name="flame" /></span>}
       </div>
       <div className="mem-content">{m.content}</div>
       <div className="mem-foot">
-        <span className="mem-meta">{m.dateText}{m.category ? " · " + m.category : ""}</span>
+        <span className="mem-meta">{m.memoryTypeLabel}{m.appointmentAt ? " · " + String(m.appointmentAt).slice(0, 10) : ""}{m.category ? " · " + m.category : ""}</span>
         <div className="mem-actions">
           <button onClick={() => onPin(m)}>{m.isImportant ? "取消置顶" : "置顶"}</button>
           <button onClick={() => onEdit(m)}>编辑</button>
@@ -126,14 +156,7 @@ function MemoryScreen() {
       try {
         const res = await getMemories(activeId);
         if (!cancelled && res?.success && Array.isArray(res.data)) {
-          setList(res.data.map((m) => ({
-            id: m.id,
-            content: m.content || "",
-            tag: m.tag || "",
-            category: m.category || "",
-            isImportant: !!m.is_important,
-            dateText: m.created_at ? new Date(m.created_at).toLocaleDateString("zh-CN") : "",
-          })));
+          setList(res.data.map(fromApiMemory));
         }
       } catch (e) { setList([]); }
       if (!cancelled) setLoading(false);
@@ -150,11 +173,7 @@ function MemoryScreen() {
     try {
       const res = await getMemories(activeId);
       if (res?.success && Array.isArray(res.data)) {
-        setList(res.data.map((m) => ({
-          id: m.id, content: m.content || "", tag: m.tag || "",
-          category: m.category || "", isImportant: !!m.is_important,
-          dateText: m.created_at ? new Date(m.created_at).toLocaleDateString("zh-CN") : "",
-        })));
+        setList(res.data.map(fromApiMemory));
       }
     } catch (e) { /* 静默 */ }
   };
@@ -163,9 +182,9 @@ function MemoryScreen() {
     if (!activeId) return;
     try {
       if (data.id) {
-        await apiUpdateMemory(data.id, { content: data.content, tag: data.tag, category: data.category, is_important: data.isImportant });
+        await apiUpdateMemory(data.id, { content: data.content, tag: data.tag, category: data.category, memory_type: data.memoryType, weight: data.weight, appointment_at: data.appointmentAt, appointment_status: data.appointmentStatus, is_important: data.isImportant });
       } else {
-        await createMemory(activeId, { content: data.content, tag: data.tag, category: data.category, is_important: data.isImportant });
+        await createMemory(activeId, { content: data.content, tag: data.tag, category: data.category, memory_type: data.memoryType, weight: data.weight, appointment_at: data.appointmentAt, appointment_status: data.appointmentStatus, is_important: data.isImportant });
       }
     } catch (e) { /* 静默 */ }
     setEditor(undefined);

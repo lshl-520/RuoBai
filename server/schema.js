@@ -74,6 +74,18 @@ const CREDENTIAL_RUNTIME_COLUMNS = [
   }
 ];
 
+const MEMORY_RUNTIME_COLUMNS = [
+  { name: 'memory_type', definition: "VARCHAR(32) DEFAULT 'life'", after: 'category' },
+  { name: 'source_type', definition: "VARCHAR(32) DEFAULT 'manual'", after: 'memory_type' },
+  { name: 'source_id', definition: 'BIGINT DEFAULT NULL', after: 'source_type' },
+  { name: 'occurred_at', definition: 'DATETIME DEFAULT NULL', after: 'source_id' },
+  { name: 'confidence', definition: 'DECIMAL(4,3) DEFAULT 1.000', after: 'occurred_at' },
+  { name: 'weight', definition: 'INT DEFAULT 50', after: 'confidence' },
+  { name: 'appointment_at', definition: 'DATETIME DEFAULT NULL', after: 'weight' },
+  { name: 'appointment_status', definition: 'VARCHAR(20) DEFAULT NULL', after: 'appointment_at' },
+  { name: 'updated_at', definition: 'DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP', after: 'created_at' },
+];
+
 const PUSH_RUNTIME_TABLES = [
   `
     CREATE TABLE IF NOT EXISTS push_devices (
@@ -178,6 +190,13 @@ export async function ensureCredentialRuntimeColumns(db) {
   }
 }
 
+export async function ensureMemoryRuntimeColumns(db) {
+  for (const column of MEMORY_RUNTIME_COLUMNS) {
+    if (await columnExists(db, 'memories', column.name)) continue;
+    await db.query(`ALTER TABLE memories ADD COLUMN ${column.name} ${column.definition} AFTER ${column.after}`);
+  }
+}
+
 export async function ensurePushRuntimeTables(db) {
   for (const statement of PUSH_RUNTIME_TABLES) {
     await db.query(statement);
@@ -193,6 +212,7 @@ export async function ensurePersonaRuntimeTables(db) {
 export async function ensureRuntimeSchema(db) {
   await ensureCharacterRuntimeColumns(db);
   await ensureCredentialRuntimeColumns(db);
+  await ensureMemoryRuntimeColumns(db);
   await ensurePushRuntimeTables(db);
   await ensurePersonaRuntimeTables(db);
 }
