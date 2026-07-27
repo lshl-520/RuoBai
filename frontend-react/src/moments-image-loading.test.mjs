@@ -14,5 +14,6 @@ test('moment images can open the original in a full-screen preview', () => {
   assert.match(source, /className="m-img-button"/);
   assert.match(source, /function MomentImagePreview/);
   assert.match(source, /className="chat-image-preview"/);
+  assert.match(source, /\/api\/media\/preview\?path=/);
   assert.match(source, /打开原图/);
 });

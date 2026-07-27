@@ -10,8 +10,8 @@ export const userChatImageDir = path.join(projectRoot, 'user_assets', 'chat');
 
 const HIGH_MAX_EDGE = 1600;
 const THUMB_MAX_EDGE = 640;
-const inflightThumbnails = new Map();
-let thumbnailQueue = Promise.resolve();
+const inflightVariants = new Map();
+let imageVariantQueue = Promise.resolve();
 
 sharp.concurrency(1);
 
@@ -28,6 +28,11 @@ export function thumbnailFilename(filename) {
   return `${parsed.name}.thumb.webp`;
 }
 
+export function previewFilename(filename) {
+  const parsed = path.parse(String(filename || ''));
+  return `${parsed.name}.preview.webp`;
+}
+
 export function resolveChatImagePath(publicPath) {
   const prefix = '/user_assets/chat/';
   const value = String(publicPath || '').trim().split(/[?#]/, 1)[0];
@@ -42,8 +47,19 @@ export function resolveChatImagePath(publicPath) {
     filename,
     sourcePath: path.join(userChatImageDir, filename),
     thumbnailName: thumbnailFilename(filename),
-    thumbnailPath: path.join(userChatImageDir, thumbnailFilename(filename))
+    thumbnailPath: path.join(userChatImageDir, thumbnailFilename(filename)),
+    previewName: previewFilename(filename),
+    previewPath: path.join(userChatImageDir, previewFilename(filename))
   };
+}
+
+function enqueueVariant(targetPath, create) {
+  if (inflightVariants.has(targetPath)) return inflightVariants.get(targetPath);
+  const conversion = imageVariantQueue.then(create);
+  imageVariantQueue = conversion.catch(() => {});
+  const task = conversion.finally(() => inflightVariants.delete(targetPath));
+  inflightVariants.set(targetPath, task);
+  return task;
 }
 
 export async function saveOptimizedImage(buffer, baseName, options = {}) {
@@ -93,11 +109,7 @@ export async function ensureThumbnail(publicPath, options = {}) {
     return resolved.thumbnailPath;
   } catch {}
 
-  if (inflightThumbnails.has(resolved.thumbnailPath)) {
-    return inflightThumbnails.get(resolved.thumbnailPath);
-  }
-
-  const conversion = thumbnailQueue.then(async () => {
+  return enqueueVariant(resolved.thumbnailPath, async () => {
     try {
       await fileStorage.access(resolved.thumbnailPath);
       return resolved.thumbnailPath;
@@ -110,9 +122,39 @@ export async function ensureThumbnail(publicPath, options = {}) {
       .toFile(resolved.thumbnailPath);
     return resolved.thumbnailPath;
   });
-  thumbnailQueue = conversion.catch(() => {});
-  const task = conversion.finally(() => inflightThumbnails.delete(resolved.thumbnailPath));
+}
 
-  inflightThumbnails.set(resolved.thumbnailPath, task);
-  return task;
+export async function ensurePreview(publicPath, options = {}) {
+  const resolved = resolveChatImagePath(publicPath);
+  if (!resolved) {
+    const error = new Error('图片地址不合法');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const fileStorage = options.fileStorage || fs;
+  const imageSharp = options.sharpImpl || sharp;
+  if (/\.webp$/i.test(resolved.filename) && !/\.(?:thumb|preview)\.webp$/i.test(resolved.filename)) {
+    await fileStorage.access(resolved.sourcePath);
+    return resolved.sourcePath;
+  }
+
+  try {
+    await fileStorage.access(resolved.previewPath);
+    return resolved.previewPath;
+  } catch {}
+
+  return enqueueVariant(resolved.previewPath, async () => {
+    try {
+      await fileStorage.access(resolved.previewPath);
+      return resolved.previewPath;
+    } catch {}
+    await fileStorage.access(resolved.sourcePath);
+    await imageSharp(resolved.sourcePath)
+      .rotate()
+      .resize({ width: HIGH_MAX_EDGE, height: HIGH_MAX_EDGE, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 82, effort: 3 })
+      .toFile(resolved.previewPath);
+    return resolved.previewPath;
+  });
 }
