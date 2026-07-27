@@ -1,11 +1,5 @@
-import path from 'node:path';
 import fs from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const projectRoot = path.resolve(__dirname, '..');
-const userChatImageDir = path.join(projectRoot, 'user_assets', 'chat');
+import { saveOptimizedImage } from './image-assets.js';
 
 const LEGACY_IMAGE_KEY = process.env.AGNES_AI_KEY || '';
 const LEGACY_IMAGE_BASE = process.env.AGNES_AI_BASE || 'https://apihub.agnes-ai.com/v1';
@@ -77,19 +71,17 @@ export function buildImageGenerationsUrl(apiBase) {
   return `${base}/v1/images/generations`;
 }
 
-async function saveBase64Image(rawValue, filename, fileStorage) {
+async function saveBase64Image(rawValue, baseName, fileStorage, optimizeImage) {
   const value = String(rawValue || '').trim();
   const base64 = value.includes(',') && /^data:image\//i.test(value)
     ? value.slice(value.indexOf(',') + 1)
     : value;
   const buffer = Buffer.from(base64, 'base64');
   if (!buffer.length) throw new Error('图片接口返回了空图片');
-  await fileStorage.mkdir(userChatImageDir, { recursive: true });
-  await fileStorage.writeFile(path.join(userChatImageDir, filename), buffer);
-  return `/user_assets/chat/${filename}`;
+  return optimizeImage(buffer, baseName, { fileStorage });
 }
 
-async function downloadAndSaveImage(imageUrl, filename, fetchImpl, fileStorage) {
+async function downloadAndSaveImage(imageUrl, baseName, fetchImpl, fileStorage, optimizeImage) {
   let lastError = null;
 
   for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -104,9 +96,7 @@ async function downloadAndSaveImage(imageUrl, filename, fetchImpl, fileStorage) 
 
       const buffer = Buffer.from(await response.arrayBuffer());
       if (!buffer.length) throw new Error('下载到的图片是空的');
-      await fileStorage.mkdir(userChatImageDir, { recursive: true });
-      await fileStorage.writeFile(path.join(userChatImageDir, filename), buffer);
-      return `/user_assets/chat/${filename}`;
+      return optimizeImage(buffer, baseName, { fileStorage });
     } catch (error) {
       lastError = error;
       if (attempt < 3) {
@@ -243,6 +233,7 @@ async function generateTaskImage({
   extras,
   fetchImpl,
   fileStorage,
+  optimizeImage,
   sleepImpl,
   timeoutMs
 }) {
@@ -303,8 +294,8 @@ async function generateTaskImage({
           type: String(image.type || 'output')
         });
         const imageUrl = `${taskBase}/view?${query.toString()}&t=${Date.now()}`;
-        const filename = `draw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
-        return downloadAndSaveImage(imageUrl, filename, fetchImpl, fileStorage);
+        const baseName = `draw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        return downloadAndSaveImage(imageUrl, baseName, fetchImpl, fileStorage, optimizeImage);
       }
       if (entry?.status?.completed) {
         const error = readTaskImageExecutionError(entry);
@@ -331,6 +322,7 @@ export async function generateImage(subject, options = {}) {
   const sleepImpl = normalizedOptions.sleepImpl || (ms => new Promise(resolve => setTimeout(resolve, ms)));
   const generationTimeoutMs = Number(normalizedOptions.generationTimeoutMs) || GENERATION_TIMEOUT_MS;
   const extras = normalizeExtras(normalizedOptions.extras);
+  const optimizeImage = normalizedOptions.optimizeImage || saveOptimizedImage;
 
   const needsApiKey = providerType !== TASK_IMAGE_PROVIDER;
   if ((needsApiKey && !apiKey) || !apiBase || !model) {
@@ -348,6 +340,7 @@ export async function generateImage(subject, options = {}) {
       extras,
       fetchImpl,
       fileStorage,
+      optimizeImage,
       sleepImpl,
       timeoutMs: generationTimeoutMs
     });
@@ -382,9 +375,9 @@ export async function generateImage(subject, options = {}) {
   const result = readImageResult(payload);
   if (!result) throw new Error('接口返回里没有图片地址或图片内容');
 
-  const filename = `draw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
+  const baseName = `draw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   if (result.url) {
-    return downloadAndSaveImage(result.url, filename, fetchImpl, fileStorage);
+    return downloadAndSaveImage(result.url, baseName, fetchImpl, fileStorage, optimizeImage);
   }
-  return saveBase64Image(result.base64, filename, fileStorage);
+  return saveBase64Image(result.base64, baseName, fileStorage, optimizeImage);
 }

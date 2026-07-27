@@ -371,6 +371,10 @@
 .m-imgs.c1 { grid-template-columns: 1fr; max-width: 75%; }
 .m-imgs.c1 img { width: 100%; max-height: 180px; object-fit: cover; border-radius: 14px; }
 .m-imgs img { width: 100%; aspect-ratio: 1; object-fit: cover; }
+.m-img-button { display: block; width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; overflow: hidden; cursor: zoom-in; line-height: 0; }
+.m-img-button:focus-visible { outline: 2px solid var(--rose); outline-offset: -2px; }
+.m-imgs.c1 .m-img-button { border-radius: 14px; }
+.m-imgs.c1 .m-img-button img { width: 100%; max-height: 180px; aspect-ratio: auto; object-fit: cover; border-radius: 14px; }
 .m-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; }
 .m-time { font-size: 11px; color: var(--ink-faint); }
 .m-actions { display: flex; gap: 14px; }

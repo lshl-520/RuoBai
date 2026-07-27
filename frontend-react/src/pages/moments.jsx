@@ -39,7 +39,7 @@ function mapMoment(m, agentsMap, user) {
   };
 }
 
-function MomentCard({ m, onLike, onDelete, currentUserId }) {
+function MomentCard({ m, onLike, onDelete, onOpenImage, currentUserId }) {
   const [isLiking, setIsLiking] = React.useState(false);
   const moodTags = m.mood ? m.mood.trim().split(/\s+/).filter(Boolean) : [];
 
@@ -108,7 +108,26 @@ function MomentCard({ m, onLike, onDelete, currentUserId }) {
         <div className="m-body">{m.content}</div>
         {m.images.length > 0 && (
           <div className={"m-imgs c" + m.images.length}>
-            {m.images.map((src, i) => <img key={i} src={src} alt="" />)}
+            {m.images.map((src, i) => (
+              <button
+                type="button"
+                className="m-img-button"
+                key={`${src}-${i}`}
+                onClick={() => onOpenImage(src)}
+                aria-label="打开动态图片"
+              >
+                <img
+                  src={`/api/media/thumbnail?path=${encodeURIComponent(src)}`}
+                  alt="动态图片"
+                  loading="lazy"
+                  decoding="async"
+                  onError={(event) => {
+                    if (event.currentTarget.src.endsWith(src)) return;
+                    event.currentTarget.src = src;
+                  }}
+                />
+              </button>
+            ))}
           </div>
         )}
         <div className="m-foot">
@@ -134,6 +153,31 @@ function MomentCard({ m, onLike, onDelete, currentUserId }) {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function MomentImagePreview({ src, onClose }) {
+  React.useEffect(() => {
+    const oldOverflow = document.body.style.overflow;
+    const onKeyDown = (event) => { if (event.key === "Escape") onClose(); };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = oldOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
+
+  return (
+    <div className="chat-image-preview" onClick={onClose}>
+      <button className="cip-close" onClick={onClose} aria-label="关闭图片预览">×</button>
+      <div className="cip-stage" onClick={(event) => event.stopPropagation()}>
+        <img src={src} alt="动态图片原图" />
+      </div>
+      <div className="cip-actions" onClick={(event) => event.stopPropagation()}>
+        <a className="cip-original" href={src} target="_blank" rel="noreferrer">打开原图</a>
       </div>
     </div>
   );
@@ -348,6 +392,7 @@ function Composer({ user, onClose, onPost }) {
 function MomentsScreen() {
   const [composing, setComposing] = useStateM(false);
   const [filter, setFilter] = useStateM(null);
+  const [previewImage, setPreviewImage] = useStateM("");
 
   /* 从后端拉真实数据 */
   const [realAgents, setRealAgents] = useStateM(null);
@@ -470,7 +515,7 @@ function MomentsScreen() {
         </div>
       ) : (
         <div className="moments-list pad">
-          {list.map((m) => <MomentCard key={m.id} m={m} onLike={handleLike} onDelete={handleDelete} currentUserId={user?.id} />)}
+          {list.map((m) => <MomentCard key={m.id} m={m} onLike={handleLike} onDelete={handleDelete} onOpenImage={setPreviewImage} currentUserId={user?.id} />)}
           <div style={{ height: 20 }} />
         </div>
       )}
@@ -481,6 +526,7 @@ function MomentsScreen() {
         <Composer user={user} onClose={() => setComposing(false)}
           onPost={handlePost} />
       )}
+      {previewImage && <MomentImagePreview src={previewImage} onClose={() => setPreviewImage("")} />}
     </div>
   );
 }
