@@ -8,6 +8,8 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -18,15 +20,35 @@ public class NativeTextToSpeechPlugin extends Plugin {
 
     private TextToSpeech textToSpeech;
     private volatile boolean ready = false;
+    private volatile boolean initializing = true;
     private volatile String initError = "APP 原生朗读正在准备，请稍后再试";
     private final Map<String, PluginCall> pendingCalls = new ConcurrentHashMap<>();
+    private final List<PendingSpeakRequest> waitingForInitialization = new ArrayList<>();
+
+    private static final class PendingSpeakRequest {
+        final PluginCall call;
+        final String text;
+        final String language;
+        final float rate;
+        final float pitch;
+
+        PendingSpeakRequest(PluginCall call, String text, String language, float rate, float pitch) {
+            this.call = call;
+            this.text = text;
+            this.language = language;
+            this.rate = rate;
+            this.pitch = pitch;
+        }
+    }
 
     @Override
     public void load() {
+        initializing = true;
         getActivity().runOnUiThread(() -> {
             textToSpeech = new TextToSpeech(getContext(), status -> {
                 if (status == TextToSpeech.SUCCESS) {
                     ready = true;
+                    initializing = false;
                     initError = "";
                     textToSpeech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                         @Override
@@ -52,9 +74,12 @@ public class NativeTextToSpeechPlugin extends Plugin {
                             finishCall(utteranceId, "stopped", null);
                         }
                     });
+                    drainInitializationQueue();
                 } else {
                     ready = false;
+                    initializing = false;
                     initError = "手机的文字朗读服务没有准备好";
+                    rejectInitializationQueue(initError);
                 }
             });
         });
@@ -67,42 +92,82 @@ public class NativeTextToSpeechPlugin extends Plugin {
             call.reject("没有可以朗读的文字");
             return;
         }
+        String language = call.getString("language", "zh-CN");
+        float rate = clamp(call.getFloat("rate", 0.95f), 0.5f, 2.0f);
+        float pitch = clamp(call.getFloat("pitch", 1.05f), 0.5f, 2.0f);
+        PendingSpeakRequest request = new PendingSpeakRequest(call, text, language, rate, pitch);
+
+        if (!ready && initializing) {
+            synchronized (waitingForInitialization) {
+                if (!ready && initializing) {
+                    waitingForInitialization.add(request);
+                    return;
+                }
+            }
+        }
         if (!ready || textToSpeech == null) {
             call.reject(initError);
             return;
         }
+        speakWhenReady(request);
+    }
 
-        String language = call.getString("language", "zh-CN");
-        float rate = clamp(call.getFloat("rate", 0.95f), 0.5f, 2.0f);
-        float pitch = clamp(call.getFloat("pitch", 1.05f), 0.5f, 2.0f);
+    private void speakWhenReady(PendingSpeakRequest request) {
+        if (!ready || textToSpeech == null) {
+            request.call.reject(initError);
+            return;
+        }
         String utteranceId = UUID.randomUUID().toString();
-        pendingCalls.put(utteranceId, call);
+        pendingCalls.put(utteranceId, request.call);
 
         getActivity().runOnUiThread(() -> {
-            Locale locale = Locale.forLanguageTag(language);
+            Locale locale = Locale.forLanguageTag(request.language);
             int languageResult = textToSpeech.setLanguage(locale);
             if (languageResult == TextToSpeech.LANG_MISSING_DATA || languageResult == TextToSpeech.LANG_NOT_SUPPORTED) {
                 languageResult = textToSpeech.setLanguage(Locale.SIMPLIFIED_CHINESE);
             }
             if (languageResult == TextToSpeech.LANG_MISSING_DATA || languageResult == TextToSpeech.LANG_NOT_SUPPORTED) {
                 pendingCalls.remove(utteranceId);
-                call.reject("手机没有可用的中文朗读音色");
+                request.call.reject("手机没有可用的中文朗读音色");
                 return;
             }
 
-            textToSpeech.setSpeechRate(rate);
-            textToSpeech.setPitch(pitch);
+            textToSpeech.setSpeechRate(request.rate);
+            textToSpeech.setPitch(request.pitch);
             Bundle params = new Bundle();
-            int result = textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, params, utteranceId);
+            int result = textToSpeech.speak(request.text, TextToSpeech.QUEUE_FLUSH, params, utteranceId);
             if (result == TextToSpeech.ERROR) {
                 pendingCalls.remove(utteranceId);
-                call.reject("手机没有成功开始朗读");
+                request.call.reject("手机没有成功开始朗读");
             }
         });
     }
 
+    private void drainInitializationQueue() {
+        List<PendingSpeakRequest> queued;
+        synchronized (waitingForInitialization) {
+            queued = new ArrayList<>(waitingForInitialization);
+            waitingForInitialization.clear();
+        }
+        for (PendingSpeakRequest request : queued) {
+            speakWhenReady(request);
+        }
+    }
+
+    private void rejectInitializationQueue(String error) {
+        List<PendingSpeakRequest> queued;
+        synchronized (waitingForInitialization) {
+            queued = new ArrayList<>(waitingForInitialization);
+            waitingForInitialization.clear();
+        }
+        for (PendingSpeakRequest request : queued) {
+            request.call.reject(error);
+        }
+    }
+
     @PluginMethod
     public void stop(PluginCall call) {
+        rejectInitializationQueue("朗读已停止");
         if (textToSpeech == null) {
             call.resolve();
             return;
@@ -134,6 +199,8 @@ public class NativeTextToSpeechPlugin extends Plugin {
 
     @Override
     protected void handleOnDestroy() {
+        initializing = false;
+        rejectInitializationQueue("朗读已停止");
         for (Map.Entry<String, PluginCall> entry : pendingCalls.entrySet()) {
             finishCall(entry.getKey(), "stopped", null);
         }

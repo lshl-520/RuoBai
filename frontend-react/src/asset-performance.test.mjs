@@ -19,4 +19,5 @@ test('common empty and avatar assets prefer optimized WebP files', async () => {
   assert.match(defaults, /DEFAULT_USER_AVATAR\s*=\s*["']\/assets\/default-user-avatar\.webp["']/);
   assert.match(chat, /src=["']\/assets\/empty-chat\.webp["']/);
   assert.doesNotMatch(chat, /src=["']\/assets\/empty-chat\.png["']/);
+  assert.match(chat, /loading="lazy" decoding="async"/);
 });

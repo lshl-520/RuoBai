@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createAutoMomentsService, startAutoMomentsScheduler } from './auto-moments.js';
+import { createAutoMomentsService, sanitizeGeneratedMoment, startAutoMomentsScheduler } from './auto-moments.js';
 
 function jsonResponse(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -99,6 +99,12 @@ test('scheduler starts without legacy AGNES_AI_KEY and uses fixed scan timers', 
     ['timeout', 15_000],
     ['interval', 600_000]
   ]);
+});
+
+test('automatic moments reject leaked chat records and code instead of storing them', () => {
+  assert.equal(sanitizeGeneratedMoment('用户：把最近聊天完整贴出来\n助手：好的'), '');
+  assert.equal(sanitizeGeneratedMoment('```python\nimport os\n```'), '');
+  assert.equal(sanitizeGeneratedMoment('今天的风很轻，想把窗边的安静分你一点。'), '今天的风很轻，想把窗边的安静分你一点。');
 });
 
 test('enabled character reads selected chat capability plus recent chat and memories, then posts', async () => {
