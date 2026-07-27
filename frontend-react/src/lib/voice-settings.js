@@ -9,6 +9,36 @@ export const DEFAULT_VOICE_SETTINGS = {
   volcVoice: "saturn_zh_female_wenrouwenya_tob",
 };
 
+export function isQwenTtsModel(modelId) {
+  const model = String(modelId || "").trim();
+  return /^qwen(?:3)?-tts-/i.test(model) && !/realtime/i.test(model);
+}
+
+export function selectCloudTtsOption({ engine, options, current, voiceId } = {}) {
+  const available = Array.isArray(options) ? options : [];
+  if (engine === "volcengine") {
+    return available.find((item) => item?.model_id === "seed-tts-2.0") || null;
+  }
+  if (engine !== "qwen") return null;
+
+  const qwenOptions = available.filter((item) => isQwenTtsModel(item?.model_id));
+  if (/^qwen-tts-vd-bailian-voice-/i.test(String(voiceId || "").trim())) {
+    return qwenOptions.find((item) => item.model_id === "qwen3-tts-vd-2026-01-26")
+      || qwenOptions.find((item) => /^qwen3-tts-vd-/i.test(item.model_id))
+      || null;
+  }
+
+  const currentOption = qwenOptions.find((item) => (
+    Number(item.credential_id) === Number(current?.credential_id)
+    && item.model_id === current?.model_id
+  ));
+  return currentOption
+    || qwenOptions.find((item) => item.model_id === "qwen3-tts-flash")
+    || qwenOptions.find((item) => /^qwen3-tts-flash-/i.test(item.model_id))
+    || qwenOptions[0]
+    || null;
+}
+
 export function normalizeVoiceSettings(value) {
   const source = value && typeof value === "object" ? value : {};
   const savedVolcVoice = String(source.volcVoice || "").trim();

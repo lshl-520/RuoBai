@@ -1,7 +1,7 @@
 import React from "react";
 import { Icon, CHANNEL_TYPES, VOICE_ENGINES, useLockBody } from "../store.jsx";
 import { getCredentials, createCredential, updateCredential, deleteCredential, refreshCredentialModels, getCapabilities, updateCapability, testCredentialDraft, applyCredential } from "../lib/profile.js";
-import { loadVoiceSettings, saveVoiceSettings } from "../lib/voice-settings.js";
+import { isQwenTtsModel, loadVoiceSettings, saveVoiceSettings, selectCloudTtsOption } from "../lib/voice-settings.js";
 import { previewTts } from "../lib/chat.js";
 import { speakTextWithSystemVoice } from "../lib/native-tts.js";
 import { Toggle, StatusDot, Row } from "./profile.jsx";
@@ -353,7 +353,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete, onTest }) {
 }
 
 /* ====== 语音 TTS 配置 Sheet ====== */
-function VoiceSheet({ voice, capabilities, onClose, onSave, onPrepareCloud }) {
+function VoiceSheet({ voice, capabilities, onClose, onSave, onPrepareCloud, onRestoreCloud }) {
   useLockBody();
   const [engine, setEngine] = useStateMo(voice?.engine || "browser");
   const [rate, setRate] = useStateMo(voice?.rate ?? 0.9);
@@ -367,7 +367,7 @@ function VoiceSheet({ voice, capabilities, onClose, onSave, onPrepareCloud }) {
 
   const ttsOptions = capabilities?.find((item) => item.capability === "tts")?.options || [];
   const hasVolcTts = ttsOptions.some((item) => item.model_id === VOLC_TTS_MODEL);
-  const hasQwenTts = ttsOptions.some((item) => /qwen/i.test(item.model_id || ""));
+  const hasQwenTts = ttsOptions.some((item) => isQwenTtsModel(item.model_id));
 
   React.useEffect(() => {
     if (!("speechSynthesis" in window)) return;
@@ -394,6 +394,7 @@ function VoiceSheet({ voice, capabilities, onClose, onSave, onPrepareCloud }) {
     if (testing) return;
     setTesting(true);
     setError("");
+    let preparedCloud = null;
     try {
       if (engine === "browser") {
         await speakInBrowser();
@@ -401,7 +402,7 @@ function VoiceSheet({ voice, capabilities, onClose, onSave, onPrepareCloud }) {
       }
 
       const config = currentConfig();
-      await onPrepareCloud(config);
+      preparedCloud = await onPrepareCloud(config);
       const result = await previewTts({
         voiceOverride: engine === "volcengine" ? config.volcVoice : config.voiceId,
         rate: config.rate,
@@ -416,6 +417,7 @@ function VoiceSheet({ voice, capabilities, onClose, onSave, onPrepareCloud }) {
     } catch (e) {
       setError(e?.message || String(e));
     } finally {
+      if (preparedCloud) await onRestoreCloud(preparedCloud).catch(() => {});
       setTesting(false);
     }
   };
@@ -687,9 +689,12 @@ function ModelsSection() {
     if (v.engine === "browser") return null;
     const ttsCapability = capabilities.find((item) => item.capability === "tts");
     const options = ttsCapability?.options || [];
-    const target = v.engine === "volcengine"
-      ? options.find((item) => item.model_id === VOLC_TTS_MODEL)
-      : options.find((item) => /qwen/i.test(item.model_id || "")) || (ttsCapability?.current?.model_id !== VOLC_TTS_MODEL ? ttsCapability?.current : null);
+    const target = selectCloudTtsOption({
+      engine: v.engine,
+      options,
+      current: ttsCapability?.current,
+      voiceId: v.voiceId,
+    });
 
     if (!target?.credential_id || !target?.model_id) {
       throw new Error(v.engine === "volcengine"
@@ -711,7 +716,22 @@ function ModelsSection() {
     });
     if (!result?.success) throw new Error(result?.error || "语音渠道保存失败");
     refreshCaps();
-    return target;
+    return {
+      target,
+      previous: ttsCapability?.current ? {
+        enabled: ttsCapability.enabled !== false,
+        credential_id: ttsCapability.current.credential_id,
+        model_id: ttsCapability.current.model_id,
+        extras: ttsCapability.current.extras || null,
+      } : null,
+    };
+  };
+
+  const restoreCloudVoice = async (prepared) => {
+    const previous = prepared?.previous;
+    if (!previous?.credential_id || !previous?.model_id) return;
+    await updateCapability("tts", previous);
+    await refreshCaps();
   };
 
   const saveVoice = async (v) => {
@@ -806,7 +826,7 @@ function ModelsSection() {
         ) : null;
       })()}
       {voiceSheet && (
-        <VoiceSheet voice={voiceConfig} capabilities={capabilities} onClose={() => setVoiceSheet(false)} onSave={saveVoice} onPrepareCloud={prepareCloudVoice} />
+        <VoiceSheet voice={voiceConfig} capabilities={capabilities} onClose={() => setVoiceSheet(false)} onSave={saveVoice} onPrepareCloud={prepareCloudVoice} onRestoreCloud={restoreCloudVoice} />
       )}
     </>
   );
