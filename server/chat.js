@@ -570,7 +570,21 @@ export function createChatRouter({
       if (!match) {
         return res.status(400).json({ success: false, error: '只支持base64音频数据' });
       }
-      const ext = match[1].includes('webm') ? 'webm' : match[1].includes('ogg') ? 'ogg' : 'mp4';
+      const mimeType = match[1].toLowerCase();
+      const ext = mimeType.includes('webm')
+        ? 'webm'
+        : mimeType.includes('ogg')
+          ? 'ogg'
+          : /(?:x-)?wav|wave/.test(mimeType)
+            ? 'wav'
+            : /mpeg|mp3/.test(mimeType)
+              ? 'mp3'
+              : /mp4|m4a|aac/.test(mimeType)
+                ? 'mp4'
+                : '';
+      if (!ext) {
+        return res.status(400).json({ success: false, error: '不支持这种音频格式' });
+      }
       const buffer = Buffer.from(match[2], 'base64');
       if (!buffer.length) {
         return res.status(400).json({ success: false, error: '音频内容为空' });

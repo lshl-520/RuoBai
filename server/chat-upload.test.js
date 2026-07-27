@@ -87,3 +87,31 @@ test('POST /api/chat/upload-image rejects unsupported formats', async () => {
     assert.equal(payload.success, false);
   });
 });
+
+test('POST /api/chat/upload-voice keeps WAV audio as a WAV file', async () => {
+  const writes = [];
+  const router = createChatRouter({
+    fileStorage: {
+      mkdir: async () => {},
+      writeFile: async (filePath, content) => {
+        writes.push({ filePath, size: content.length });
+      }
+    }
+  });
+
+  await withServer(createApp({ router }), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/chat/upload-voice`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        audio_data: 'data:audio/wav;base64,UklGRg=='
+      })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.success, true);
+    assert.match(payload.audio_url, /^\/user_assets\/voice\/21-\d+\.wav$/);
+    assert.ok(writes.some(item => item.filePath.endsWith('.wav') && item.size > 0));
+  });
+});
