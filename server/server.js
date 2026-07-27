@@ -27,6 +27,7 @@ import ttsRoutes from './tts.js';
 import postsRoutes from './posts.js';
 import momentRoutes from './moments.js';
 import settingsRoutes from './settings.js';
+import mediaRoutes from './media.js';
 import { attachRealtimeCallServer } from './realtime-call.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -174,6 +175,7 @@ app.use('/api/settings', requireAuth, settingsRoutes);
 app.use('/api/relationship', requireAuth, settingsRoutes);
 app.use('/api/usage', requireAuth, settingsRoutes);
 app.use('/api/push', requireAuth, pushRoutes);
+app.use('/api/media', requireAuth, mediaRoutes);
 
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) {
