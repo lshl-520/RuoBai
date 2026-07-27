@@ -606,7 +606,7 @@ function MessageImages({ images, onOpenImage }) {
           onContextMenu={(event) => event.stopPropagation()}
           aria-label="打开图片预览"
         >
-          <img src={src} alt="聊天图片" />
+          <img src={src} alt="聊天图片" loading="lazy" decoding="async" />
         </button>
       ))}
     </div>

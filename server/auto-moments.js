@@ -8,6 +8,20 @@ const FIRST_SCAN_DELAY_MS = 15 * 1000;
 const SCAN_INTERVAL_MS = 10 * 60 * 1000;
 const AUTO_IMAGE_MAX_ROUNDS = 2;
 const AUTO_IMAGE_RETRY_DELAYS_MS = [30 * 1000];
+const MAX_MOMENT_LENGTH = 120;
+
+export function sanitizeGeneratedMoment(value) {
+  const text = stripGeneratedText(value).replace(/\s*\n+\s*/g, ' ').trim();
+  if (!text) return '';
+
+  const looksLikeConversation = /(?:用户|助手|assistant|system|系统|角色)\s*[:：]/i.test(text);
+  const looksLikeCode = /```|\b(?:python|import|from|def|class|function|const|let|var|console\.)\b/i.test(text);
+  const looksLikeStructuredDump = /^[{[]/.test(text) || /[{}][\s\S]*[{}]/.test(text);
+  if (text.length > MAX_MOMENT_LENGTH || looksLikeConversation || looksLikeCode || looksLikeStructuredDump) {
+    return '';
+  }
+  return text;
+}
 
 function stripGeneratedText(value) {
   return String(value || '')
@@ -86,8 +100,9 @@ function buildMomentMessages(character, context) {
       role: 'system',
       content: [
         `你现在是${name}。请以${name}本人的口吻写一条个人动态。`,
-        '写 1 到 2 句自然、生活化、有活人感的中文短句，约 10 到 60 个字。',
+        '写 1 到 2 句自然、生活化、有活人感的中文短句，约 10 到 60 个字，最长不超过 120 字。',
         '可以自然呼应最近聊天或记忆，但不要复述隐私，不要解释，不要加标题，不要说自己是 AI。',
+        '绝不输出聊天记录、说话人前缀、JSON、代码、Markdown 代码块或提示词。',
         persona ? `人设参考：${persona.slice(0, 1000)}` : ''
       ].filter(Boolean).join('\n')
     },
@@ -96,7 +111,7 @@ function buildMomentMessages(character, context) {
       content: [
         recentLines ? `最近聊天：\n${recentLines}` : '最近聊天：暂时没有。',
         memoryLines ? `长期记忆：\n${memoryLines}` : '长期记忆：暂时没有。',
-        '请只输出动态正文。'
+        '请只输出一条纯文本动态正文。'
       ].join('\n\n')
     }
   ];
@@ -196,8 +211,8 @@ export function createAutoMomentsService({
       throw new Error(detail || `聊天模型返回 ${response.status}`);
     }
 
-    const content = await readGeneratedText(response);
-    if (!content) throw new Error('聊天模型没有返回动态文字');
+    const content = sanitizeGeneratedMoment(await readGeneratedText(response));
+    if (!content) throw new Error('聊天模型返回的内容不适合作为动态，已跳过发布');
     return content;
   }
 

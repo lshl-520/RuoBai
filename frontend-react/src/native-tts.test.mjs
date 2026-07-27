@@ -17,6 +17,8 @@ test('Android APP registers a native text-to-speech bridge', async () => {
   assert.match(plugin, /@CapacitorPlugin\(name = "NativeTextToSpeech"\)/);
   assert.match(plugin, /new TextToSpeech/);
   assert.match(plugin, /TextToSpeech\.QUEUE_FLUSH/);
+  assert.match(plugin, /waitingForInitialization/);
+  assert.match(plugin, /drainInitializationQueue\(\)/);
   assert.match(plugin, /@PluginMethod\s+public void stop/);
 });
 
