@@ -299,7 +299,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete, onTest }) {
             </button>
           </div>
           {fetchMessage && <div className={"channel-feedback " + fetchState}>{fetchMessage}</div>}
-          {models.length === 0 && <div className="model-empty">{noKeyRequired ? "这个渠道会自动使用固定生图模型" : realtimeMode ? "豆包语音会自动登记实时通话和文字转语音" : "点「获取模型列表」拉取，或手动输入"}</div>}
+          {models.length === 0 && <div className="model-empty">{noKeyRequired ? "这个渠道会自动使用固定生图模型" : realtimeMode ? "豆包实时通话使用 App ID + Access Token；普通文字转语音另需 TTS API Key" : "点「获取模型列表」拉取，或手动输入"}</div>}
           {models.length > 0 && models.length <= 10 && (
             <div className="model-chips" style={{ marginTop: 8 }}>
               {models.map((m) => (
@@ -470,7 +470,7 @@ function VoiceSheet({ voice, capabilities, onClose, onSave, onPrepareCloud }) {
           {engine === "volcengine" && (<>
             <label className="field-label">豆包音色 ID</label>
             <input className="fld" value={volcVoice} onChange={(e) => setVolcVoice(e.target.value)} placeholder={DEFAULT_VOLC_VOICE} />
-            <div className="voice-tip">{hasVolcTts ? "已复用实时通话的豆包语音 Key，可试听，也能生成角色语音消息。" : "请先添加或保存一次“豆包语音”渠道，系统会自动登记实时通话和文字转语音。"}</div>
+            <div className="voice-tip">{hasVolcTts ? "已找到豆包文字转语音配置。注意：这里需要 TTS API Key，不能直接使用实时通话的 Access Token。" : "普通文字转语音需要单独的豆包 TTS API Key；实时通话的 Access Token 不能直接替代。"}</div>
           </>)}
 
           <label className="field-label">语速 <span className="lbl-hint">{Number(rate).toFixed(2)}x</span></label>

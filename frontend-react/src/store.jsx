@@ -142,9 +142,9 @@ const CAP_LABELS = { chat: "聊天", image: "图片", voice: "语音", realtime:
 
 /* ===== 语音引擎 ===== */
 const VOICE_ENGINES = [
-  { id: "browser", name: "浏览器语音", sub: "免费 · 内置 · 无需密钥", free: true },
+  { id: "browser", name: "手机 / 浏览器朗读", sub: "免费 · 无需密钥 · 取决于设备语音服务", free: true },
   { id: "qwen", name: "千问 TTS", sub: "阿里千问 · 自然女声", free: false },
-  { id: "volcengine", name: "豆包语音", sub: "实时通话同一把 Key · 高拟真", free: false },
+  { id: "volcengine", name: "豆包文字转语音", sub: "需单独的 TTS API Key · 高拟真", free: false },
 ];
 
 /* ---------- 动态 / 朋友圈 ---------- */
