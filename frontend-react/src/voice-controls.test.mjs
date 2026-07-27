@@ -4,7 +4,9 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import {
+  isQwenTtsModel,
   normalizeVoiceSettings,
+  selectCloudTtsOption,
   speechRecognitionErrorMessage,
 } from './lib/voice-settings.js';
 import { friendlyStreamHttpError } from './lib/chat.js';
@@ -24,6 +26,36 @@ test('speech recognition errors are translated into useful Chinese messages', ()
   assert.equal(speechRecognitionErrorMessage('aborted'), '');
 });
 
+test('千问专属音色固定选择非实时的 voice design 模型', () => {
+  const options = [
+    { credential_id: 20, model_id: 'MiniMax/speech-02-hd' },
+    { credential_id: 20, model_id: 'qwen-tts-2025-05-22' },
+    { credential_id: 20, model_id: 'qwen3-tts-vd-realtime-2026-01-15' },
+    { credential_id: 20, model_id: 'qwen3-tts-vd-2026-01-26' },
+  ];
+
+  assert.equal(isQwenTtsModel('qwen3-tts-vd-realtime-2026-01-15'), false);
+  assert.equal(selectCloudTtsOption({
+    engine: 'qwen',
+    options,
+    current: { credential_id: 20, model_id: 'qwen-tts-2025-05-22' },
+    voiceId: 'qwen-tts-vd-bailian-voice-test',
+  })?.model_id, 'qwen3-tts-vd-2026-01-26');
+});
+
+test('普通千问音色尊重已经明确保存的非实时 TTS 模型', () => {
+  const options = [
+    { credential_id: 20, model_id: 'qwen-tts-2025-05-22' },
+    { credential_id: 20, model_id: 'qwen3-tts-flash' },
+  ];
+  assert.equal(selectCloudTtsOption({
+    engine: 'qwen',
+    options,
+    current: { credential_id: 20, model_id: 'qwen3-tts-flash' },
+    voiceId: 'longwan',
+  })?.model_id, 'qwen3-tts-flash');
+});
+
 test('voice controls use local TTS settings and wait for recognition to finish', async () => {
   const models = await readFile(path.join(__dirname, 'pages', 'models.jsx'), 'utf8');
   const chat = await readFile(path.join(__dirname, 'pages', 'chat.jsx'), 'utf8');
@@ -31,6 +63,7 @@ test('voice controls use local TTS settings and wait for recognition to finish',
   assert.match(models, /<Toggle on=\{voiceConfig\.enabled\}/);
   assert.match(models, /previewTts\(/);
   assert.match(models, /VOLC_TTS_MODEL = "seed-tts-2\.0"/);
+  assert.match(models, /onRestoreCloud\(preparedCloud\)/);
   assert.match(models, /saveVoiceSettings\(\{ \.\.\.voiceConfig, enabled: nextEnabled \}\)/);
   assert.match(chat, /secondsRef\.current/);
   assert.match(chat, /convertToVoice: true/);
