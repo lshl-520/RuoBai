@@ -174,7 +174,14 @@ function MomentImagePreview({ src, onClose }) {
     <div className="chat-image-preview" onClick={onClose}>
       <button className="cip-close" onClick={onClose} aria-label="关闭图片预览">×</button>
       <div className="cip-stage" onClick={(event) => event.stopPropagation()}>
-        <img src={src} alt="动态图片原图" />
+        <img
+          src={`/api/media/preview?path=${encodeURIComponent(src)}`}
+          alt="动态图片高清预览"
+          onError={(event) => {
+            if (event.currentTarget.src.endsWith(src)) return;
+            event.currentTarget.src = src;
+          }}
+        />
       </div>
       <div className="cip-actions" onClick={(event) => event.stopPropagation()}>
         <a className="cip-original" href={src} target="_blank" rel="noreferrer">打开原图</a>
