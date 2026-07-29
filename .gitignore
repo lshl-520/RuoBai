@@ -62,6 +62,10 @@ output/
 *.backup
 *.tmp
 
+# 本地诊断、真机验收和部署中间产物
+/_tmp_*
+/_vendor/
+
 # 桌面元数据
 desktop.ini
 
