@@ -2,7 +2,7 @@
   "runId": "ruobai-ds-20260730",
   "updatedAt": "2026-07-31",
   "phase": "page-design",
-  "step": "Design First review passed; prepare scoped React implementation beginning with the Moments comment flow",
+  "step": "First-pass React alignment is complete; reconcile the approved Figma screens with implemented functionality",
   "figma": {
     "teamName": "新思维's team",
     "teamId": "1628718300400662760",
@@ -355,11 +355,11 @@
   },
   "scope": {
     "p0Components": ["Button", "Input", "Avatar", "Navigation", "Bubble", "Feedback"],
-    "excludedForNow": ["React implementation", "new product features"]
+    "excludedForNow": ["new product features"]
   },
   "next": {
-    "phase": "implementation-planning",
-    "step": "Implement the existing Moments comment flow first, then apply the approved visual rules to Chat Room, Chat List, and Characters one page at a time",
+    "phase": "implementation-review",
+    "step": "Review the first React pass against the approved Figma screens and correct only verified mismatches one page at a time",
     "requirements": [
       "Read component-creation.md before creating components",
       "Run search_design_system again immediately before each component creation",
@@ -370,12 +370,13 @@
       "Bottom Sheet is complete: Default and Busy states expose only the real moment actions (comment, open original image, cancel); Busy visually disables repeated interaction",
       "Loading Skeleton is complete: List, Card, and Chat placeholders are static when reduced motion is requested and do not rely on shimmer or movement",
       "Keep all visual properties bound to existing variables",
-      "Do not modify React",
+      "React first pass is complete for Moments comments, Chat Room, Chat List, and Characters; retain existing real functionality while reviewing",
       "Chat Room first-pass screens completed: Mobile Default (140:2), Mobile Send Failed (140:3), Desktop Default (140:4), Desktop Offline (140:5), Mobile Streaming (144:3), Mobile Voice recording (144:4)",
       "Validated dimensions: mobile 390x844; desktop 1440x900; all free text uses Noto Sans SC",
-      "Chat List first-pass screens completed: Mobile Default (145:2), Mobile Empty (145:3), Desktop Default (145:4)",
+      "Chat List first-pass screens completed: Mobile Default (145:2), Mobile Empty (145:3), Desktop Default (145:4); unsupported list-search controls were removed from all three frames after the React audit",
       "Characters first-pass screens completed: Mobile Default (150:2), Mobile Empty (150:3), Desktop Default (150:4); unreliable relationship metrics are excluded",
-      "Moments comment-flow screens completed: Collapsed (156:2), Expanded (156:3), Focused (156:4), Sending (156:5), Success (156:6), Failed (156:7); all are 390x844 using Noto Sans SC"
+      "Moments comment-flow screens completed: Collapsed (156:2), Expanded (156:3), Focused (156:4), Sending (156:5), Success (156:6), Failed (156:7); all are 390x844 using Noto Sans SC",
+      "Figma structural validation confirmed list-search removal. The MCP screenshot export rendered a blank gray image, so visually recheck these three frames in the Figma client before a final screenshot sign-off."
     ],
     "componentOrder": ["Button", "Input", "Avatar", "Navigation", "Bubble", "Feedback"]
   }
