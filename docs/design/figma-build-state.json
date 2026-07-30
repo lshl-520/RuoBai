@@ -24,7 +24,9 @@
     "P1.a", "P1.b", "P1.c", "P1.d", "P1.e", "P1.f", "P1.g", "P1.h",
     "P2.a", "P2.b", "P2.c",
     "P3.Button.a", "P3.Button.b", "P3.Button.c", "P3.Button.d",
-    "P3.Button.e", "P3.Button.f", "P3.Button.g", "P3.Button.motion"
+    "P3.Button.e", "P3.Button.f", "P3.Button.g", "P3.Button.motion",
+    "P3.Input.a", "P3.Input.b", "P3.Input.c", "P3.Input.d",
+    "P3.Input.e", "P3.Input.f", "P3.Input.g"
   ],
   "partialSteps": [],
   "blockedSteps": [],
@@ -76,7 +78,7 @@
         "variableCount": 9
       }
     },
-    "variableCount": 131,
+    "variableCount": 133,
     "semanticAliasCount": 56,
     "brokenAliasCount": 0,
     "allScopesSet": true,
@@ -98,6 +100,7 @@
       "--- Components": "6:5",
       "04 Components": "6:6",
       "04.1 Button": "19:2",
+      "04.2 Input": "42:2",
       "05 Chat System": "6:7",
       "06 Companion Patterns": "6:8",
       "--- Usage": "6:9",
@@ -116,6 +119,8 @@
     "components": {
       "Button": "23:2",
       "Icon Button": "27:8",
+      "Chat Composer": "75:97",
+      "Voice Input": "84:91",
       "__Icon/Plus": "23:15",
       "__Icon/Loader": "24:2"
     }
@@ -189,6 +194,48 @@
         "Restored loader icon for the Loading state",
         "Removed private icon masters from the delivery screenshot"
       ]
+    },
+    "Input": {
+      "passed": true,
+      "pageId": "42:2",
+      "componentSets": {
+        "Input Field": {
+          "id": "49:27",
+          "variantCount": 18,
+          "axes": {"Type": ["Text", "Search", "Password"], "State": ["Default", "Hover", "Focused", "Filled", "Disabled", "Error"]},
+          "properties": ["Label", "Value", "Helper", "Show Label", "Show Helper"]
+        },
+        "Textarea": {
+          "id": "57:81",
+          "variantCount": 6,
+          "axes": {"State": ["Default", "Hover", "Focused", "Filled", "Disabled", "Error"]},
+          "properties": ["Label", "Value", "Helper", "Show Label", "Show Helper"]
+        },
+        "Chat Composer": {
+          "id": "75:97",
+          "variantCount": 6,
+          "axes": {"State": ["Default", "Focused", "Filled", "Sending", "Disabled", "Error"]},
+          "properties": ["Value", "Show Image", "Show Voice"],
+          "touchTarget": "44x44"
+        },
+        "Voice Input": {
+          "id": "84:91",
+          "variantCount": 6,
+          "axes": {"State": ["Idle", "Hover", "Recording", "Transcribing", "Disabled", "Error"]},
+          "properties": ["Title", "Hint", "Show Keyboard"],
+          "touchTarget": "44x44"
+        }
+      },
+      "unboundSolidPaintCount": 0,
+      "screenshotChecked": true,
+      "notes": [
+        "Chat Composer failure state preserves the typed text and exposes retry wording",
+        "Voice Input distinguishes recording, transcribing, disabled and error states",
+        "Cloned semantic color bindings use resolved fallback paints to avoid black rendering",
+        "Direct icon instances replace blank nested icon-button swaps while keeping 44px controls",
+        "All four component sets include descriptions that match their actual states",
+        "Final full-page review corrected Chat Composer and Voice Input section padding and spacing"
+      ]
     }
   },
   "scope": {
@@ -197,10 +244,10 @@
   },
   "next": {
     "phase": "phase3",
-    "step": "P3 Input",
+    "step": "P3 Avatar",
     "requirements": [
       "Read component-creation.md before creating components",
-      "Run search_design_system again immediately before Button creation",
+      "Run search_design_system again immediately before each component creation",
       "Build and validate one component family at a time",
       "Keep all visual properties bound to existing variables",
       "Do not modify React"
