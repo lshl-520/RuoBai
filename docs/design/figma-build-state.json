@@ -2,7 +2,7 @@
   "runId": "ruobai-ds-20260730",
   "updatedAt": "2026-07-31",
   "phase": "phase3",
-  "step": "P3.Navigation.ready",
+  "step": "P3.Bubble.ready",
   "figma": {
     "teamName": "新思维's team",
     "teamId": "1628718300400662760",
@@ -28,7 +28,8 @@
     "P3.Input.a", "P3.Input.b", "P3.Input.c", "P3.Input.d",
     "P3.Input.e", "P3.Input.f", "P3.Input.g",
     "P3.Avatar.a", "P3.Avatar.b", "P3.Avatar.c", "P3.Avatar.d", "P3.Avatar.e", "P3.Avatar.f", "P3.Avatar.g",
-    "P3.Navigation.a", "P3.Navigation.b", "P3.Navigation.c", "P3.Navigation.d", "P3.Navigation.e"
+    "P3.Navigation.a", "P3.Navigation.b", "P3.Navigation.c", "P3.Navigation.d", "P3.Navigation.e",
+    "P3.Bubble.a", "P3.Bubble.b", "P3.Bubble.c", "P3.Bubble.d", "P3.Bubble.e"
   ],
   "partialSteps": [],
   "blockedSteps": [],
@@ -105,6 +106,7 @@
       "04.2 Input": "42:2",
       "04.3 Avatar": "96:91",
       "04.4 Navigation": "101:2",
+      "04.5 Bubble": "113:2",
       "05 Chat System": "6:7",
       "06 Companion Patterns": "6:8",
       "--- Usage": "6:9",
@@ -131,6 +133,9 @@
       "Navigation Item / Desktop": "106:19",
       "Bottom Navigation": "108:87",
       "Sidebar Navigation": "109:102",
+      "Text Bubble": "115:22",
+      "Media Bubble": "116:20",
+      "System Bubble": "117:11",
       "__Icon/Plus": "23:15",
       "__Icon/Loader": "24:2"
     }
@@ -304,6 +309,41 @@
         "Active state uses icon and text color plus a visible indicator, so it is not conveyed by color alone.",
         "The mobile-item skeleton placeholders were removed after screenshot review; the final page has no clipping or overlap."
       ]
+    },
+    "Bubble": {
+      "passed": true,
+      "pageId": "113:2",
+      "documentationNodeId": "114:3",
+      "componentSets": {
+        "Text Bubble": {
+          "id": "115:22",
+          "variantCount": 6,
+          "axes": {"Sender": ["Companion", "User"], "State": ["Default", "Sending", "Failed"]},
+          "properties": ["Message"],
+          "notes": ["Failed state preserves the original message and includes a 44px retry action."]
+        },
+        "Media Bubble": {
+          "id": "116:20",
+          "variantCount": 4,
+          "axes": {"Sender": ["Companion", "User"], "Type": ["Image", "Voice"]},
+          "notes": ["Voice control is 44px high; image uses an explicit preview placeholder."]
+        },
+        "System Bubble": {
+          "id": "117:11",
+          "variantCount": 3,
+          "axes": {"Type": ["Info", "Loading", "Error"]},
+          "properties": ["Message"],
+          "notes": ["System feedback remains in the chat flow and is not presented as character speech or a browser alert."]
+        }
+      },
+      "unboundSolidPaintCount": 0,
+      "screenshotChecked": true,
+      "actionTargets": {"Retry": "104x44", "Voice": "188x44"},
+      "visualIssuesFixed": [
+        "Restored content-hugging heights after fixed-size calls clipped the first component screenshot.",
+        "Restored the image preview to its 188x132 fixed height and system messages to their 44px content height.",
+        "Removed unused unbound default strokes from both voice play icons."
+      ]
     }
   },
   "scope": {
@@ -312,7 +352,7 @@
   },
   "next": {
     "phase": "phase3",
-    "step": "P3 Bubble",
+    "step": "P3 Feedback",
     "requirements": [
       "Read component-creation.md before creating components",
       "Run search_design_system again immediately before each component creation",
