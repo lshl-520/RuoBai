@@ -614,7 +614,7 @@ function MessageImages({ images, onOpenImage }) {
 }
 
 /* ---------------- 单条消息 ---------------- */
-function Bubble({ m, agent, tts, voice, myAvatar, onDelete, onOpenImage }) {
+function Bubble({ m, agent, tts, voice, myAvatar, onDelete, onOpenImage, onRetry }) {
   const [menuPos, setMenuPos] = useStateC(null); // {x, y} 或 null
   const pressRef = useRefC(null);
 
@@ -681,6 +681,7 @@ function Bubble({ m, agent, tts, voice, myAvatar, onDelete, onOpenImage }) {
               </div>
             )}
             {m.time && <span className="msg-time">{m.time}</span>}
+            {m.failed && <button className="msg-retry" onClick={() => onRetry?.(m._clientId)}>重新发送</button>}
             {m.type === "voice" && <VoiceTranscriptButton transcript={m.transcript || ""} error={m.recognitionError || ""} />}
           </div>
           <div className="row-avatar"><img src={myAvatar} alt="" onError={fallbackToDefaultUserAvatar} /></div>
@@ -905,6 +906,7 @@ function ChatRoom({ agent, onBack }) {
   };
   const modelLabel = modelChoice.modelId || "对话模型";
   const [chatError, setChatError] = useStateC("");
+  const [failedSend, setFailedSend] = useStateC(null);
   const [momentNotice, setMomentNotice] = useStateC("");
   const [uploading, setUploading] = useStateC(false);
   const areaRef = useRefC(null);
@@ -983,28 +985,36 @@ function ChatRoom({ agent, onBack }) {
     return () => document.removeEventListener("paste", onPaste);
   }, []);
 
-  const send = async () => {
-    const t = draft.trim();
-    const images = [...atts];
+  const send = async (retryPayload = null) => {
+    const t = retryPayload ? retryPayload.text : draft.trim();
+    const images = retryPayload ? retryPayload.images : [...atts];
     if ((!t && images.length === 0) || typing || uploading) return;
     const tm = now();
+    const clientId = retryPayload?.clientId || `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    let userSaved = Boolean(retryPayload?.userSaved);
     setChatError("");
+    setFailedSend(null);
     setMomentNotice("");
 
     // UI 显示用户消息（多图显示在一条里）
-    setMsgs((p) => [...p, { who: "me", type: images.length > 0 ? "image" : "text", text: t, images, time: tm }]);
+    setMsgs((p) => retryPayload
+      ? p.map((m) => m._clientId === clientId ? { ...m, failed: false, time: tm } : m)
+      : [...p, { who: "me", type: images.length > 0 ? "image" : "text", text: t, images, time: tm, _clientId: clientId }]);
     setDraft(""); setAtts([]);
     setTyping(true);
 
     try {
       // 1) 存用户消息到数据库（多图：每张存一条，最后一条带文字）
-      if (images.length > 0) {
+      if (!userSaved && images.length > 0) {
         for (let i = 0; i < images.length; i++) {
           const isLast = i === images.length - 1;
           const payload = { role: "user", content: isLast ? t : "", message_type: "image", media_url: images[i] };
-          try { await saveUserMessage(roleId, payload); } catch {}
+          try {
+            const saved = await saveUserMessage(roleId, payload);
+            userSaved = userSaved || Boolean(saved?.item?.id || saved?.success);
+          } catch {}
         }
-      } else {
+      } else if (!userSaved) {
         // 检测绘画意图，走画图流程
         if (images.length === 0 && detectDrawKeywords(t)) {
           try {
@@ -1050,6 +1060,7 @@ function ChatRoom({ agent, onBack }) {
 
         try {
           const saved = await saveUserMessage(roleId, { role: "user", content: t });
+          userSaved = Boolean(saved?.item?.id || saved?.success);
           if (saved?.item?.id) {
             setMsgs((p) => {
               const copy = [...p];
@@ -1081,6 +1092,7 @@ function ChatRoom({ agent, onBack }) {
         ...(modelChoice.credentialId && modelChoice.modelId ? { credential_id: modelChoice.credentialId, model_id: modelChoice.modelId } : {}),
         ...(modelChoice.thinkLevel && modelChoice.thinkLevel !== "off" ? { thinking_level: modelChoice.thinkLevel } : {}),
       };
+      let streamError = "";
 
       await streamAssistantReply(roleId, streamPayload, {
         onToken: (token) => {
@@ -1088,9 +1100,10 @@ function ChatRoom({ agent, onBack }) {
           setMsgs((p) => p.map((m) => m._id === replyId ? { ...m, text: fullReply } : m));
         },
         onError: (errMsg) => {
-          setChatError(errMsg);
+          streamError = String(errMsg || "发送失败，请检查后端和模型配置。");
         },
       });
+      if (streamError) throw new Error(streamError);
 
       // 流式结束，更新时间和去掉 streaming 标记
       setMsgs((p) => p.map((m) => m._id === replyId ? { ...m, time: now(), _streaming: false } : m));
@@ -1106,6 +1119,8 @@ function ChatRoom({ agent, onBack }) {
       }
     } catch (err) {
       setChatError(err instanceof Error ? err.message : "发送失败，请检查后端和模型配置。");
+      setFailedSend({ clientId, text: t, images, userSaved });
+      setMsgs((p) => p.map((m) => m._clientId === clientId ? { ...m, failed: true } : m));
     } finally {
       setTyping(false);
     }
@@ -1300,7 +1315,7 @@ function ChatRoom({ agent, onBack }) {
 
       <div className="msg-area" ref={areaRef}>
         {q.trim() && <div className="search-note">找到 {shown.filter((m) => m.type !== "time").length} 条包含"{q.trim()}"的记录</div>}
-        {shown.map((m, i) => (m.type === "time" && q.trim()) ? null : <Bubble key={i} m={m} agent={agent} tts={voiceSettings.enabled && !q.trim()} voice={voiceSettings} myAvatar={myAvatar} onDelete={deleteMsg} onOpenImage={setPreviewImage} />)}
+        {shown.map((m, i) => (m.type === "time" && q.trim()) ? null : <Bubble key={i} m={m} agent={agent} tts={voiceSettings.enabled && !q.trim()} voice={voiceSettings} myAvatar={myAvatar} onDelete={deleteMsg} onOpenImage={setPreviewImage} onRetry={(clientId) => { if (failedSend?.clientId === clientId) send(failedSend); }} />)}
         {typing && !q.trim() && <Typing agent={agent} />}
         {momentNotice && <div className="chat-notice" onClick={() => setMomentNotice("")}>{momentNotice}<span style={{marginLeft:8,opacity:0.6}}>点击关闭</span></div>}
         {chatError && <div className="chat-error" onClick={() => setChatError("")}>{chatError}<span style={{marginLeft:8,opacity:0.6}}>点击关闭</span></div>}
