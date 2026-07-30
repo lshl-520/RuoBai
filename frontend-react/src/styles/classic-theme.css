@@ -120,7 +120,7 @@ html[data-theme="classic"] .pad { padding-left: 16px; padding-right: 16px; }
 html[data-theme="classic"] .section-label { color: #7e2344; font-family: var(--serif); font-size: 14px; }
 html[data-theme="classic"] .sl-line { background: #f2d4df; }
 
-/* ===== 聊天列表：旧版描边卡 + 亲密度条 ===== */
+/* ===== 聊天列表：旧版描边卡 ===== */
 html[data-theme="classic"] .cl-screen .cl-topbar { padding-bottom: 8px; }
 html[data-theme="classic"] .cl-screen .cl-topbar h1::first-letter { color: #8b294b; }
 html[data-theme="classic"] .chat-list { padding-top: 7px; padding-bottom: 24px; }
@@ -149,7 +149,6 @@ html[data-theme="classic"] .cl-card::before { display: none; }
 html[data-theme="classic"] .cl-avatar { width: 58px; height: 58px; flex: 0 0 58px; }
 html[data-theme="classic"] .cl-avatar img { border-radius: 18px; border: 1px solid #f1c2d3; }
 html[data-theme="classic"] .cl-online { border-color: #fff; }
-html[data-theme="classic"] .cl-glow { display: none; }
 html[data-theme="classic"] .cl-main { min-width: 0; }
 html[data-theme="classic"] .cl-name { color: #59172f; font-family: var(--serif); font-size: 16px; }
 html[data-theme="classic"] .cl-star {
@@ -160,28 +159,6 @@ html[data-theme="classic"] .cl-star {
 }
 html[data-theme="classic"] .cl-msg { color: #c04c75; }
 html[data-theme="classic"] .cl-arrow { display: none; }
-html[data-theme="classic"] .cl-classic-meter {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-top: 7px;
-}
-html[data-theme="classic"] .cl-classic-meter > span {
-  height: 4px;
-  border-radius: 99px;
-  background: #f7dbe5;
-  flex: 1;
-  overflow: hidden;
-}
-html[data-theme="classic"] .cl-classic-meter i {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #f18bad, #df4b7d);
-}
-html[data-theme="classic"] .cl-classic-meter b { color: #e15a87; font-size: 10px; font-weight: 600; }
-.cl-classic-meter { display: none; }
-
 /* ===== 角色页：旧版信息主卡 + 横向角色列表 ===== */
 html[data-theme="classic"] .hero {
   height: 262px;
