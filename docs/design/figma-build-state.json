@@ -2,7 +2,7 @@
   "runId": "ruobai-ds-20260730",
   "updatedAt": "2026-07-31",
   "phase": "page-design",
-  "step": "Chat Room golden page: first four desktop/mobile states completed and visually validated",
+  "step": "Chat Room golden page: six desktop/mobile states completed and visually validated",
   "figma": {
     "teamName": "新思维's team",
     "teamId": "1628718300400662760",
@@ -31,7 +31,7 @@
     "P3.Navigation.a", "P3.Navigation.b", "P3.Navigation.c", "P3.Navigation.d", "P3.Navigation.e",
     "P3.Bubble.a", "P3.Bubble.b", "P3.Bubble.c", "P3.Bubble.d", "P3.Bubble.e",
     "P3.Feedback.a", "P3.Feedback.b", "P3.Feedback.c", "P3.Feedback.d", "P3.Feedback.e",
-    "P4", "Page.ChatRoom.a", "Page.ChatRoom.b", "Page.ChatRoom.c", "Page.ChatRoom.d"
+    "P4", "Page.ChatRoom.a", "Page.ChatRoom.b", "Page.ChatRoom.c", "Page.ChatRoom.d", "Page.ChatRoom.e", "Page.ChatRoom.f"
   ],
   "partialSteps": [],
   "blockedSteps": [],
@@ -371,7 +371,7 @@
       "Loading Skeleton is complete: List, Card, and Chat placeholders are static when reduced motion is requested and do not rely on shimmer or movement",
       "Keep all visual properties bound to existing variables",
       "Do not modify React",
-      "Chat Room first-pass screens completed: Mobile Default (140:2), Mobile Send Failed (140:3), Desktop Default (140:4), Desktop Offline (140:5)",
+      "Chat Room first-pass screens completed: Mobile Default (140:2), Mobile Send Failed (140:3), Desktop Default (140:4), Desktop Offline (140:5), Mobile Streaming (144:3), Mobile Voice recording (144:4)",
       "Validated dimensions: mobile 390x844; desktop 1440x900; all free text uses Noto Sans SC"
     ],
     "componentOrder": ["Button", "Input", "Avatar", "Navigation", "Bubble", "Feedback"]
