@@ -36,6 +36,12 @@ test("聊天列表不把角色关系数据伪装成等级进度", () => {
   assert.doesNotMatch(classic, /\.cl-classic-meter/);
 });
 
+test("聊天列表不把角色人设伪装成最近聊天内容", () => {
+  assert.doesNotMatch(chat, /role\.persona \? role\.persona\.slice/);
+  assert.match(chat, /a\.tag \|\| "点击开始聊天"/);
+  assert.doesNotMatch(chat, /lastTime|unread/);
+});
+
 test("八个页面共用同一套 React 功能路由，不按主题复制业务页面", () => {
   for (const path of ["/", "/auth", "/chat", "/characters", "/moments", "/memory", "/profile"]) {
     assert.ok(app.includes(`path="${path}"`), `缺少 ${path} 路由`);

@@ -144,10 +144,8 @@
   padding: 2px 7px; border-radius: 999px;
   background: var(--rose-tint); color: var(--rose-deep);
 }
-.cl-time { font-size: 10.5px; color: var(--ink-faint); margin-left: auto; flex-shrink: 0; }
 .cl-bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 3px; }
 .cl-msg { font-size: 12.5px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.4; }
-.cl-badge { flex-shrink: 0; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--rose); color: #fff; font-size: 11px; font-weight: 600; display: grid; place-items: center; }
 
 /* 右侧箭头 */
 .cl-arrow { flex-shrink: 0; color: var(--ink-ghost); transition: transform 0.2s; }

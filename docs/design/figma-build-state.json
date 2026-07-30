@@ -373,7 +373,7 @@
       "React first pass is complete for Moments comments, Chat Room, Chat List, and Characters; retain existing real functionality while reviewing",
       "Chat Room first-pass screens completed: Mobile Default (140:2), Mobile Send Failed (140:3), Desktop Default (140:4), Desktop Offline (140:5), Mobile Streaming (144:3), Mobile Voice recording (144:4)",
       "Validated dimensions: mobile 390x844; desktop 1440x900; all free text uses Noto Sans SC",
-      "Chat List first-pass screens completed: Mobile Default (145:2), Mobile Empty (145:3), Desktop Default (145:4); unsupported list-search controls were removed from all three frames after the React audit",
+      "Chat List first-pass screens completed: Mobile Default (145:2), Mobile Empty (145:3), Desktop Default (145:4); unsupported list-search, timestamp, unread-count, and recent-message controls were removed after the React audit. Default rows now show only real role tags or an explicit start-chat prompt.",
       "Characters first-pass screens completed: Mobile Default (150:2), Mobile Empty (150:3), Desktop Default (150:4); unreliable relationship metrics are excluded",
       "Moments comment-flow screens completed: Collapsed (156:2), Expanded (156:3), Focused (156:4), Sending (156:5), Success (156:6), Failed (156:7); all are 390x844 using Noto Sans SC",
       "Figma structural validation confirmed list-search removal. The MCP screenshot export rendered a blank gray image, so visually recheck these three frames in the Figma client before a final screenshot sign-off."
