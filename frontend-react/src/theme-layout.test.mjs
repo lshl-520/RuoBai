@@ -10,6 +10,7 @@ const moments = await readFile(new URL("./pages/moments.jsx", import.meta.url), 
 const chat = await readFile(new URL("./pages/chat.jsx", import.meta.url), "utf8");
 const classic = await readFile(new URL("./styles/classic-theme.css", import.meta.url), "utf8");
 const components = await readFile(new URL("./styles/components.css", import.meta.url), "utf8");
+const components2 = await readFile(new URL("./styles/components2.css", import.meta.url), "utf8");
 
 test("原版主题在首次绘制前恢复并最后加载覆盖样式", () => {
   assert.match(main, /ruobai_theme/);
@@ -65,6 +66,13 @@ test("角色页不把关系数据或临时状态伪装成角色资料", () => {
 
 test("空状态不使用持续漂浮来伪造角色在场", () => {
   assert.doesNotMatch(components, /emptyFloat/);
+});
+
+test("聊天室立绘不用持续呼吸或光晕伪造状态", () => {
+  for (const selector of ["chat-fig-glow", "chat-fig-img", "bigview-glow"]) {
+    assert.doesNotMatch(components2, new RegExp(`\\.${selector}\\s*\\{[^}]*animation:`));
+  }
+  assert.doesNotMatch(components2, /bigviewBreathe|breatheFig|temp-dot/);
 });
 
 test("原版动态装饰头像有等价筛选入口，聊天室常驻立绘不能被主题隐藏", () => {
