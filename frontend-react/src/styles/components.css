@@ -386,6 +386,14 @@
 .m-comments { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: var(--paper-2); display: flex; flex-direction: column; gap: 6px; }
 .m-comment { font-size: 12.5px; line-height: 1.5; color: var(--ink-soft); }
 .mc-name { font-weight: 600; color: var(--rose-deep); margin-right: 5px; }
+.m-comment-empty { font-size: 12.5px; color: var(--ink-faint); }
+.m-comment-composer { display: flex; gap: 8px; margin-top: 4px; }
+.m-comment-composer input { min-width: 0; flex: 1; height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); color: var(--ink); font: inherit; font-size: 13px; }
+.m-comment-composer input:focus { outline: 2px solid color-mix(in srgb, var(--rose) 35%, transparent); border-color: var(--rose); }
+.m-comment-composer button, .m-comment-error button { min-height: 40px; padding: 0 14px; border-radius: 10px; background: var(--rose); color: #fff; font-size: 13px; font-weight: 600; }
+.m-comment-composer button:disabled, .m-comment-error button:disabled { opacity: .5; cursor: not-allowed; }
+.m-comment-error { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border: 1px solid var(--danger, #c94d4d); border-radius: 10px; color: var(--danger, #a33c3c); font-size: 12px; }
+.m-comment-error button { min-height: 36px; padding: 0 10px; background: transparent; color: inherit; border: 1px solid currentColor; }
 .fab { position: absolute; right: 18px; bottom: 18px; z-index: 15; width: 52px; height: 52px; border-radius: 50%; background: var(--rose); color: #fff; display: grid; place-items: center; box-shadow: var(--shadow-rose); transition: transform 0.15s; }
 .fab:active { transform: scale(0.9); }
 .fab svg { width: 22px; height: 22px; }

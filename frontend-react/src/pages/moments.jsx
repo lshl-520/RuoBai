@@ -1,7 +1,7 @@
 import React from "react";
 import { Icon, Bars } from "../store.jsx";
 import { getRoles, getRolePortraitSrc, getRoleAvatarRound } from "../lib/roles.js";
-import { getMoments, createMoment, likeMoment as apiLike, deleteMoment as apiDelete } from "../lib/moments.js";
+import { getMoments, createMoment, likeMoment as apiLike, deleteMoment as apiDelete, commentMoment } from "../lib/moments.js";
 import { getSessionProfile } from "../lib/profile.js";
 import {
   DEFAULT_ROLE_AVATAR,
@@ -39,8 +39,12 @@ function mapMoment(m, agentsMap, user) {
   };
 }
 
-function MomentCard({ m, onLike, onDelete, onOpenImage, currentUserId }) {
+function MomentCard({ m, onLike, onDelete, onOpenImage, onComment, currentUserId }) {
   const [isLiking, setIsLiking] = React.useState(false);
+  const [commentsOpen, setCommentsOpen] = React.useState(false);
+  const [commentDraft, setCommentDraft] = React.useState("");
+  const [commentSending, setCommentSending] = React.useState(false);
+  const [commentError, setCommentError] = React.useState("");
   const moodTags = m.mood ? m.mood.trim().split(/\s+/).filter(Boolean) : [];
 
   const handleLike = async () => {
@@ -48,6 +52,22 @@ function MomentCard({ m, onLike, onDelete, onOpenImage, currentUserId }) {
     setIsLiking(true);
     await onLike(m.id);
     setTimeout(() => setIsLiking(false), 300);
+  };
+
+  const submitComment = async () => {
+    const content = commentDraft.trim();
+    if (!content || commentSending) return;
+    setCommentSending(true);
+    setCommentError("");
+    try {
+      await onComment(m.id, content);
+      setCommentDraft("");
+      setCommentsOpen(true);
+    } catch (error) {
+      setCommentError(error?.message || "评论没有发送成功，请重试。");
+    } finally {
+      setCommentSending(false);
+    }
   };
 
   return (
@@ -143,14 +163,36 @@ function MomentCard({ m, onLike, onDelete, onOpenImage, currentUserId }) {
             >
               <Icon name={m.liked ? "heartFill" : "heart"} /> {m.likes}
             </button>
-            <button className="m-act"><Icon name="comment" /> {m.comments.length}</button>
+            <button className="m-act" onClick={() => setCommentsOpen((open) => !open)} aria-expanded={commentsOpen}>
+              <Icon name="comment" /> {m.comments.length}
+            </button>
           </div>
         </div>
-        {m.comments.length > 0 && (
+        {commentsOpen && (
           <div className="m-comments">
             {m.comments.map((c, i) => (
               <div key={i} className="m-comment"><span className="mc-name">{c.name}</span>{c.text}</div>
             ))}
+            {m.comments.length === 0 && <div className="m-comment-empty">还没有评论，写下第一句吧。</div>}
+            {commentError && (
+              <div className="m-comment-error" role="alert">
+                <span>{commentError}</span>
+                <button type="button" onClick={submitComment} disabled={commentSending}>重试</button>
+              </div>
+            )}
+            <div className="m-comment-composer">
+              <input
+                value={commentDraft}
+                onChange={(event) => { setCommentDraft(event.target.value); setCommentError(""); }}
+                onKeyDown={(event) => { if (event.key === "Enter") submitComment(); }}
+                placeholder="写条评论…"
+                aria-label="评论内容"
+                disabled={commentSending}
+              />
+              <button type="button" onClick={submitComment} disabled={!commentDraft.trim() || commentSending}>
+                {commentSending ? "发送中" : "发送"}
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -472,6 +514,12 @@ function MomentsScreen() {
     }
   };
 
+  const handleComment = async (id, content) => {
+    const result = await commentMoment(id, { content });
+    if (!result?.success) throw new Error(result?.error || "评论没有发送成功，请重试。");
+    await fetchMoments(filter);
+  };
+
   const handlePost = async (data) => {
     try {
       await createMoment({
@@ -522,7 +570,7 @@ function MomentsScreen() {
         </div>
       ) : (
         <div className="moments-list pad">
-          {list.map((m) => <MomentCard key={m.id} m={m} onLike={handleLike} onDelete={handleDelete} onOpenImage={setPreviewImage} currentUserId={user?.id} />)}
+          {list.map((m) => <MomentCard key={m.id} m={m} onLike={handleLike} onComment={handleComment} onDelete={handleDelete} onOpenImage={setPreviewImage} currentUserId={user?.id} />)}
           <div style={{ height: 20 }} />
         </div>
       )}
