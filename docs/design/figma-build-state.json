@@ -1,8 +1,8 @@
 {
   "runId": "ruobai-ds-20260730",
   "updatedAt": "2026-07-30",
-  "phase": "phase2",
-  "step": "P2.c",
+  "phase": "phase3",
+  "step": "P3.Button.checkpoint",
   "figma": {
     "teamName": "新思维's team",
     "teamId": "1628718300400662760",
@@ -22,12 +22,14 @@
   "completedSteps": [
     "P0.a", "P0.b", "P0.c", "P0.d", "P0.e", "P0.f",
     "P1.a", "P1.b", "P1.c", "P1.d", "P1.e", "P1.f", "P1.g", "P1.h",
-    "P2.a", "P2.b", "P2.c"
+    "P2.a", "P2.b", "P2.c",
+    "P3.Button.a", "P3.Button.b", "P3.Button.c", "P3.Button.d",
+    "P3.Button.e", "P3.Button.f", "P3.Button.g"
   ],
   "partialSteps": [],
   "blockedSteps": [],
   "blocker": null,
-  "awaitingApproval": null,
+  "awaitingApproval": "User visual approval of the completed Button family before starting Input.",
   "connectionDiagnostics": {
     "oauth": "completed",
     "endpointReachable": true,
@@ -56,7 +58,7 @@
       "01 Color": {
         "id": "VariableCollectionId:1:3",
         "modes": ["微光", "经典"],
-        "variableCount": 27
+        "variableCount": 28
       },
       "02 Dimensions": {
         "id": "VariableCollectionId:1:4",
@@ -69,8 +71,8 @@
         "variableCount": 18
       }
     },
-    "variableCount": 121,
-    "semanticAliasCount": 54,
+    "variableCount": 122,
+    "semanticAliasCount": 56,
     "brokenAliasCount": 0,
     "allScopesSet": true,
     "allWebCodeSyntaxSet": true,
@@ -90,6 +92,7 @@
       "03 Foundations": "6:4",
       "--- Components": "6:5",
       "04 Components": "6:6",
+      "04.1 Button": "19:2",
       "05 Chat System": "6:7",
       "06 Companion Patterns": "6:8",
       "--- Usage": "6:9",
@@ -105,7 +108,12 @@
       "dimensions": "11:2",
       "shadows": "12:2"
     },
-    "components": {}
+    "components": {
+      "Button": "23:2",
+      "Icon Button": "27:8",
+      "__Icon/Plus": "23:15",
+      "__Icon/Loader": "24:2"
+    }
   },
   "phase2Validation": {
     "passed": true,
@@ -124,13 +132,52 @@
     ],
     "overflowOrClipping": false
   },
+  "phase3Validation": {
+    "Button": {
+      "passed": true,
+      "pageId": "19:2",
+      "documentationNodeId": "20:2",
+      "componentSets": {
+        "Button": {
+          "id": "23:2",
+          "variantCount": 24,
+          "axes": {
+            "Style": ["Primary", "Secondary", "Text", "Danger"],
+            "State": ["Default", "Hover", "Pressed", "Focused", "Disabled", "Loading"]
+          },
+          "properties": ["Label"]
+        },
+        "Icon Button": {
+          "id": "27:8",
+          "variantCount": 6,
+          "axes": {
+            "State": ["Default", "Hover", "Pressed", "Focused", "Disabled", "Loading"]
+          },
+          "properties": ["Icon"],
+          "touchTarget": "44x44"
+        }
+      },
+      "foundationChanges": [
+        "Added color/text/inverse as a two-mode semantic alias",
+        "Renamed size/input/compact|default|large to size/control/compact|default|large"
+      ],
+      "unboundSolidPaintCount": 0,
+      "screenshotChecked": true,
+      "visualIssuesFixed": [
+        "Corrected unresolved black fallback paints on Primary and Danger variants",
+        "Corrected black fallback paints on Icon Button Default and Focused",
+        "Restored loader icon for the Loading state",
+        "Removed private icon masters from the delivery screenshot"
+      ]
+    }
+  },
   "scope": {
     "p0Components": ["Button", "Input", "Avatar", "Navigation", "Bubble", "Feedback"],
     "excludedForNow": ["full product screens", "React implementation", "new product features"]
   },
   "next": {
     "phase": "phase3",
-    "step": "P3 Button",
+    "step": "P3 Input after Button approval",
     "requirements": [
       "Read component-creation.md before creating components",
       "Run search_design_system again immediately before Button creation",
