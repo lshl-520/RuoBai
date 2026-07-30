@@ -1,6 +1,6 @@
 import React from "react";
-import { Icon, AGENTS } from "../store.jsx";
-import { getRoles, getRolePortraitSrc, clampIntimacy, createRole, updateRole, switchRole, buildRolePayload, restoreRole } from "../lib/roles.js";
+import { Icon } from "../store.jsx";
+import { getRoles, getRolePortraitSrc, createRole, updateRole, switchRole, buildRolePayload, restoreRole } from "../lib/roles.js";
 /* 角色 — 列表(Hero + 网格) + 详情 + 创建/编辑 */
 const { useState: useStateA, useEffect: useEffectA, useRef: useRefA } = React;
 
@@ -23,16 +23,11 @@ function toAgent(role) {
     tagline: role.persona ? role.persona.slice(0, 30) + "…" : "",
     persona: role.persona || "",
     tags: role.tag ? [role.tag] : [],
-    intimacy: clampIntimacy(role.intimacy),
-    temp: Number(role.mood) || 36.5,
-    days: role.first_chat_at ? Math.max(1, Math.ceil((Date.now() - new Date(role.first_chat_at).getTime()) / 86400000)) : 0,
     online: Boolean(role.is_active),
     isDefault: Boolean(role.is_active),
     autoMoments: Boolean(role.auto_moments_enabled),
     momentFreq: [2, 4, 6].includes(Number(role.auto_moments_daily_max)) ? Number(role.auto_moments_daily_max) : 4,
     handle: role.tag || "角色",
-    voice: "默认",
-    lastMsg: "",
     _raw: role,
   };
 }
@@ -51,15 +46,7 @@ function AgentHero({ agent, onChat, onDetail }) {
       </div>
       <div className="hero-body">
         <div className="hero-name serif">{agent.name}</div>
-        <div className="hero-quote">「{agent.tagline}」</div>
-        <div className="hero-stats">
-          <div className="hs"><b>{agent.days}</b><span>在一起 · 天</span></div>
-          <div className="hs-div" />
-          <div className="hs"><b>{(Number(agent.temp) || 36.5).toFixed(1)}°</b><span>关系温度</span></div>
-          <div className="hs-div" />
-          <div className="hs"><b>{agent.intimacy}</b><span>亲密度</span></div>
-        </div>
-        <div className="hero-temp"><div className="temp-bar"><i style={{ width: `${agent.intimacy}%` }} /></div></div>
+        {agent.tagline && <div className="hero-quote">「{agent.tagline}」</div>}
         <div className="hero-cta-row">
           <button className="pill pill-primary hero-cta" onClick={() => onChat(agent)}>
             <Icon name="chat" /> 继续和{agent.name}聊
@@ -79,10 +66,9 @@ function AgentCard({ agent, onDetail }) {
         <img src={agent.cover} alt={agent.name} />
         <div className="ac-scrim" />
         {agent.online && <span className="ac-online" />}
-        <div className="ac-overlay">
-          <div className="ac-name serif">{agent.name}</div>
-          <div className="ac-temp"><Icon name="flame" /> {(Number(agent.temp) || 36.5).toFixed(1)}° · {agent.days}天</div>
-        </div>
+          <div className="ac-overlay">
+            <div className="ac-name serif">{agent.name}</div>
+          </div>
       </div>
       <div className="ac-meta">
         <div className="ac-tags">
@@ -169,7 +155,6 @@ function AgentsScreen({ agents: fallbackAgents, onChat, onDetail, onCreate, onRe
           <div className="sub">{agents.length} 位 · 各自记得不一样的你</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="icon-btn"><Icon name="search" /></button>
           <button className="icon-btn" style={{ background: "var(--rose)", color: "#fff", boxShadow: "var(--shadow-rose)" }} onClick={onCreate}>
             <Icon name="plus" />
           </button>
@@ -198,7 +183,7 @@ function AgentsScreen({ agents: fallbackAgents, onChat, onDetail, onCreate, onRe
 }
 
 /* ============ 角色详情 ============ */
-function CharacterDetail({ agent, memCount, onClose, onChat, onEdit, onDelete, onSetMain, onOnboard }) {
+function CharacterDetail({ agent, onClose, onChat, onEdit, onDelete, onSetMain, onOnboard }) {
   const [confirm, setConfirm] = useStateA(false);
   const [deleting, setDeleting] = useStateA(false);
   const [deleteError, setDeleteError] = useStateA("");
@@ -233,15 +218,6 @@ function CharacterDetail({ agent, memCount, onClose, onChat, onEdit, onDelete, o
       <div className="detail-body">
         <div className="detail-quote serif">「{agent.tagline}」</div>
 
-        <div className="detail-stats">
-          <div className="ds"><b>{agent.days}</b><span>在一起·天</span></div>
-          <div className="ds"><b>{agent.temp.toFixed(1)}°</b><span>关系温度</span></div>
-          <div className="ds"><b>{agent.intimacy}</b><span>亲密度</span></div>
-          <div className="ds"><b>{memCount}</b><span>记忆条</span></div>
-        </div>
-
-        <div className="temp-bar" style={{ margin: "16px 2px 4px" }}><i style={{ width: `${agent.intimacy}%` }} /></div>
-
         <div className="detail-section-t">人设</div>
         <div className="detail-persona">{agent.persona}</div>
 
@@ -268,16 +244,8 @@ function CharacterDetail({ agent, memCount, onClose, onChat, onEdit, onDelete, o
         </div>
 
         <div className="detail-row">
-          <span className="dr-l">声音</span>
-          <span className="dr-r">{agent.voice}</span>
-        </div>
-        <div className="detail-row">
           <span className="dr-l">主动发动态</span>
           <span className="dr-r">{agent.autoMoments ? "已开启" : "已关闭"}</span>
-        </div>
-        <div className="detail-row">
-          <span className="dr-l">最近一句</span>
-          <span className="dr-r ellip">{agent.lastMsg}</span>
         </div>
       </div>
 
