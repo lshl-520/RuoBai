@@ -2,7 +2,7 @@
   "runId": "ruobai-ds-20260730",
   "updatedAt": "2026-07-30",
   "phase": "phase3",
-  "step": "P3.Button.checkpoint",
+  "step": "P3.Input.ready",
   "figma": {
     "teamName": "新思维's team",
     "teamId": "1628718300400662760",
@@ -24,12 +24,12 @@
     "P1.a", "P1.b", "P1.c", "P1.d", "P1.e", "P1.f", "P1.g", "P1.h",
     "P2.a", "P2.b", "P2.c",
     "P3.Button.a", "P3.Button.b", "P3.Button.c", "P3.Button.d",
-    "P3.Button.e", "P3.Button.f", "P3.Button.g"
+    "P3.Button.e", "P3.Button.f", "P3.Button.g", "P3.Button.motion"
   ],
   "partialSteps": [],
   "blockedSteps": [],
   "blocker": null,
-  "awaitingApproval": "User visual approval of the completed Button family before starting Input.",
+  "awaitingApproval": null,
   "connectionDiagnostics": {
     "oauth": "completed",
     "endpointReachable": true,
@@ -69,9 +69,14 @@
         "id": "VariableCollectionId:1:5",
         "modes": ["Value"],
         "variableCount": 18
+      },
+      "04 Motion": {
+        "id": "VariableCollectionId:35:8",
+        "modes": ["Value"],
+        "variableCount": 9
       }
     },
-    "variableCount": 122,
+    "variableCount": 131,
     "semanticAliasCount": 56,
     "brokenAliasCount": 0,
     "allScopesSet": true,
@@ -163,6 +168,21 @@
       ],
       "unboundSolidPaintCount": 0,
       "screenshotChecked": true,
+      "motion": {
+        "passed": true,
+        "documentationNodeId": "36:8",
+        "prototypeNodeId": "36:48",
+        "motionApiAvailable": true,
+        "interactiveComponentFamilies": 5,
+        "tokens": {
+          "hover": "120ms EASE_OUT",
+          "pressed": "80ms QUICK; scale 0.98; y +1px",
+          "release": "140ms EASE_OUT",
+          "loading": "800ms LINEAR loop"
+        },
+        "reducedMotion": "Disable movement, scale, and continuous rotation; retain color, border, text, and icon state changes.",
+        "videoExportChecked": true
+      },
       "visualIssuesFixed": [
         "Corrected unresolved black fallback paints on Primary and Danger variants",
         "Corrected black fallback paints on Icon Button Default and Focused",
@@ -177,7 +197,7 @@
   },
   "next": {
     "phase": "phase3",
-    "step": "P3 Input after Button approval",
+    "step": "P3 Input",
     "requirements": [
       "Read component-creation.md before creating components",
       "Run search_design_system again immediately before Button creation",
