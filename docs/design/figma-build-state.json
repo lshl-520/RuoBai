@@ -376,7 +376,7 @@
       "Chat List first-pass screens completed: Mobile Default (145:2), Mobile Empty (145:3), Desktop Default (145:4); unsupported list-search, timestamp, unread-count, and recent-message controls were removed after the React audit. Default rows now show only real role tags or an explicit start-chat prompt.",
       "Characters first-pass screens completed: Mobile Default (150:2), Mobile Empty (150:3), Desktop Default (150:4); unreliable relationship metrics are excluded",
       "Moments comment-flow screens completed: Collapsed (156:2), Expanded (156:3), Focused (156:4), Sending (156:5), Success (156:6), Failed (156:7); all are 390x844 using Noto Sans SC",
-      "Figma structural validation confirmed list-search removal. Both MCP export and direct Figma desktop-client inspection render the three Chat List frames as gray blank canvases while the MCP still reports child nodes. Treat this as a formal-file rendering/content integrity issue: restore or rebuild visible frame contents, then repeat client visual sign-off."
+      "Figma structural validation confirmed list-search removal. A repair audit found every Chat List child using the same gray fallback fill as its canvas; all affected fills now bind to existing color variables. Direct Figma desktop-client review confirms Mobile Default, Mobile Empty, and Desktop Default render correctly with no clipping or overlap."
     ],
     "componentOrder": ["Button", "Input", "Avatar", "Navigation", "Bubble", "Feedback"]
   }
