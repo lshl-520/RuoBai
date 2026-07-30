@@ -140,9 +140,6 @@ function toAgent(role) {
     avatar: getRolePortraitSrc(role) || `/assets/portraits/round/0.png`,
     cover: getRoleFullPortrait(role),
     tag: role.tag || "",
-    lastMsg: role.persona ? role.persona.slice(0, 30) + "…" : "点击开始聊天",
-    lastTime: "",
-    unread: 0,
     online: Boolean(role.is_active),
     isDefault: Boolean(role.is_active),
     _raw: role,
@@ -228,11 +225,9 @@ function ChatListScreen({ onOpen }) {
               <div className="cl-top">
                 <span className="cl-name">{a.name}</span>
                 {a.isDefault && <span className="cl-star">主陪伴</span>}
-                <span className="cl-time">{a.lastTime}</span>
               </div>
               <div className="cl-bottom">
-                <span className="cl-msg">{a.lastMsg}</span>
-                {a.unread > 0 && <span className="cl-badge">{a.unread}</span>}
+                <span className="cl-msg">{a.tag || "点击开始聊天"}</span>
               </div>
             </div>
             <div className="cl-arrow"><Icon name="chevron" /></div>
