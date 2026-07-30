@@ -2,7 +2,7 @@
   "runId": "ruobai-ds-20260730",
   "updatedAt": "2026-07-31",
   "phase": "phase3",
-  "step": "P3.Feedback.Confirmation.ready",
+  "step": "P3.Feedback.ContentState.ready",
   "figma": {
     "teamName": "新思维's team",
     "teamId": "1628718300400662760",
@@ -31,7 +31,7 @@
     "P3.Navigation.a", "P3.Navigation.b", "P3.Navigation.c", "P3.Navigation.d", "P3.Navigation.e",
     "P3.Bubble.a", "P3.Bubble.b", "P3.Bubble.c", "P3.Bubble.d", "P3.Bubble.e"
   ],
-  "partialSteps": ["P3.Feedback.Notice", "P3.Feedback.Confirmation"],
+  "partialSteps": ["P3.Feedback.Notice", "P3.Feedback.Confirmation", "P3.Feedback.ContentState"],
   "blockedSteps": [],
   "blocker": null,
   "awaitingApproval": null,
@@ -352,13 +352,14 @@
   },
   "next": {
     "phase": "phase3",
-    "step": "P3 Feedback / Notice and Confirmation complete; continue offline and empty-state patterns",
+    "step": "P3 Feedback / Notice, Confirmation, and Content State complete; continue bottom-sheet and loading-skeleton patterns",
     "requirements": [
       "Read component-creation.md before creating components",
       "Run search_design_system again immediately before each component creation",
       "Build and validate one component family at a time",
       "Feedback Notice is complete: five status variants (Info, Success, Warning, Error, Loading), editable title/message, 44px close or retry action, and no action while loading",
       "Confirmation Dialog is complete: default and processing variants reuse the existing Secondary and Danger Button states; it explains the 7-day recovery window and disables duplicate actions while processing",
+      "Content State is complete: Empty, Offline, and Loading variants; only Offline exposes a 48px reload action, while Empty and Loading do not present fake actions",
       "Keep all visual properties bound to existing variables",
       "Do not modify React"
     ],
