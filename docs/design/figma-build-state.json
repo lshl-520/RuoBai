@@ -1,8 +1,8 @@
 {
   "runId": "ruobai-ds-20260730",
-  "updatedAt": "2026-07-30",
+  "updatedAt": "2026-07-31",
   "phase": "phase3",
-  "step": "P3.Input.ready",
+  "step": "P3.Navigation.ready",
   "figma": {
     "teamName": "新思维's team",
     "teamId": "1628718300400662760",
@@ -26,7 +26,9 @@
     "P3.Button.a", "P3.Button.b", "P3.Button.c", "P3.Button.d",
     "P3.Button.e", "P3.Button.f", "P3.Button.g", "P3.Button.motion",
     "P3.Input.a", "P3.Input.b", "P3.Input.c", "P3.Input.d",
-    "P3.Input.e", "P3.Input.f", "P3.Input.g"
+    "P3.Input.e", "P3.Input.f", "P3.Input.g",
+    "P3.Avatar.a", "P3.Avatar.b", "P3.Avatar.c", "P3.Avatar.d", "P3.Avatar.e", "P3.Avatar.f", "P3.Avatar.g",
+    "P3.Navigation.a", "P3.Navigation.b", "P3.Navigation.c", "P3.Navigation.d", "P3.Navigation.e"
   ],
   "partialSteps": [],
   "blockedSteps": [],
@@ -65,7 +67,7 @@
       "02 Dimensions": {
         "id": "VariableCollectionId:1:4",
         "modes": ["Value"],
-        "variableCount": 32
+        "variableCount": 34
       },
       "03 Typography": {
         "id": "VariableCollectionId:1:5",
@@ -78,7 +80,7 @@
         "variableCount": 9
       }
     },
-    "variableCount": 133,
+    "variableCount": 135,
     "semanticAliasCount": 56,
     "brokenAliasCount": 0,
     "allScopesSet": true,
@@ -101,6 +103,8 @@
       "04 Components": "6:6",
       "04.1 Button": "19:2",
       "04.2 Input": "42:2",
+      "04.3 Avatar": "96:91",
+      "04.4 Navigation": "101:2",
       "05 Chat System": "6:7",
       "06 Companion Patterns": "6:8",
       "--- Usage": "6:9",
@@ -121,6 +125,12 @@
       "Icon Button": "27:8",
       "Chat Composer": "75:97",
       "Voice Input": "84:91",
+      "Avatar": "97:12",
+      "Presence Dot": "97:123",
+      "Navigation Item / Mobile": "102:12",
+      "Navigation Item / Desktop": "106:19",
+      "Bottom Navigation": "108:87",
+      "Sidebar Navigation": "109:102",
       "__Icon/Plus": "23:15",
       "__Icon/Loader": "24:2"
     }
@@ -236,6 +246,64 @@
         "All four component sets include descriptions that match their actual states",
         "Final full-page review corrected Chat Composer and Voice Input section padding and spacing"
       ]
+    },
+    "Avatar": {
+      "passed": true,
+      "pageId": "96:91",
+      "documentationNodeId": "96:92",
+      "componentSets": {
+        "Avatar": {
+          "id": "97:12",
+          "variantCount": 5,
+          "axes": {"Size": ["XS", "SM", "MD", "LG", "XL"]},
+          "notes": ["All five sizes bind width and height to the existing avatar-size variables.", "All four corner radii bind to radius/full.", "The circle fill binds to color/bg/subtle; image content is replaced directly on the instance."]
+        },
+        "Presence Dot": {
+          "id": "97:123",
+          "variantCount": 12,
+          "axes": {"Size": ["SM", "MD", "LG"], "Status": ["Online", "Away", "Busy", "Offline"]},
+          "notes": ["All state fills and outline colors bind to existing semantic color variables.", "Use only for system-verifiable availability states; it must not fake typing, thinking, or continual presence."]
+        }
+      },
+      "screenshotChecked": true,
+      "visualIssuesFixed": ["Expanded component-set bounds and placed all variants in visible grids after the first screenshot showed only the default variants.", "Added section headings and usage guidance to the dedicated page."],
+      "unboundSolidPaintCount": 0
+    },
+    "Navigation": {
+      "passed": true,
+      "pageId": "101:2",
+      "documentationNodeId": "101:3",
+      "componentSets": {
+        "Navigation Item / Mobile": {
+          "id": "102:12",
+          "variantCount": 3,
+          "axes": {"State": ["Default", "Active", "Disabled"]},
+          "touchTarget": "72x64"
+        },
+        "Navigation Item / Desktop": {
+          "id": "106:19",
+          "variantCount": 3,
+          "axes": {"State": ["Default", "Active", "Disabled"]},
+          "touchTarget": "208x48"
+        },
+        "Bottom Navigation": {
+          "id": "108:87",
+          "variantCount": 5,
+          "axes": {"Active": ["聊天", "角色", "动态", "记忆", "我的"]}
+        },
+        "Sidebar Navigation": {
+          "id": "109:102",
+          "variantCount": 5,
+          "axes": {"Active": ["聊天", "角色", "动态", "记忆", "我的"]}
+        }
+      },
+      "unboundSolidPaintCount": 0,
+      "screenshotChecked": true,
+      "notes": [
+        "Only the five real primary routes are present; Chat Room intentionally has no bottom navigation.",
+        "Active state uses icon and text color plus a visible indicator, so it is not conveyed by color alone.",
+        "The mobile-item skeleton placeholders were removed after screenshot review; the final page has no clipping or overlap."
+      ]
     }
   },
   "scope": {
@@ -244,7 +312,7 @@
   },
   "next": {
     "phase": "phase3",
-    "step": "P3 Avatar",
+    "step": "P3 Bubble",
     "requirements": [
       "Read component-creation.md before creating components",
       "Run search_design_system again immediately before each component creation",
