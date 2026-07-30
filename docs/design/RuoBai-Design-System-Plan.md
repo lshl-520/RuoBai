@@ -210,6 +210,8 @@
 5. **不加入假功能**：不为填版面增加天气、音乐、订阅、排行榜、关注量或来源不明的关系数字。
 6. **设计确认前不改 React**：只有进入 `Ready for Development` 并标明版本的设计，才允许交给 Codex 开发。
 
-## 8. 下一步
+## 8. 当前进度与下一步
 
-用户确认上面的 Phase 0 拍板清单后，进入 Phase 1。第一轮只在已经创建的 `01 RuoBai Design System 1.0` 中建立页面目录、品牌说明和基础变量；完成颜色与文字可读性检查后，再制作 Button、Input、Avatar、Navigation、Bubble 和 Feedback，不立即制作全部产品页面。
+2026/7/30，用户已确认 Phase 0 的六条拍板清单，Phase 1 Foundations 与 Phase 2 File Structure 也已完成并通过逐页截图验收。正式文件现有 10 个页面目录、4 个变量集合、121 个变量、8 个文字样式和 4 个阴影样式；54 条模式别名均有效，封面、品牌、颜色、字体、尺寸和阴影文档无明显裁切或溢出。
+
+下一步进入 Phase 3，按 `Button → Input → Avatar → Navigation → Bubble → Feedback` 的顺序一次只制作并验收一个组件族。每个组件开始前重新搜索可复用设计库，所有颜色、间距、圆角和尺寸绑定现有变量；六组基础组件完成前不创建完整产品页面，也不修改 React。
