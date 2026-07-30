@@ -359,7 +359,7 @@
   },
   "next": {
     "phase": "page-design",
-    "step": "Characters first-pass desktop/mobile states completed; review before moving to Moments and Comments",
+    "step": "Moments comment-flow mobile states completed; review before React implementation planning",
     "requirements": [
       "Read component-creation.md before creating components",
       "Run search_design_system again immediately before each component creation",
@@ -374,7 +374,8 @@
       "Chat Room first-pass screens completed: Mobile Default (140:2), Mobile Send Failed (140:3), Desktop Default (140:4), Desktop Offline (140:5), Mobile Streaming (144:3), Mobile Voice recording (144:4)",
       "Validated dimensions: mobile 390x844; desktop 1440x900; all free text uses Noto Sans SC",
       "Chat List first-pass screens completed: Mobile Default (145:2), Mobile Empty (145:3), Desktop Default (145:4)",
-      "Characters first-pass screens completed: Mobile Default (150:2), Mobile Empty (150:3), Desktop Default (150:4); unreliable relationship metrics are excluded"
+      "Characters first-pass screens completed: Mobile Default (150:2), Mobile Empty (150:3), Desktop Default (150:4); unreliable relationship metrics are excluded",
+      "Moments comment-flow screens completed: Collapsed (156:2), Expanded (156:3), Focused (156:4), Sending (156:5), Success (156:6), Failed (156:7); all are 390x844 using Noto Sans SC"
     ],
     "componentOrder": ["Button", "Input", "Avatar", "Navigation", "Bubble", "Feedback"]
   }
