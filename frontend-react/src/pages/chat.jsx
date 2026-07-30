@@ -725,7 +725,6 @@ function BigView({ agent, figSrc, onClose }) {
       <div className="bigview-scrim" />
       <div className="bigview-text">
         <div className="bigview-name serif">{agent.name}</div>
-        <div className="bigview-sub">她正看着你 · 在一起 {agent.days} 天</div>
         <div className="bigview-hint">轻触任意处返回</div>
       </div>
       <button className="bigview-close" onClick={(e) => { e.stopPropagation(); onClose(); }}><Icon name="back" /></button>

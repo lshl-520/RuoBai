@@ -43,6 +43,10 @@ test("聊天列表不把角色人设伪装成最近聊天内容", () => {
   assert.doesNotMatch(chat, /lastTime|unread/);
 });
 
+test("聊天室不展示没有加载来源的关系数字", () => {
+  assert.doesNotMatch(chat, /agent\.days|关系温度|亲密度/);
+});
+
 test("八个页面共用同一套 React 功能路由，不按主题复制业务页面", () => {
   for (const path of ["/", "/auth", "/chat", "/characters", "/moments", "/memory", "/profile"]) {
     assert.ok(app.includes(`path="${path}"`), `缺少 ${path} 路由`);
