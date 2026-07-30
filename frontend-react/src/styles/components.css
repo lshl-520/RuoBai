@@ -407,11 +407,6 @@
   object-fit: cover;
   margin-bottom: 24px;
   box-shadow: 0 20px 48px rgba(193, 101, 121, 0.12);
-  animation: emptyFloat 6s ease-in-out infinite;
-}
-@keyframes emptyFloat {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
 }
 .empty-state-title {
   font-family: var(--serif, serif);
@@ -469,7 +464,6 @@
   border-radius: var(--r-xl, 24px);
   object-fit: cover;
   box-shadow: 0 20px 48px rgba(193, 101, 121, 0.12);
-  animation: emptyFloat 6s ease-in-out infinite;
 }
 .empty-split-guide {
   flex-shrink: 0;
@@ -497,7 +491,6 @@
   height: 100%;
   object-fit: cover;
   object-position: center top;
-  animation: emptyFloat 6s ease-in-out infinite;
 }
 .empty-immersive-scrim {
   position: absolute;
