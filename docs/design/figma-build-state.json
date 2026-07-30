@@ -2,7 +2,7 @@
   "runId": "ruobai-ds-20260730",
   "updatedAt": "2026-07-31",
   "phase": "page-design",
-  "step": "P4.ready; begin Chat Room golden page",
+  "step": "Chat Room golden page: first four desktop/mobile states completed and visually validated",
   "figma": {
     "teamName": "新思维's team",
     "teamId": "1628718300400662760",
@@ -30,7 +30,8 @@
     "P3.Avatar.a", "P3.Avatar.b", "P3.Avatar.c", "P3.Avatar.d", "P3.Avatar.e", "P3.Avatar.f", "P3.Avatar.g",
     "P3.Navigation.a", "P3.Navigation.b", "P3.Navigation.c", "P3.Navigation.d", "P3.Navigation.e",
     "P3.Bubble.a", "P3.Bubble.b", "P3.Bubble.c", "P3.Bubble.d", "P3.Bubble.e",
-    "P3.Feedback.a", "P3.Feedback.b", "P3.Feedback.c", "P3.Feedback.d", "P3.Feedback.e"
+    "P3.Feedback.a", "P3.Feedback.b", "P3.Feedback.c", "P3.Feedback.d", "P3.Feedback.e",
+    "P4", "Page.ChatRoom.a", "Page.ChatRoom.b", "Page.ChatRoom.c", "Page.ChatRoom.d"
   ],
   "partialSteps": [],
   "blockedSteps": [],
@@ -354,11 +355,11 @@
   },
   "scope": {
     "p0Components": ["Button", "Input", "Avatar", "Navigation", "Bubble", "Feedback"],
-    "excludedForNow": ["full product screens", "React implementation", "new product features"]
+    "excludedForNow": ["React implementation", "new product features"]
   },
   "next": {
     "phase": "page-design",
-    "step": "Build Chat Room as the first desktop/mobile golden page using the completed components",
+    "step": "Review the Chat Room golden page and add its remaining real states before proceeding to the next page",
     "requirements": [
       "Read component-creation.md before creating components",
       "Run search_design_system again immediately before each component creation",
@@ -369,7 +370,9 @@
       "Bottom Sheet is complete: Default and Busy states expose only the real moment actions (comment, open original image, cancel); Busy visually disables repeated interaction",
       "Loading Skeleton is complete: List, Card, and Chat placeholders are static when reduced motion is requested and do not rely on shimmer or movement",
       "Keep all visual properties bound to existing variables",
-      "Do not modify React"
+      "Do not modify React",
+      "Chat Room first-pass screens completed: Mobile Default (140:2), Mobile Send Failed (140:3), Desktop Default (140:4), Desktop Offline (140:5)",
+      "Validated dimensions: mobile 390x844; desktop 1440x900; all free text uses Noto Sans SC"
     ],
     "componentOrder": ["Button", "Input", "Avatar", "Navigation", "Bubble", "Feedback"]
   }
