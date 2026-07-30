@@ -359,7 +359,7 @@
   },
   "next": {
     "phase": "page-design",
-    "step": "Review the Chat Room golden page and add its remaining real states before proceeding to the next page",
+    "step": "Build Chat List as the next desktop/mobile golden page using the completed components and the Chat Room patterns",
     "requirements": [
       "Read component-creation.md before creating components",
       "Run search_design_system again immediately before each component creation",
