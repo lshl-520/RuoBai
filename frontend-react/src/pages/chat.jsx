@@ -1268,7 +1268,7 @@ function ChatRoom({ agent, onBack }) {
         <button className="ct-back" onClick={onBack} aria-label="返回聊天列表" title="返回聊天列表"><Icon name="back" /></button>
         <div className="ct-avatar" role="button" tabIndex={0} aria-label={`查看${agent.name}的立绘`} onClick={() => setBig(true)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setBig(true); }}><img src={agent.avatar} alt="" onError={fallbackToDefaultRoleAvatar} />{agent.online && <span className="cl-online" />}</div>
         <div className="ct-info">
-          <div className="ct-name">{agent.name}<TempDot temp={agent.temp} /></div>
+          <div className="ct-name">{agent.name}</div>
           <button className="ct-model" onClick={() => setModelOpen(!modelOpen)} aria-label="切换聊天模型">
             <Icon name="cpu" /> {modelLabel}<Icon name="chevronD" className={"cm-chev" + (modelOpen ? " open" : "")} />
           </button>
@@ -1395,11 +1395,6 @@ function ChatRoom({ agent, onBack }) {
       )}
     </div>
   );
-}
-
-function TempDot({ temp }) {
-  const v = Number(temp) || 36.5;
-  return <span className="temp-dot"><Icon name="flame" /> {v.toFixed(1)}°</span>;
 }
 
 /* ---------------- 火山端到端实时语音通话 ---------------- */
@@ -1631,4 +1626,4 @@ function CallScreen({ agent, figSrc, onClose }) {
   );
 }
 
-export { ChatListScreen, ChatRoom, Bubble, TempDot, CallScreen };
+export { ChatListScreen, ChatRoom, Bubble, CallScreen };

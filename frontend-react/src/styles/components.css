@@ -206,6 +206,13 @@
 .ct-ic { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: var(--ink-soft); }
 .ct-ic svg { width: 20px; height: 20px; }
 
+@media (min-width: 860px) {
+  .chat-screen { max-width: none; }
+  .chat-top { padding-left: max(24px, calc((100vw - 780px) / 2)); padding-right: max(24px, calc((100vw - 780px) / 2)); }
+  .msg-area { width: min(780px, 100%); align-self: center; box-sizing: border-box; padding-left: 16px; padding-right: 16px; }
+  .input-bar { width: min(780px, 100%); align-self: center; box-sizing: border-box; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+}
+
 .msg-area { flex: 1; overflow-y: auto; padding: 16px 16px 8px; position: relative; z-index: 2; }
 .msg-area::-webkit-scrollbar { width: 0; }
 .chat-intro { text-align: center; padding: 12px 20px 26px; }
