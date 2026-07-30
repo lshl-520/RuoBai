@@ -1,6 +1,6 @@
 import React from "react";
 import { Icon, Bars, greetByHour, STICKERS } from "../store.jsx";
-import { getRoles, updateRole, getRolePortraitSrc, getRoleFullPortrait, clampIntimacy } from "../lib/roles.js";
+import { getRoles, updateRole, getRolePortraitSrc, getRoleFullPortrait } from "../lib/roles.js";
 import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage, uploadVoice, deleteAllMessages, deleteMessage, detectDrawKeywords, drawImage, speakMessage } from "../lib/chat.js";
 import { createRealtimeCallSocket, startRealtimeMicrophone, RealtimePcmPlayer } from "../lib/realtime-call.js";
 import { getSessionProfile, getCapabilities } from "../lib/profile.js";
@@ -144,7 +144,6 @@ function toAgent(role) {
     lastTime: "",
     unread: 0,
     online: Boolean(role.is_active),
-    intimacy: clampIntimacy(role.intimacy),
     isDefault: Boolean(role.is_active),
     _raw: role,
   };
@@ -208,15 +207,15 @@ function ChatListScreen({ onOpen }) {
 
   const list = agents ?? [];
   const displayList = list;
+  const onlineCount = list.filter((agent) => agent.online).length;
 
   return (
     <div className="screen anim-screen cl-screen">
       <div className="topbar cl-topbar">
         <div>
           <h1>{greetByHour()}</h1>
-          <div className="sub">{agents === null ? "加载中…" : `${list.length} 位在线 · 随时可以说话`}</div>
+          <div className="sub">{agents === null ? "加载中…" : `${onlineCount} 位在线 · 随时可以说话`}</div>
         </div>
-        <button className="icon-btn"><Icon name="search" /></button>
       </div>
       <div className="chat-list pad">
         {displayList.map((a, i) => (
@@ -224,7 +223,6 @@ function ChatListScreen({ onOpen }) {
             <div className="cl-avatar">
               <img src={a.avatar} alt={a.name} onError={fallbackToDefaultRoleAvatar} />
               {a.online && <span className="cl-online" />}
-              {a.isDefault && <span className="cl-glow" />}
             </div>
             <div className="cl-main">
               <div className="cl-top">
@@ -235,10 +233,6 @@ function ChatListScreen({ onOpen }) {
               <div className="cl-bottom">
                 <span className="cl-msg">{a.lastMsg}</span>
                 {a.unread > 0 && <span className="cl-badge">{a.unread}</span>}
-              </div>
-              <div className="cl-classic-meter" aria-hidden="true">
-                <span><i style={{ width: `${a.intimacy}%` }} /></span>
-                <b>Lv.{Math.max(1, Math.round(a.intimacy || 1))}</b>
               </div>
             </div>
             <div className="cl-arrow"><Icon name="chevron" /></div>

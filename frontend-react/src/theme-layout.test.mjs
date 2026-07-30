@@ -31,9 +31,9 @@ test("原版主题覆盖五个主页面和聊天室布局", () => {
   }
 });
 
-test("聊天列表原版具有独立亲密度条结构", () => {
-  assert.match(chat, /cl-classic-meter/);
-  assert.match(classic, /\.cl-classic-meter/);
+test("聊天列表不把角色关系数据伪装成等级进度", () => {
+  assert.doesNotMatch(chat, /cl-classic-meter/);
+  assert.doesNotMatch(classic, /\.cl-classic-meter/);
 });
 
 test("八个页面共用同一套 React 功能路由，不按主题复制业务页面", () => {
