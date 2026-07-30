@@ -110,6 +110,9 @@ docs/*
 !docs/.gitkeep
 !docs/部署指南.md
 !docs/开源与隐私说明.md
+# 正式设计规范是 Figma 与代码之间的长期约定，需要随仓库保存
+!docs/design/
+!docs/design/*.md
 # 仅放行 React 主线实施所需的 spec / plan Markdown，避免重新打开整个 docs 目录
 !docs/superpowers/
 !docs/superpowers/specs/
