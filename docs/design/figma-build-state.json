@@ -2,7 +2,7 @@
   "runId": "ruobai-ds-20260730",
   "updatedAt": "2026-07-30",
   "phase": "phase0",
-  "step": "P0.e",
+  "step": "P0.f",
   "figma": {
     "teamName": "新思维's team",
     "teamId": "1628718300400662760",
@@ -25,15 +25,16 @@
     "P0.a",
     "P0.b",
     "P0.c",
-    "P0.d"
+    "P0.d",
+    "P0.e"
   ],
   "invalidatedSteps": [],
   "partialSteps": [
-    "P0.e",
     "P0.f"
   ],
   "blockedSteps": [],
   "blocker": null,
+  "awaitingApproval": "User approval of the six-item Phase 0 decision checklist in RuoBai-Design-System-Plan.md before any Figma variables, styles, components, or product screens are created.",
   "connectionDiagnostics": {
     "oauth": "completed",
     "endpointReachable": true,
