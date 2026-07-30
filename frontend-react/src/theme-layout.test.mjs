@@ -44,12 +44,11 @@ test("八个页面共用同一套 React 功能路由，不按主题复制业务�
   assert.doesNotMatch(app, /theme\s*===\s*["']classic["']\s*\?/);
 });
 
-test("原版角色页保留全部三项关系数据，并正确展开横向角色卡", () => {
-  assert.match(agents, /在一起 · 天/);
-  assert.match(agents, /关系温度/);
-  assert.match(agents, /亲密度/);
-  assert.doesNotMatch(classic, /\.hero-stats \.hs:first-child\s*\{\s*display:\s*none/);
-  assert.match(classic, /grid-template-columns:\s*repeat\(3,/);
+test("角色页不把关系数据或临时状态伪装成角色资料", () => {
+  assert.doesNotMatch(agents, /关系温度/);
+  assert.doesNotMatch(agents, /亲密度/);
+  assert.doesNotMatch(agents, /在一起 · 天/);
+  assert.doesNotMatch(agents, /className="hero-stats"/);
   assert.match(classic, /\.ac-photo\s*\{\s*display:\s*contents/);
 });
 

@@ -15,8 +15,7 @@
 
 /* ============== 角色 — Hero ============== */
 .hero { position: relative; height: min(420px, 56vh); border-radius: var(--r-xl); overflow: hidden; box-shadow: var(--shadow-lg); }
-.hero-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top center; animation: kenburns 18s ease-in-out infinite alternate; }
-@keyframes kenburns { from { transform: scale(1) translateY(0); } to { transform: scale(1.08) translateY(-10px); } }
+.hero-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top center; }
 .hero-scrim { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(40,28,32,0) 40%, rgba(40,28,32,0.25) 60%, rgba(38,26,30,0.88) 100%); pointer-events: none; }
 .hero-top { position: absolute; top: 16px; left: 16px; right: 16px; z-index: 2; display: flex; align-items: center; justify-content: space-between; }
 .hero-edit { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.22); backdrop-filter: blur(8px); color: #fff; display: grid; place-items: center; }
@@ -24,13 +23,6 @@
 .hero-body { position: absolute; left: 0; right: 0; bottom: 0; padding: 20px; z-index: 2; color: #fff; }
 .hero-name { font-size: 32px; font-weight: 600; letter-spacing: 1px; }
 .hero-quote { font-size: 13.5px; opacity: 0.92; margin-top: 4px; font-family: var(--serif); }
-.hero-stats { display: flex; align-items: center; gap: 14px; margin: 16px 0 10px; }
-.hs { display: flex; flex-direction: column; }
-.hs b { font-size: 20px; font-weight: 600; font-family: var(--serif); }
-.hs span { font-size: 10px; opacity: 0.78; margin-top: 1px; }
-.hs-div { width: 1px; height: 24px; background: rgba(255,255,255,0.25); }
-.hero-temp { margin-bottom: 14px; }
-.hero-temp .temp-bar { background: rgba(255,255,255,0.25); }
 .hero-cta-row { display: flex; gap: 10px; }
 .hero-cta { flex: 1; }
 .hero-info-btn { width: 46px; border-radius: 999px; background: rgba(255,255,255,0.2); backdrop-filter: blur(8px); color: #fff; display: grid; place-items: center; }
@@ -46,8 +38,6 @@
 .ac-online { position: absolute; top: 10px; left: 10px; width: 9px; height: 9px; border-radius: 50%; background: var(--sage); box-shadow: 0 0 0 2px rgba(255,255,255,0.85); }
 .ac-overlay { position: absolute; left: 12px; right: 12px; bottom: 10px; color: #fff; }
 .ac-name { font-size: 19px; font-weight: 600; }
-.ac-temp { font-size: 10.5px; opacity: 0.9; display: flex; align-items: center; gap: 3px; margin-top: 1px; }
-.ac-temp svg { width: 11px; height: 11px; }
 .ac-meta { padding: 11px 12px 13px; }
 .ac-tags { display: flex; gap: 5px; flex-wrap: wrap; }
 
@@ -623,7 +613,6 @@
   .hero { height: min(280px, 38vh); }
   .hero-name { font-size: 26px; }
   .hero-quote { font-size: 12px; }
-  .hero-stats { gap: 10px; margin: 10px 0 6px; }
   .hs b { font-size: 17px; }
   .hs span { font-size: 9px; }
   .hero-body { padding: 14px; }

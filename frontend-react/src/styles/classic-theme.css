@@ -194,25 +194,6 @@ html[data-theme="classic"] .hero-body {
 }
 html[data-theme="classic"] .hero-name { font-size: 22px; color: #741f40; }
 html[data-theme="classic"] .hero-quote { color: #bd3f6b; font-size: 12px; line-height: 1.55; max-height: 58px; overflow: hidden; }
-html[data-theme="classic"] .hero-stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 5px;
-  margin: 8px 0 6px;
-}
-html[data-theme="classic"] .hero-stats .hs {
-  min-width: 0;
-  padding: 7px 3px;
-  border: 1px solid #f5d6e1;
-  border-radius: 10px;
-  background: rgba(255,255,255,.88);
-}
-html[data-theme="classic"] .hs-div { display: none; }
-html[data-theme="classic"] .hs b { color: #e04e80; font-size: 15px; }
-html[data-theme="classic"] .hs span { color: #c36182; font-size: 8px; white-space: nowrap; }
-html[data-theme="classic"] .hero-temp { margin: 0 2px; }
-html[data-theme="classic"] .temp-bar { background: #f6d8e3; }
-html[data-theme="classic"] .temp-bar i { background: #e45186; }
 html[data-theme="classic"] .hero-cta-row { margin-top: 7px; }
 html[data-theme="classic"] .hero-cta { min-height: 34px; padding: 7px 10px; font-size: 12px; }
 html[data-theme="classic"] .hero-info-btn { width: 34px; height: 34px; border: 1px solid #f2ccda; background: #fff; color: #dc4b7c; }
@@ -250,7 +231,6 @@ html[data-theme="classic"] .ac-overlay {
   color: #651a35;
 }
 html[data-theme="classic"] .ac-name { color: #651a35; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-html[data-theme="classic"] .ac-temp { color: #b9436b; white-space: nowrap; }
 html[data-theme="classic"] .ac-meta {
   position: absolute;
   left: 86px;
