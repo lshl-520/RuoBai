@@ -2,7 +2,7 @@
   "runId": "ruobai-ds-20260730",
   "updatedAt": "2026-07-31",
   "phase": "phase3",
-  "step": "P3.Bubble.ready",
+  "step": "P3.Feedback.Notice.ready",
   "figma": {
     "teamName": "新思维's team",
     "teamId": "1628718300400662760",
@@ -31,7 +31,7 @@
     "P3.Navigation.a", "P3.Navigation.b", "P3.Navigation.c", "P3.Navigation.d", "P3.Navigation.e",
     "P3.Bubble.a", "P3.Bubble.b", "P3.Bubble.c", "P3.Bubble.d", "P3.Bubble.e"
   ],
-  "partialSteps": [],
+  "partialSteps": ["P3.Feedback.Notice"],
   "blockedSteps": [],
   "blocker": null,
   "awaitingApproval": null,
@@ -352,11 +352,12 @@
   },
   "next": {
     "phase": "phase3",
-    "step": "P3 Feedback",
+    "step": "P3 Feedback / Notice complete; continue the remaining Feedback patterns",
     "requirements": [
       "Read component-creation.md before creating components",
       "Run search_design_system again immediately before each component creation",
       "Build and validate one component family at a time",
+      "Feedback Notice is complete: five status variants (Info, Success, Warning, Error, Loading), editable title/message, 44px close or retry action, and no action while loading",
       "Keep all visual properties bound to existing variables",
       "Do not modify React"
     ],
