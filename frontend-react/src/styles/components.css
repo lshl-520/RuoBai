@@ -168,9 +168,6 @@
 .ct-avatar .cl-online { width: 10px; height: 10px; border-width: 2px; }
 .ct-info { flex: 1; min-width: 0; }
 .ct-name { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
-.temp-dot { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 600; color: var(--rose); }
-.temp-dot svg { width: 11px; height: 11px; animation: flicker 2.4s ease-in-out infinite; }
-@keyframes flicker { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.18); opacity: 0.82; } }
 .ct-meta { font-size: 11px; color: var(--ink-faint); margin-top: 1px; }
 .ct-ic { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: var(--ink-soft); }
 .ct-ic svg { width: 20px; height: 20px; }
