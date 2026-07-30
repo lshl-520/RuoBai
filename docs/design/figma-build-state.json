@@ -1,8 +1,8 @@
 {
   "runId": "ruobai-ds-20260730",
   "updatedAt": "2026-07-31",
-  "phase": "phase3",
-  "step": "P3.Feedback.ContentState.ready",
+  "phase": "phase4",
+  "step": "P3.Feedback.ready; begin P4 integration QA",
   "figma": {
     "teamName": "新思维's team",
     "teamId": "1628718300400662760",
@@ -29,9 +29,10 @@
     "P3.Input.e", "P3.Input.f", "P3.Input.g",
     "P3.Avatar.a", "P3.Avatar.b", "P3.Avatar.c", "P3.Avatar.d", "P3.Avatar.e", "P3.Avatar.f", "P3.Avatar.g",
     "P3.Navigation.a", "P3.Navigation.b", "P3.Navigation.c", "P3.Navigation.d", "P3.Navigation.e",
-    "P3.Bubble.a", "P3.Bubble.b", "P3.Bubble.c", "P3.Bubble.d", "P3.Bubble.e"
+    "P3.Bubble.a", "P3.Bubble.b", "P3.Bubble.c", "P3.Bubble.d", "P3.Bubble.e",
+    "P3.Feedback.a", "P3.Feedback.b", "P3.Feedback.c", "P3.Feedback.d", "P3.Feedback.e"
   ],
-  "partialSteps": ["P3.Feedback.Notice", "P3.Feedback.Confirmation", "P3.Feedback.ContentState"],
+  "partialSteps": [],
   "blockedSteps": [],
   "blocker": null,
   "awaitingApproval": null,
@@ -136,6 +137,11 @@
       "Text Bubble": "115:22",
       "Media Bubble": "116:20",
       "System Bubble": "117:11",
+      "Feedback Notice": "131:138",
+      "Confirmation Dialog": "133:31",
+      "Content State": "134:31",
+      "Bottom Sheet": "136:42",
+      "Loading Skeleton": "137:37",
       "__Icon/Plus": "23:15",
       "__Icon/Loader": "24:2"
     }
@@ -352,7 +358,7 @@
   },
   "next": {
     "phase": "phase3",
-    "step": "P3 Feedback / Notice, Confirmation, and Content State complete; continue bottom-sheet and loading-skeleton patterns",
+    "step": "P4 Integration + QA: accessibility, naming, binding, and final page review",
     "requirements": [
       "Read component-creation.md before creating components",
       "Run search_design_system again immediately before each component creation",
@@ -360,6 +366,8 @@
       "Feedback Notice is complete: five status variants (Info, Success, Warning, Error, Loading), editable title/message, 44px close or retry action, and no action while loading",
       "Confirmation Dialog is complete: default and processing variants reuse the existing Secondary and Danger Button states; it explains the 7-day recovery window and disables duplicate actions while processing",
       "Content State is complete: Empty, Offline, and Loading variants; only Offline exposes a 48px reload action, while Empty and Loading do not present fake actions",
+      "Bottom Sheet is complete: Default and Busy states expose only the real moment actions (comment, open original image, cancel); Busy visually disables repeated interaction",
+      "Loading Skeleton is complete: List, Card, and Chat placeholders are static when reduced motion is requested and do not rely on shimmer or movement",
       "Keep all visual properties bound to existing variables",
       "Do not modify React"
     ],
