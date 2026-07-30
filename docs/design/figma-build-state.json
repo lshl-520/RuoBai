@@ -1,8 +1,8 @@
 {
   "runId": "ruobai-ds-20260730",
   "updatedAt": "2026-07-31",
-  "phase": "phase4",
-  "step": "P3.Feedback.ready; begin P4 integration QA",
+  "phase": "page-design",
+  "step": "P4.ready; begin Chat Room golden page",
   "figma": {
     "teamName": "新思维's team",
     "teamId": "1628718300400662760",
@@ -357,8 +357,8 @@
     "excludedForNow": ["full product screens", "React implementation", "new product features"]
   },
   "next": {
-    "phase": "phase3",
-    "step": "P4 Integration + QA: accessibility, naming, binding, and final page review",
+    "phase": "page-design",
+    "step": "Build Chat Room as the first desktop/mobile golden page using the completed components",
     "requirements": [
       "Read component-creation.md before creating components",
       "Run search_design_system again immediately before each component creation",
