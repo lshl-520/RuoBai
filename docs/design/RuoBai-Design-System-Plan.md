@@ -1,6 +1,6 @@
 # RuoBai V2.0 Design System 建设计划
 
-> 状态：设计规划第一版  
+> 状态：Phase 0 设计方向确认稿
 > 日期：2026-07-30  
 > 当前边界：只做现状分析与设计规划，不修改 React、业务功能、接口或数据库。
 
@@ -12,7 +12,7 @@
 
 正式工作流：
 
-1. Figma Pro 是唯一正式设计中心和最终视觉来源。
+1. `新思维's team` 教育版 Figma 是唯一正式设计中心和最终视觉来源。
 2. Pencil 只做快速布局和视觉探索。
 3. Open Design 只做独立提案和交互验证。
 4. Codex 负责项目盘点、规范整理、Figma 协作、设计审查，以及设计确认后的 React 实现。
@@ -124,40 +124,36 @@
 
 ## 4. Figma 正式结构
 
-不要把所有内容塞进一个巨大文件。专业版团队中建立一个项目和三份主要文件，个人维护也不会过重。
+若白目前由个人长期维护，第一阶段不同时铺开三份大型文件。先把唯一设计系统文件做完整，等基础组件和前三个核心原型稳定后，再建立产品页面文件；这样既符合正规产品工作流，也不会增加无意义的维护负担。
 
 ```text
-专业版团队：fhdhyyhdh12h 的团队
+教育团队：新思维's team
 
-Project: RuoBai V2.0
+01 RuoBai Design System 1.0（已创建）
+├── 00 Cover & Changelog
+├── 01 Audit & Legacy
+├── 02 Brand
+├── 03 Foundations
+├── 04 Components
+├── 05 Chat System
+├── 06 Companion Patterns
+└── 07 Usage & Do Not
 
-├── 00 RuoBai Audit & Legacy
-│   ├── 现有页面截图
-│   ├── 微光 2.0 可保留元素
-│   ├── 问题标注
-│   └── Pencil / Open Design 探索稿索引
-│
-├── 01 RuoBai Design System 1.0
-│   ├── Cover & Changelog
-│   ├── Brand
-│   ├── Foundations
-│   ├── Components
-│   ├── Chat System
-│   ├── Companion Patterns
-│   └── Usage & Do Not
-│
-├── 02 RuoBai Product Screens
-│   ├── App Shell
-│   ├── Mobile
-│   ├── Desktop
-│   ├── States
-│   ├── Flows
-│   └── Ready for Development
-│
-└── 99 Archive
+02 RuoBai Product Screens（Phase 1 后半段再创建）
+├── 00 Cover & Changelog
+├── 01 App Shell
+├── 02 Mobile
+├── 03 Desktop
+├── 04 States
+├── 05 Flows
+└── 06 Ready for Development
+
+99 Archive（出现被替换的正式方案后再创建）
 ```
 
-`01 RuoBai Design System 1.0` 是唯一组件库。`02 RuoBai Product Screens` 只能使用该库中的变量和组件，不能在页面里偷偷造新按钮或新颜色。
+正式设计系统文件地址：`https://www.figma.com/design/lRcqdL0A9Bfk15oqiYPnrx`。
+
+`01 RuoBai Design System 1.0` 是唯一组件库。以后建立的 `02 RuoBai Product Screens` 只能使用该库中的变量和组件，不能在页面里临时创造新按钮、新圆角或新颜色。Pencil、Open Design 和旧 UI 图片只作为 `01 Audit & Legacy` 的参考输入，不直接成为交付稿。
 
 ## 5. 第一批页面顺序
 
@@ -196,13 +192,24 @@ Project: RuoBai V2.0
 第一阶段完成标准：
 
 - 没有修改 React、CSS、接口或数据库；
-- Figma 正式文件全部位于专业版团队；
+- Figma 正式文件全部位于 `新思维's team` 教育团队；
 - 新页面不包含不存在的功能和假数据；
 - 每个 P0 组件都有交互和异常状态；
 - 手机与桌面不是简单缩放关系；
 - 颜色、文字和触控尺寸通过基本可读性检查；
 - 下一位 AI 不需要重新猜若白的视觉方向和工具职责。
 
-## 7. 下一步
+## 7. Phase 0 拍板清单
 
-下一步不是直接画首页，而是进入专业版 Figma，先创建 `RuoBai V2.0` 项目和 `00 Audit & Legacy`、`01 RuoBai Design System 1.0`、`02 RuoBai Product Screens` 三份文件。第一轮只放审计结果、品牌原则与现有变量映射，不立即制作全部页面。
+进入 Figma 正式建设前，只需要确认下面六件事：
+
+1. **不推翻微光 2.0**：保留暖米白、脏粉、薰衣草、陶土色、鼠尾草绿、角色形象和陪伴式中文文案。
+2. **整体升级方向**：背景和长文本以安静中性色承载，粉色和紫色只用于品牌强调；减少满屏发光、玻璃和层层卡片。
+3. **先解决高频体验**：第一批页面顺序为 App Shell、Chat Room、Chat List、Characters、Moments + Comments，不先重画官网。
+4. **先建六组 P0 组件**：Button、Input、Avatar、Navigation、Bubble、Feedback；每组都必须包含交互、加载和失败状态。
+5. **不加入假功能**：不为填版面增加天气、音乐、订阅、排行榜、关注量或来源不明的关系数字。
+6. **设计确认前不改 React**：只有进入 `Ready for Development` 并标明版本的设计，才允许交给 Codex 开发。
+
+## 8. 下一步
+
+用户确认上面的 Phase 0 拍板清单后，进入 Phase 1。第一轮只在已经创建的 `01 RuoBai Design System 1.0` 中建立页面目录、品牌说明和基础变量；完成颜色与文字可读性检查后，再制作 Button、Input、Avatar、Navigation、Bubble 和 Feedback，不立即制作全部产品页面。
