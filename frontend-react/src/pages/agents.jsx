@@ -187,6 +187,7 @@ function CharacterDetail({ agent, onClose, onChat, onEdit, onDelete, onSetMain, 
   const [confirm, setConfirm] = useStateA(false);
   const [deleting, setDeleting] = useStateA(false);
   const [deleteError, setDeleteError] = useStateA("");
+  const [mainError, setMainError] = useStateA("");
 
   const handleDelete = async (options = {}) => {
     if (!onDelete || deleting) return;
@@ -199,6 +200,16 @@ function CharacterDetail({ agent, onClose, onChat, onEdit, onDelete, onSetMain, 
       setDeleteError(err instanceof Error ? err.message : "删除失败");
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleSetMain = async () => {
+    if (!onSetMain) return;
+    setMainError("");
+    try {
+      await onSetMain(agent.id);
+    } catch (err) {
+      setMainError(err instanceof Error ? err.message : "设置主陪伴失败");
     }
   };
 
@@ -240,8 +251,9 @@ function CharacterDetail({ agent, onClose, onChat, onEdit, onDelete, onSetMain, 
           <span className="dr-l">主陪伴</span>
           {agent.isDefault
             ? <span className="dr-r" style={{ color: "var(--rose-deep)", display: "inline-flex", alignItems: "center", gap: 4 }}><Icon name="heartFill" style={{ width: 12, height: 12 }} /> 当前主陪伴</span>
-            : <button className="set-main-btn" onClick={() => onSetMain && onSetMain(agent.id)}>设为主陪伴</button>}
+            : <button className="set-main-btn" onClick={handleSetMain}>设为主陪伴</button>}
         </div>
+        {mainError && <div className="chat-error" style={{ marginTop: -2 }}>{mainError}</div>}
 
         <div className="detail-row">
           <span className="dr-l">主动发动态</span>

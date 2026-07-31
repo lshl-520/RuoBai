@@ -12,6 +12,7 @@ import {
 import { publishGeneratedSelfieMoment, shouldPublishGeneratedSelfie } from "../lib/moments.js";
 import { loadVoiceSettings, speechRecognitionErrorMessage } from "../lib/voice-settings.js";
 import { speakTextWithSystemVoice, stopSystemTextSpeech } from "../lib/native-tts.js";
+import { recordDiagnostic, withDiagnosticId } from "../lib/diagnostics.js";
 /* 聊天列表 + 聊天室(沉浸: 常驻立绘随情绪变化 / 全屏立绘 / 语音 / 表情包 / 思考过程 / 搜索) */
 const { useState: useStateC, useRef: useRefC, useEffect: useEffectC } = React;
 
@@ -951,7 +952,8 @@ function ChatRoom({ agent, onBack }) {
       }
       setAtts((prev) => [...prev, ...urls]);
     } catch (e) {
-      setChatError(e instanceof Error ? e.message : "上传图片失败");
+      const baseText = e instanceof Error ? e.message : "上传图片失败";
+      setChatError(withDiagnosticId(baseText, recordDiagnostic({ area: "image", action: "upload-chat-image", error: e })));
     } finally {
       setUploading(false);
     }
@@ -1106,7 +1108,8 @@ function ChatRoom({ agent, onBack }) {
         } catch (e) { /* 保存回复失败仍继续 */ }
       }
     } catch (err) {
-      setChatError(err instanceof Error ? err.message : "发送失败，请检查后端和模型配置。");
+      const baseText = err instanceof Error ? err.message : "发送失败，请检查后端和模型配置。";
+      setChatError(withDiagnosticId(baseText, recordDiagnostic({ area: "chat", action: "send-message", error: err })));
       setFailedSend({ clientId, text: t, images, userSaved });
       setMsgs((p) => p.map((m) => m._clientId === clientId ? { ...m, failed: true } : m));
     } finally {
@@ -1251,7 +1254,10 @@ function ChatRoom({ agent, onBack }) {
           setChatError(`她的文字回复已经保留，但云端和手机朗读都失败了：${detail}`);
         }
       }
-    } catch (err) { setTyping(false); setChatError(String(err)); }
+    } catch (err) {
+      setTyping(false);
+      setChatError(withDiagnosticId("语音消息发送失败，请重试。", recordDiagnostic({ area: "voice", action: "send-voice-message", error: err })));
+    }
   };
 
   const shown = q.trim() ? msgs.filter((m) => (m.text || "").includes(q.trim())) : msgs;
