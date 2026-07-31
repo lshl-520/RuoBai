@@ -15,6 +15,12 @@ import {
   fallbackToDefaultRoleAvatar,
   fallbackToDefaultUserAvatar,
 } from "../lib/default-assets.js";
+import {
+  clearDiagnosticEvents,
+  describeDiagnosticEvent,
+  formatDiagnosticReport,
+  getDiagnosticEvents,
+} from "../lib/diagnostics.js";
 /* 我的 / 设置 / 模型接入(见 models.jsx) / 能力配置 */
 const { useState: useStateP, useEffect: useEffectP } = React;
 
@@ -246,10 +252,110 @@ function AboutSheet({ onClose }) {
   );
 }
 
+function formatDiagnosticTime(timestamp) {
+  try {
+    return new Date(timestamp).toLocaleString("zh-CN", {
+      month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false,
+    });
+  } catch {
+    return "刚刚";
+  }
+}
+
+async function copyDiagnosticReport(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  if (!copied) throw new Error("复制没有完成");
+}
+
+/* ====== 本机排障信息 ====== */
+function DiagnosticsSheet({ onClose }) {
+  useLockBody();
+  const [events, setEvents] = useStateP(() => getDiagnosticEvents().slice().reverse());
+  const [copyState, setCopyState] = useStateP("");
+  const [clearing, setClearing] = useStateP(false);
+
+  const copyReport = async () => {
+    setCopyState("");
+    try {
+      await copyDiagnosticReport(formatDiagnosticReport(events.slice().reverse()));
+      setCopyState("已复制，可直接发给我排查");
+    } catch {
+      setCopyState("没有复制成功，请稍后再试");
+    }
+  };
+
+  const clearEvents = () => {
+    if (!clearing) {
+      setClearing(true);
+      return;
+    }
+    clearDiagnosticEvents();
+    setEvents([]);
+    setClearing(false);
+    setCopyState("本机排障记录已清空");
+  };
+
+  return (
+    <div className="sheet-mask" onClick={onClose}>
+      <div className="sheet" onClick={(event) => event.stopPropagation()} style={{ maxHeight: "84%" }}>
+        <div className="sheet-grip" />
+        <div className="sheet-head">
+          <h2 className="serif">本机排障信息</h2>
+          <button className="icon-btn" onClick={onClose} aria-label="关闭本机排障信息" style={{ width: 34, height: 34 }}>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+        <div className="sheet-body">
+          <div className="date-hint">只保存在这台设备，最多 80 条、7 天后自动过期。这里不显示聊天内容、图片、密码或密钥，也不会自动上传。</div>
+          {events.length === 0 ? (
+            <div className="priv-card">
+              <span className="priv-ic lav"><Icon name="check" /></span>
+              <div><div className="priv-t">目前没有需要排查的问题</div><div className="priv-s">以后若出现错误，这里会留下脱敏后的编号和发生位置。</div></div>
+            </div>
+          ) : (
+            <div className="cap-card diag-list">
+              {events.map((event, index) => {
+                const label = describeDiagnosticEvent(event);
+                return (
+                  <div className={"diag-row" + (index === events.length - 1 ? " last" : "")} key={event.id}>
+                    <span className="diag-main"><span className="diag-title">{label.area} · {label.action}</span><span className="diag-meta">{formatDiagnosticTime(event.at)}{event.status ? ` · HTTP ${event.status}` : ""}</span><span className="diag-id">{event.id}</span></span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div className="section-label" style={{ margin: "18px 0 12px" }}><span>这里能做什么</span><span className="sl-line" /></div>
+          <button className="pill pill-primary grow" style={{ width: "100%", marginBottom: 10 }} onClick={copyReport}>
+            <Icon name="download" /> 一键复制排障摘要
+          </button>
+          <button className={"pill pill-ghost grow" + (clearing ? " warn" : "")} style={{ width: "100%", color: "var(--rose-deep)" }} onClick={clearEvents}>
+            <Icon name={clearing ? "alert" : "trash"} /> {clearing ? "再点一次，确认清空这些本机记录" : "清空本机排障记录"}
+          </button>
+          {copyState && <div className="vin-hint diag-feedback">{copyState}</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ====== 隐私与数据 ====== */
 function PrivacySheet({ agents, onClose }) {
   useLockBody();
   const [done, setDone] = useStateP(false);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useStateP(false);
   const exportAll = () => { agents.forEach((a) => window.downloadHistory && window.downloadHistory(a, window.getFullHistory(a.id))); };
   const clearLocal = () => { try { Object.keys(localStorage).filter((k) => k.startsWith("ruobai")).forEach((k) => localStorage.removeItem(k)); } catch (e) {} setDone(true); setTimeout(() => setDone(false), 1800); };
   return (
@@ -275,6 +381,11 @@ function PrivacySheet({ agents, onClose }) {
             <span className="priv-ic rose"><Icon name="trash" /></span>
             <div><div className="priv-t">随时清除</div><div className="priv-s">清掉本机缓存的草稿与设置;角色聊天记录可在各自详情页单独删除。</div></div>
           </div>
+          <button className="priv-card diag-entry" onClick={() => setDiagnosticsOpen(true)}>
+            <span className="priv-ic lav"><Icon name="cpu" /></span>
+            <span><span className="priv-t">本机排障信息</span><span className="priv-s">出错时查看编号，一键复制脱敏摘要给我排查。</span></span>
+            <Icon name="chevron" className="row-chev" />
+          </button>
 
           <div className="section-label" style={{ margin: "18px 0 12px" }}><span>这里能做什么</span><span className="sl-line" /></div>
           <button className="pill pill-ghost grow" style={{ width: "100%", marginBottom: 10 }} onClick={exportAll}><Icon name="download" /> 导出全部聊天记录</button>
@@ -284,6 +395,7 @@ function PrivacySheet({ agents, onClose }) {
           <div className="vin-hint" style={{ marginTop: 14 }}>注销账号、彻底删除服务器数据等高风险操作,会再加一道确认 —— 这部分接后端。</div>
         </div>
       </div>
+      {diagnosticsOpen && <DiagnosticsSheet onClose={() => setDiagnosticsOpen(false)} />}
     </div>
   );
 }

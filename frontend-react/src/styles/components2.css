@@ -387,6 +387,17 @@ select.fld { appearance: none; background-image: url("data:image/svg+xml,%3Csvg 
 .priv-card { display: flex; gap: 12px; align-items: flex-start; padding: 14px; background: var(--card); border-radius: var(--r); box-shadow: var(--shadow-sm); margin-bottom: 10px; }
 .priv-ic { width: 36px; height: 36px; border-radius: 11px; flex-shrink: 0; display: grid; place-items: center; background: var(--paper-2); color: var(--ink-soft); }
 .priv-ic.lav { background: var(--lav-tint); color: var(--lav-deep); }
+.diag-entry { width: 100%; text-align: left; cursor: pointer; }
+.diag-entry > span:nth-child(2) { min-width: 0; flex: 1; }
+.diag-entry .row-chev { margin-left: auto; }
+.diag-list { margin-bottom: 2px; }
+.diag-row { display: flex; padding: 13px 15px; border-bottom: 1px solid var(--line); }
+.diag-row.last { border-bottom: none; }
+.diag-main { min-width: 0; display: grid; gap: 3px; }
+.diag-title { color: var(--ink); font-size: 13px; font-weight: 600; }
+.diag-meta { color: var(--ink-soft); font-size: 11px; }
+.diag-id { color: var(--lav-deep); font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+.diag-feedback { color: var(--sage-deep); }
 .priv-ic.rose { background: var(--rose-tint); color: var(--rose-deep); }
 .priv-ic svg { width: 18px; height: 18px; }
 .priv-t { font-size: 13.5px; font-weight: 600; color: var(--ink); }
