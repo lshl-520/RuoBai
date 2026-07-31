@@ -2,6 +2,32 @@ const STORAGE_KEY = "ruobai_private_diagnostics_v1";
 const MAX_EVENTS = 80;
 const RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
+const AREA_LABELS = {
+  app: "应用",
+  auth: "登录",
+  chat: "聊天",
+  image: "图片",
+  voice: "语音",
+  role: "角色",
+};
+
+const ACTION_LABELS = {
+  "draw-image": "生成图片",
+  "login": "登录",
+  "register": "注册",
+  "request": "请求服务",
+  "send-message": "发送消息",
+  "send-voice-message": "发送语音",
+  "stream-reply": "等待回复",
+  "switch-primary": "设为主陪伴",
+  "system-text-to-speech": "系统朗读",
+  "text-to-speech": "生成语音",
+  "upload-chat-image": "上传聊天图片",
+  "upload-image": "上传图片",
+  "upload-voice": "上传语音",
+  "delete": "删除角色",
+};
+
 function getStorage() {
   try {
     return globalThis.localStorage;
@@ -90,6 +116,39 @@ export function clearDiagnosticEvents() {
   try {
     storage?.removeItem(STORAGE_KEY);
   } catch {}
+}
+
+export function describeDiagnosticEvent(event = {}) {
+  return {
+    area: AREA_LABELS[event.area] || "应用",
+    action: ACTION_LABELS[event.action] || "暂时没有完成的操作",
+  };
+}
+
+export function formatDiagnosticReport(events = getDiagnosticEvents()) {
+  const safeEvents = Array.isArray(events) ? events.slice(-MAX_EVENTS) : [];
+  const generatedAt = new Date().toLocaleString("zh-CN", { hour12: false });
+  const header = [
+    "若白本机排障摘要",
+    `生成时间：${generatedAt}`,
+    "说明：仅包含本机自动脱敏后的错误摘要，未上传聊天内容、图片、密码或密钥。",
+  ];
+
+  if (safeEvents.length === 0) return [...header, "", "当前没有可复制的排障记录。"].join("\n");
+
+  const lines = safeEvents.map((event) => {
+    const label = describeDiagnosticEvent(event);
+    const time = new Date(event.at).toLocaleString("zh-CN", { hour12: false });
+    const details = [
+      `${time}｜${label.area}·${label.action}`,
+      event.status ? `HTTP ${event.status}` : "",
+      `错误编号：${event.id || "未知"}`,
+      sanitizeDiagnosticText(event.message),
+    ].filter(Boolean);
+    return `- ${details.join("｜")}`;
+  });
+
+  return [...header, "", ...lines].join("\n");
 }
 
 export function withDiagnosticId(message, id) {
