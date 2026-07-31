@@ -39,6 +39,12 @@ function mapMoment(m, agentsMap, user) {
   };
 }
 
+function getMomentImageSource(src, variant) {
+  const value = typeof src === "string" ? src : "";
+  if (!value.startsWith("/user_assets/chat/")) return value;
+  return `/api/media/${variant}?path=${encodeURIComponent(value)}`;
+}
+
 function MomentCard({ m, onLike, onDelete, onOpenImage, onComment, currentUserId }) {
   const [isLiking, setIsLiking] = React.useState(false);
   const [commentsOpen, setCommentsOpen] = React.useState(false);
@@ -137,7 +143,7 @@ function MomentCard({ m, onLike, onDelete, onOpenImage, onComment, currentUserId
                 aria-label="打开动态图片"
               >
                 <img
-                  src={`/api/media/thumbnail?path=${encodeURIComponent(src)}`}
+                  src={getMomentImageSource(src, "thumbnail")}
                   alt="动态图片"
                   loading="lazy"
                   decoding="async"
@@ -217,7 +223,7 @@ function MomentImagePreview({ src, onClose }) {
       <button className="cip-close" onClick={onClose} aria-label="关闭图片预览">×</button>
       <div className="cip-stage" onClick={(event) => event.stopPropagation()}>
         <img
-          src={`/api/media/preview?path=${encodeURIComponent(src)}`}
+          src={getMomentImageSource(src, "preview")}
           alt="动态图片高清预览"
           onError={(event) => {
             if (event.currentTarget.src.endsWith(src)) return;
