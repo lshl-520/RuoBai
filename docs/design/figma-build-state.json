@@ -2,7 +2,7 @@
   "runId": "ruobai-ds-20260730",
   "updatedAt": "2026-07-31",
   "phase": "page-design",
-  "step": "First-pass React alignment is complete; reconcile the approved Figma screens with implemented functionality",
+  "step": "App Shell first draft is complete in Figma; review it before marking it Ready for Development, then refine Chat Room against implemented functionality",
   "figma": {
     "teamName": "新思维's team",
     "teamId": "1628718300400662760",
@@ -31,7 +31,7 @@
     "P3.Navigation.a", "P3.Navigation.b", "P3.Navigation.c", "P3.Navigation.d", "P3.Navigation.e",
     "P3.Bubble.a", "P3.Bubble.b", "P3.Bubble.c", "P3.Bubble.d", "P3.Bubble.e",
     "P3.Feedback.a", "P3.Feedback.b", "P3.Feedback.c", "P3.Feedback.d", "P3.Feedback.e",
-    "P4", "Page.ChatRoom.a", "Page.ChatRoom.b", "Page.ChatRoom.c", "Page.ChatRoom.d", "Page.ChatRoom.e", "Page.ChatRoom.f", "Page.ChatList.a", "Page.ChatList.b", "Page.ChatList.c", "Page.Characters.a", "Page.Characters.b", "Page.Characters.c", "Page.MomentsComments.a", "Page.MomentsComments.b", "Page.MomentsComments.c", "Page.MomentsComments.d", "Page.MomentsComments.e", "Page.MomentsComments.f", "P5.DesignReview"
+    "P4", "Page.ChatRoom.a", "Page.ChatRoom.b", "Page.ChatRoom.c", "Page.ChatRoom.d", "Page.ChatRoom.e", "Page.ChatRoom.f", "Page.ChatList.a", "Page.ChatList.b", "Page.ChatList.c", "Page.Characters.a", "Page.Characters.b", "Page.Characters.c", "Page.MomentsComments.a", "Page.MomentsComments.b", "Page.MomentsComments.c", "Page.MomentsComments.d", "Page.MomentsComments.e", "Page.MomentsComments.f", "P5.DesignReview", "Page.AppShell.a", "Page.AppShell.b", "Page.AppShell.c"
   ],
   "partialSteps": [],
   "blockedSteps": [],
@@ -143,6 +143,9 @@
       "Content State": "134:31",
       "Bottom Sheet": "136:42",
       "Loading Skeleton": "137:37",
+      "App Shell / Formal": "184:2",
+      "App Shell / Mobile / Default": "184:3",
+      "App Shell / Desktop / Default": "184:4",
       "__Icon/Plus": "23:15",
       "__Icon/Loader": "24:2"
     }
@@ -359,7 +362,7 @@
   },
   "next": {
     "phase": "implementation-review",
-    "step": "Review the first React pass against the approved Figma screens and correct only verified mismatches one page at a time",
+    "step": "Review the App Shell first draft, then use Chat Room as the golden screen to reconcile approved Figma structure with implemented functionality",
     "requirements": [
       "Read component-creation.md before creating components",
       "Run search_design_system again immediately before each component creation",
@@ -377,7 +380,8 @@
       "Chat List first-pass screens completed: Mobile Default (145:2), Mobile Empty (145:3), Desktop Default (145:4); unsupported list-search, timestamp, unread-count, and recent-message controls were removed after the React audit. Default rows now show only real role tags or an explicit start-chat prompt.",
       "Characters first-pass screens completed: Mobile Default (150:2), Mobile Empty (150:3), Desktop Default (150:4); unreliable relationship metrics and unsupported role-search controls are excluded. A later fill audit repaired gray fallback fills by rebinding all visible layers to existing color variables; all three screens pass screenshot review without clipping or overlap.",
       "Moments comment-flow screens completed: Collapsed (156:2), Expanded (156:3), Focused (156:4), Sending (156:5), Success (156:6), Failed (156:7); all are 390x844 using Noto Sans SC. A fill audit repaired gray fallback fills by rebinding all visible layers to existing color variables; six-state screenshot review confirms no clipping or overlap and preserves sending, success, and retry feedback.",
-      "Figma structural validation confirmed list-search removal. A repair audit found every Chat List child using the same gray fallback fill as its canvas; all affected fills now bind to existing color variables. Direct Figma desktop-client review confirms Mobile Default, Mobile Empty, and Desktop Default render correctly with no clipping or overlap."
+      "Figma structural validation confirmed list-search removal. A repair audit found every Chat List child using the same gray fallback fill as its canvas; all affected fills now bind to existing color variables. Direct Figma desktop-client review confirms Mobile Default, Mobile Empty, and Desktop Default render correctly with no clipping or overlap.",
+      "App Shell first draft completed in 05 Chat System: Mobile Default (184:3) is 390x844 with a fixed header, a scrollable content region, and the existing active bottom-navigation component; Desktop Default (184:4) is 1440x900 with the existing active sidebar-navigation component, a global header, a 720px readable content column, and a companion-context column. Both were screenshot-checked with no remaining placeholders; product fonts are Noto Sans SC, with the sidebar brand retaining its existing Noto Serif SC treatment."
     ],
     "componentOrder": ["Button", "Input", "Avatar", "Navigation", "Bubble", "Feedback"]
   }
