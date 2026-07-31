@@ -174,7 +174,7 @@
 
 @media (min-width: 860px) {
   .chat-screen { max-width: none; }
-  .chat-top { padding-left: max(24px, calc((100vw - 780px) / 2)); padding-right: max(24px, calc((100vw - 780px) / 2)); }
+  .chat-top { padding-left: 14px; padding-right: 14px; }
   .msg-area { width: min(780px, 100%); align-self: center; box-sizing: border-box; padding-left: 16px; padding-right: 16px; }
   .input-bar { width: min(780px, 100%); align-self: center; box-sizing: border-box; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
 }
@@ -624,7 +624,7 @@
   .mc-user { right: 16px; bottom: 18px; width: 52px; height: 52px; }
   .mc-user img { border-radius: 16px; }
   .mem-roles { gap: 12px; padding: 8px 18px 10px; }
-  .mem-role { flex: 0 0 calc((100vw - 36px - 5 * 12px) / 6); }
+  .mem-role { flex-basis: calc((100% - 5 * 12px) / 6); }
   .mem-role-av { width: 42px; height: 42px; border-radius: 50%; }
   .mem-role-name { font-size: 10px; }
   .moments-list { gap: 2px; margin-top: 4px; }
