@@ -8,17 +8,24 @@ async function parseJson(response) {
   return data;
 }
 
-async function request(path, options = {}) {
-  const response = await fetch(path, {
-    credentials: "same-origin",
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers ?? {}),
-    },
-  });
+import { recordDiagnostic } from "./diagnostics.js";
 
-  return parseJson(response);
+async function request(path, options = {}) {
+  try {
+    const response = await fetch(path, {
+      credentials: "same-origin",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers ?? {}),
+      },
+    });
+    if (!response.ok) recordDiagnostic({ area: "auth", action: path.includes("login") ? "login" : path.includes("register") ? "register" : "session", status: response.status, error: `HTTP ${response.status}` });
+    return parseJson(response);
+  } catch (error) {
+    recordDiagnostic({ area: "auth", action: path.includes("login") ? "login" : path.includes("register") ? "register" : "session", error });
+    throw error;
+  }
 }
 
 export function getSession() {

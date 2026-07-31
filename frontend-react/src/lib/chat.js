@@ -8,17 +8,32 @@ async function parseJson(response) {
   return data;
 }
 
-async function request(path, options = {}) {
-  const response = await fetch(path, {
-    credentials: "same-origin",
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers ?? {}),
-    },
-  });
+import { recordDiagnostic } from "./diagnostics.js";
 
-  return parseJson(response);
+function diagnosticAction(path) {
+  if (path.includes("upload-image")) return "upload-image";
+  if (path.includes("upload-voice")) return "upload-voice";
+  if (path.includes("/tts/")) return "text-to-speech";
+  if (path.includes("/draw")) return "draw-image";
+  return "request";
+}
+
+async function request(path, options = {}) {
+  try {
+    const response = await fetch(path, {
+      credentials: "same-origin",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers ?? {}),
+      },
+    });
+    if (!response.ok) recordDiagnostic({ area: "chat", action: diagnosticAction(path), status: response.status, error: `HTTP ${response.status}` });
+    return parseJson(response);
+  } catch (error) {
+    recordDiagnostic({ area: "chat", action: diagnosticAction(path), error });
+    throw error;
+  }
 }
 
 export function getMessages(roleId, limit = 50) {
@@ -153,7 +168,9 @@ export function friendlyStreamHttpError(status) {
 }
 
 export async function streamAssistantReply(roleId, payload, handlers = {}) {
-  const response = await fetch("/api/chat", {
+  let response;
+  try {
+    response = await fetch("/api/chat", {
     method: "POST",
     credentials: "same-origin",
     headers: {
@@ -165,9 +182,14 @@ export async function streamAssistantReply(roleId, payload, handlers = {}) {
       skip_server_persistence: true,
       ...payload,
     }),
-  });
+    });
+  } catch (error) {
+    recordDiagnostic({ area: "chat", action: "stream-reply", error });
+    throw error;
+  }
 
   if (!response.ok || !response.body) {
+    recordDiagnostic({ area: "chat", action: "stream-reply", status: response.status, error: `HTTP ${response.status}` });
     const data = await parseJson(response).catch(() => null);
     throw new Error(
       data?.error || friendlyStreamHttpError(response.status),

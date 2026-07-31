@@ -10,6 +10,7 @@ import { MemoryScreen } from "./pages/memory.jsx";
 import { ProfileScreen, OnboardSheet } from "./pages/profile.jsx";
 import { DEFAULT_USER_AVATAR } from "./lib/default-assets.js";
 import { bootNativePushIfPossible, isNativePushAvailable } from "./lib/push.js";
+import { recordDiagnostic, withDiagnosticId } from "./lib/diagnostics.js";
 
 const TABS = [
   { key: "chat",    path: "/chat",       label: "聊天", icon: "chat" },
@@ -102,8 +103,9 @@ function RuobaiApp({ authed, setAuthed }) {
       setDetailAgent(null);
       setTimeout(() => window.dispatchEvent(new Event("focus")), 100);
     } catch (err) {
+      const id = recordDiagnostic({ area: "role", action: "delete", error: err });
       console.error("删除角色失败", err);
-      throw err;
+      throw new Error(withDiagnosticId("删除角色失败，请稍后重试。", id));
     }
   };
   const restoreAgent = () => {
@@ -118,7 +120,9 @@ function RuobaiApp({ authed, setAuthed }) {
       setDetailAgent((d) => d ? { ...d, isDefault: d.id === id } : d);
       setTimeout(() => window.dispatchEvent(new Event("focus")), 100);
     } catch (err) {
+      const id = recordDiagnostic({ area: "role", action: "switch-primary", error: err });
       console.error("切换主陪伴失败", err);
+      throw new Error(withDiagnosticId("设置主陪伴失败，请稍后重试。", id));
     }
   };
 

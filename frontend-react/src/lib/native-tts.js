@@ -1,4 +1,5 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
+import { recordDiagnostic } from "./diagnostics.js";
 
 const NativeTextToSpeech = registerPlugin("NativeTextToSpeech");
 
@@ -63,7 +64,9 @@ export async function speakTextWithSystemVoice(text, options = {}) {
   try {
     return await speakBrowserText(text, options);
   } catch (browserError) {
-    throw nativeError || browserError;
+    const error = nativeError || browserError;
+    recordDiagnostic({ area: "voice", action: "system-text-to-speech", error });
+    throw error;
   }
 }
 

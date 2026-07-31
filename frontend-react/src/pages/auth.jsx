@@ -1,5 +1,6 @@
 import React from "react";
 import { login, normalizeErrorMessage, register } from "../lib/auth.js";
+import { recordDiagnostic, withDiagnosticId } from "../lib/diagnostics.js";
 import { Icon, Bars } from "../store.jsx";
 /* 登录 / 邀请码注册 — 温的、克制的入口
    场景:她从管理员私下拿到了邀请码,正站在注册页前犹豫。
@@ -42,7 +43,8 @@ function AuthScreen({ onEnter, notify }) {
       const data = reg ? await register(payload) : await login(payload);
 
       if (!data?.success) {
-        const text = normalizeErrorMessage(data, reg ? "注册失败，请检查邀请码。" : "登录失败，请检查用户名和密码。");
+        const baseText = normalizeErrorMessage(data, reg ? "注册失败，请检查邀请码。" : "登录失败，请检查用户名和密码。");
+        const text = withDiagnosticId(baseText, recordDiagnostic({ area: "auth", action: reg ? "register" : "login", error: baseText }));
         setStatus({
           type: "error",
           text,
@@ -57,7 +59,8 @@ function AuthScreen({ onEnter, notify }) {
       });
       onEnter?.();
     } catch (error) {
-      const text = error instanceof Error ? error.message : "连接后端失败，请确认后端已经启动。";
+      const baseText = error instanceof Error ? error.message : "连接后端失败，请确认后端已经启动。";
+      const text = withDiagnosticId(baseText, recordDiagnostic({ area: "auth", action: reg ? "register" : "login", error }));
       setStatus({
         type: "error",
         text,
