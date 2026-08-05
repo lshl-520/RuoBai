@@ -1302,7 +1302,7 @@ export function createChatRouter({
               model: modelConfig.model,
               messages,
               stream: shouldStream,
-              thinkLevel
+              thinkLevel: primaryThinkLevel
             })
         : {
             model: modelConfig.model,
@@ -1493,11 +1493,6 @@ export function createChatRouter({
         : useAnthropicMessagesApi
           ? extractAnthropicText(payload)
           : payload?.choices?.[0]?.message?.content || '';
-      const reasoningSummary = useResponsesApi
-        ? extractResponsesReasoningSummary(payload)
-        : useAnthropicMessagesApi
-          ? extractAnthropicThinking(payload)
-          : extractChatCompletionsReasoning(payload);
       const style = String(character?.speech_style || 'natural');
       let finalContent = rawContent;
       if (style !== 'roleplay') finalContent = stripActionDescriptions(finalContent);
@@ -1525,8 +1520,7 @@ export function createChatRouter({
           // 原始摘要不再暴露给陪伴 UI；只有独立生成的中文内心 OS 可以展示。
           inner_os_content: innerOsContent || null,
           inner_os_source: innerOsContent ? INNER_OS_SOURCE : null
-        },
-        raw: payload
+        }
       });
     } catch (error) {
       if (wantsEventStream(req)) {
