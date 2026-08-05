@@ -37,3 +37,8 @@ test("发送失败重试时把缺失的图片附件归一为空数组", () => {
   assert.match(source, /Array\.isArray\(retryPayload\.images\)/);
   assert.match(source, /Array\.isArray\(atts\)/);
 });
+
+test("发送按钮不把鼠标事件对象误当成重试参数", () => {
+  assert.match(source, /onClick=\{\(\) => send\(\)\}/);
+  assert.doesNotMatch(source, /onClick=\{send\}/);
+});

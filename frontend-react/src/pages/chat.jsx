@@ -1597,7 +1597,7 @@ function ChatRoom({ agent, onBack }) {
                   placeholder={typing ? `${agent.name}正在回复…` : `和${agent.name}说点什么…`} />
               </div>
               {(draft.trim() || atts.length > 0)
-                ? <button className={"ib-send on" + (typing ? " busy" : "")} onClick={send} disabled={typing || uploading} aria-label="发送消息" title="发送消息"><Icon name="send" /></button>
+                ? <button className={"ib-send on" + (typing ? " busy" : "")} onClick={() => send()} disabled={typing || uploading} aria-label="发送消息" title="发送消息"><Icon name="send" /></button>
                 : null}
             </>
           )}
