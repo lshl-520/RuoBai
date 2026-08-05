@@ -15,7 +15,8 @@ import { createAdminRouter } from './admin.js';
 import { createUpdateService, startDailyBackupScheduler } from './admin-update.js';
 import { createFcmSender, startProactiveScheduler } from './proactive.js';
 import { createPushRouter } from './push.js';
-import { startAutoMomentsScheduler } from './auto-moments.js';
+import { createAutoMomentsService, startAutoMomentsScheduler } from './auto-moments.js';
+import { createAutoMomentsRouter } from './auto-moments-routes.js';
 import authRoutes from './auth.js';
 import chatRoutes from './chat.js';
 import memoryRoutes from './memory.js';
@@ -26,6 +27,8 @@ import capabilityRoutes from './capabilities.js';
 import ttsRoutes from './tts.js';
 import postsRoutes from './posts.js';
 import momentRoutes from './moments.js';
+import lifeEventRoutes from './life-events.js';
+import proactiveEventRoutes from './proactive-events.js';
 import settingsRoutes from './settings.js';
 import mediaRoutes from './media.js';
 import { attachRealtimeCallServer } from './realtime-call.js';
@@ -33,19 +36,28 @@ import { attachRealtimeCallServer } from './realtime-call.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
-const publicDir = path.join(projectRoot, 'public');
+// 旧版 HTML 可选保留，用于对照；当前前端主线是 frontend-react/dist。
+const legacyPublicDir = path.join(projectRoot, '旧主题归档', 'legacy-html-3.13-20260803', 'public');
+const legacyIndexFile = path.join(legacyPublicDir, 'index.html');
 const reactDistDir = path.join(projectRoot, 'frontend-react', 'dist');
 const reactIndexFile = path.join(reactDistDir, 'index.html');
-// SERVE_REACT=false 时强制走旧版HTML，哪怕dist/存在也不用
+// SERVE_REACT=false 时强制走旧版 HTML，哪怕 dist/ 存在也不用。
 // 本地比较两套界面时在 .env 里加 SERVE_REACT=false
 const serveReactEnv = process.env.SERVE_REACT;
-const hasReactBuild = serveReactEnv !== 'false' && fs.existsSync(reactIndexFile);
+const hasReactBuild = fs.existsSync(reactIndexFile);
+const hasLegacyBuild = fs.existsSync(legacyIndexFile);
+// 旧归档被移走后，不能因为遗留的 SERVE_REACT=false 把新前端一起关掉。
+const serveLegacyFrontend = hasLegacyBuild && (!hasReactBuild || serveReactEnv === 'false');
+const activeFrontendIndex = serveLegacyFrontend ? legacyIndexFile : reactIndexFile;
+const hasActiveFrontend = fs.existsSync(activeFrontendIndex);
 const userAssetsDir = path.join(projectRoot, 'user_assets');
 const app = express();
 const requestedPort = Number(process.env.PORT) || 3000;
 const updateService = createUpdateService();
 const adminRoutes = createAdminRouter({ updateService });
 const pushRoutes = createPushRouter({ pool });
+const autoMomentsService = createAutoMomentsService();
+const autoMomentsRoutes = createAutoMomentsRouter({ pool, service: autoMomentsService });
 // Keep the push module independent from the Firebase Admin SDK's ESM export shape.
 const firebaseAdmin = {
   get apps() {
@@ -119,7 +131,7 @@ app.use(compression({
   },
 }));
 
-if (hasReactBuild) {
+if (hasReactBuild && !serveLegacyFrontend) {
   app.use('/assets', express.static(path.join(reactDistDir, 'assets'), {
     maxAge: '1y',
     immutable: true,
@@ -130,10 +142,12 @@ if (hasReactBuild) {
   }));
 }
 
-app.use(express.static(publicDir, {
-  maxAge: '7d',
-  etag: true,
-}));
+if (hasLegacyBuild) {
+  app.use(express.static(legacyPublicDir, {
+    maxAge: '7d',
+    etag: true,
+  }));
+}
 app.use('/user_assets', express.static(userAssetsDir, {
   maxAge: '1h',
   etag: true,
@@ -171,6 +185,9 @@ app.use('/api/capabilities', requireAuth, capabilityRoutes);
 app.use('/api/tts', requireAuth, ttsRoutes);
 app.use('/api/posts', requireAuth, postsRoutes);
 app.use('/api/moments', requireAuth, momentRoutes);
+app.use('/api/auto-moments', requireAuth, autoMomentsRoutes);
+app.use('/api/life-events', requireAuth, lifeEventRoutes);
+app.use('/api/proactive-events', requireAuth, proactiveEventRoutes);
 app.use('/api/settings', requireAuth, settingsRoutes);
 app.use('/api/relationship', requireAuth, settingsRoutes);
 app.use('/api/usage', requireAuth, settingsRoutes);
@@ -182,12 +199,19 @@ app.get('*', (req, res) => {
     return res.status(404).json({ success: false, error: 'API not found' });
   }
 
-  return res.sendFile(hasReactBuild ? reactIndexFile : path.join(publicDir, 'index.html'));
+  if (!hasActiveFrontend) {
+    return res.status(503).json({
+      success: false,
+      error: '前端构建不存在，请先运行 frontend-react 的 npm run build'
+    });
+  }
+
+  return res.sendFile(activeFrontendIndex);
 });
 
 app.use((error, _req, res, _next) => {
   console.error(error);
-  res.status(500).json({
+  res.status(Number(error?.statusCode) || 500).json({
     success: false,
     error: error.message || '服务器内部错误'
   });
@@ -228,7 +252,7 @@ async function start() {
         console.log(`  ─────────────────────────────────\n`);
         startDailyBackupScheduler(updateService);
         startProactiveScheduler({ pool, sendPush: fcmSender });
-        startAutoMomentsScheduler();
+        startAutoMomentsScheduler({ service: autoMomentsService });
         return;
       } catch (error) {
         lastError = error;

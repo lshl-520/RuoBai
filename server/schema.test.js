@@ -1,6 +1,38 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ensureCharacterRuntimeColumns, ensureCredentialRuntimeColumns, ensureMemoryRuntimeColumns, ensurePersonaRuntimeTables, ensurePushRuntimeTables } from './schema.js';
+import { ensureCharacterRuntimeColumns, ensureCredentialRuntimeColumns, ensureMessageRuntimeColumns, ensureMemoryRuntimeColumns, ensurePersonaRuntimeTables, ensurePushRuntimeTables, ensureDynamicCapabilityAssignment } from './schema.js';
+
+test('ensureDynamicCapabilityAssignment upgrades the legacy capability enum', async () => {
+  const calls = [];
+  const db = {
+    query: async (sql, params = []) => {
+      calls.push({ sql, params });
+      if (sql.includes('information_schema.TABLES')) return [[{ TABLE_NAME: 'capability_assignments' }]];
+      if (sql.includes('COLUMN_TYPE')) return [[{ COLUMN_TYPE: "enum('chat','vision','image','tts','realtime')" }]];
+      return [{ affectedRows: 0 }];
+    }
+  };
+
+  await ensureDynamicCapabilityAssignment(db);
+
+  assert.ok(calls.some(call => /ALTER TABLE capability_assignments MODIFY COLUMN capability ENUM\('chat', 'vision', 'image', 'dynamic', 'tts', 'realtime'\)/.test(call.sql)));
+});
+
+test('ensureDynamicCapabilityAssignment leaves an upgraded enum alone', async () => {
+  const calls = [];
+  const db = {
+    query: async (sql) => {
+      calls.push(sql);
+      if (sql.includes('information_schema.TABLES')) return [[{ TABLE_NAME: 'capability_assignments' }]];
+      if (sql.includes('COLUMN_TYPE')) return [[{ COLUMN_TYPE: "enum('chat','vision','image','dynamic','tts','realtime')" }]];
+      return [{ affectedRows: 0 }];
+    }
+  };
+
+  await ensureDynamicCapabilityAssignment(db);
+
+  assert.equal(calls.filter(sql => /^ALTER TABLE capability_assignments/i.test(sql)).length, 0);
+});
 
 test('ensureCharacterRuntimeColumns adds missing role-page columns once', async () => {
   const calls = [];
@@ -108,4 +140,40 @@ test('ensureCharacterRuntimeColumns adds role dedicated chat model columns on st
   assert.match(joined, /ADD COLUMN chat_credential_id INT DEFAULT NULL AFTER intimacy/i);
   assert.match(joined, /ADD COLUMN chat_model_id VARCHAR\(100\) DEFAULT NULL AFTER chat_credential_id/i);
   assert.match(joined, /ADD COLUMN chat_thinking_level VARCHAR\(20\) DEFAULT 'off' AFTER chat_model_id/i);
+});
+
+test('ensureMessageRuntimeColumns adds separate inner OS fields once', async () => {
+  const calls = [];
+  const db = {
+    query: async (sql, params = []) => {
+      calls.push({ sql, params });
+      if (sql.includes('information_schema.COLUMNS')) return [[]];
+      return [{ affectedRows: 0 }];
+    }
+  };
+
+  await ensureMessageRuntimeColumns(db);
+
+  const alterCalls = calls.filter(call => /^ALTER TABLE messages/i.test(call.sql));
+  assert.equal(alterCalls.length, 3);
+  const joined = alterCalls.map(call => call.sql).join('\n');
+  assert.match(joined, /ADD COLUMN reasoning_summary TEXT AFTER content/i);
+  assert.match(joined, /ADD COLUMN inner_os_content TEXT AFTER reasoning_summary/i);
+  assert.match(joined, /ADD COLUMN inner_os_source VARCHAR\(50\) DEFAULT NULL AFTER inner_os_content/i);
+});
+
+test('ensureCharacterRuntimeColumns adds dynamic profile and template fields on startup', async () => {
+  const calls = [];
+  const missing = new Set(['auto_moments_image_profile', 'auto_moments_templates']);
+  const db = {
+    query: async (sql, params = []) => {
+      calls.push({ sql, params });
+      if (sql.includes('information_schema.COLUMNS')) return [missing.has(params[1]) ? [] : [{ COLUMN_NAME: params[1] }]];
+      return [{ affectedRows: 0 }];
+    }
+  };
+  await ensureCharacterRuntimeColumns(db);
+  const joined = calls.filter(call => /^ALTER TABLE characters/i.test(call.sql)).map(call => call.sql).join('\n');
+  assert.match(joined, /ADD COLUMN auto_moments_image_profile JSON DEFAULT NULL AFTER auto_moments_images_enabled/i);
+  assert.match(joined, /ADD COLUMN auto_moments_templates JSON DEFAULT NULL AFTER auto_moments_image_profile/i);
 });

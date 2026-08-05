@@ -5,10 +5,11 @@ import { createMomentsRouter } from './moments.js';
 
 function createApp(router) {
   const app = express();
+  const session = { userId: 1 };
   app.use(express.json());
   app.use((req, _res, next) => {
     req.userId = 1;
-    req.session = { userId: 1 };
+    req.session = session;
     next();
   });
   app.use('/api/moments', router);
@@ -87,6 +88,35 @@ test('GET /api/moments returns filtered list with comments and liked state', asy
   });
 });
 
+test('GET /api/moments keeps all and mine scopes separate at the SQL boundary', async () => {
+  const momentQueries = [];
+  const router = createMomentsRouter({
+    pool: {
+      query: async (sql, params) => {
+        if (sql.includes('FROM moments')) {
+          momentQueries.push({ sql, params });
+          return [[]];
+        }
+        throw new Error(`Unexpected query: ${sql}`);
+      }
+    },
+    withTransaction: async work => work({ query: async () => { throw new Error('unused'); } })
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const allResponse = await fetch(`${baseUrl}/api/moments?scope=all`);
+    const mineResponse = await fetch(`${baseUrl}/api/moments?scope=mine`);
+    assert.equal(allResponse.status, 200);
+    assert.equal(mineResponse.status, 200);
+  });
+
+  assert.equal(momentQueries.length, 2);
+  assert.deepEqual(momentQueries[0].params, [1, 20, 0]);
+  assert.doesNotMatch(momentQueries[0].sql, /m\.character_id IS NULL/);
+  assert.deepEqual(momentQueries[1].params, [1, 20, 0]);
+  assert.match(momentQueries[1].sql, /m\.character_id IS NULL/);
+});
+
 test('GET /api/moments/:id returns one moment with comments and liked state', async () => {
   const calls = [];
   const router = createMomentsRouter({
@@ -142,7 +172,7 @@ test('GET /api/moments/:id returns one moment with comments and liked state', as
     assert.equal(payload.item.liked, true);
     assert.equal(payload.item.comments_count, 1);
     assert.equal(payload.item.comments[0].content, 'first');
-    assert.equal(calls.length, 3);
+    assert.equal(calls.length, 4);
   });
 });
 
@@ -153,8 +183,9 @@ test('POST /api/moments creates a moment', async () => {
         if (sql.includes('INSERT INTO moments')) {
           assert.equal(params[0], 1);
           assert.equal(params[1], null);
-          assert.equal(params[2], 'new moment');
-          assert.equal(params[3], '["x.png"]');
+          assert.equal(params[2], 'private');
+          assert.equal(params[3], 'new moment');
+          assert.equal(params[4], '["x.png"]');
           return [{ insertId: 7 }];
         }
 
@@ -192,6 +223,157 @@ test('POST /api/moments creates a moment', async () => {
     assert.equal(payload.success, true);
     assert.equal(payload.item.id, 7);
     assert.deepEqual(payload.item.images, ['x.png']);
+  });
+});
+
+test('POST /api/moments/:id/share only shares a user moment to explicitly selected roles', async () => {
+  const queries = [];
+  const connection = {
+    query: async (sql, params) => {
+      queries.push({ sql, params });
+      if (sql.includes('SELECT id, character_id FROM moments')) {
+        return [[{ id: 7, character_id: null }]];
+      }
+      if (sql.includes('DELETE FROM moment_audiences')) return [{ affectedRows: 0 }];
+      if (sql.includes('INSERT IGNORE INTO moment_audiences')) return [{ affectedRows: 1 }];
+      if (sql.includes('UPDATE moments SET visibility_mode')) return [{ affectedRows: 1 }];
+      throw new Error(`Unexpected query: ${sql}`);
+    }
+  };
+  const router = createMomentsRouter({
+    pool: { query: async () => { throw new Error('unused'); } },
+    requireCharacter: async (userId, characterId) => {
+      assert.equal(userId, 1);
+      assert.equal(characterId, 6);
+      return { id: 6, user_id: 1 };
+    },
+    withTransaction: async work => work(connection)
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/moments/7/share`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ character_ids: [6, 6, 'bad'] })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(payload.character_ids, [6]);
+    assert.equal(queries.filter((item) => item.sql.includes('INSERT IGNORE INTO moment_audiences')).length, 1);
+  });
+});
+
+test('POST /api/moments/:id/share rejects a role moment', async () => {
+  const router = createMomentsRouter({
+    pool: { query: async () => { throw new Error('unused'); } },
+    withTransaction: async work => work({
+      query: async (sql) => {
+        if (sql.includes('SELECT id, character_id FROM moments')) return [[{ id: 8, character_id: 6 }]];
+        throw new Error(`Unexpected query: ${sql}`);
+      }
+    })
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/moments/8/share`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ character_ids: [6] })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.match(payload.error, /角色动态不能由用户重新分享/);
+  });
+});
+
+test('POST /api/moments rejects direct character identity', async () => {
+  const router = createMomentsRouter({
+    pool: { query: async () => { throw new Error('普通角色动态不应写入数据库'); } },
+    requireCharacter: async () => { throw new Error('未授权的角色流程不应校验角色'); }
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/moments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        character_id: 6,
+        content: '冒充角色发动态'
+      })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 403);
+    assert.equal(payload.success, false);
+    assert.match(payload.error, /普通动态只能由你发布/);
+  });
+});
+
+test('角色自拍流程在草稿失败时仍可发布一次角色动态', async () => {
+  const inserted = [];
+  const router = createMomentsRouter({
+    pool: {
+      query: async (sql, params) => {
+        if (sql.includes('FROM capability_assignments ca')) return [[]];
+        if (sql.includes('FROM model_configs')) return [[]];
+        if (sql.includes('INSERT INTO moments')) {
+          inserted.push(params);
+          return [{ insertId: 19 }];
+        }
+        if (sql.includes('FROM moments')) {
+          return [[{
+            id: 19,
+            user_id: 1,
+            character_id: 6,
+            content: '自拍兜底文案',
+            images: '["/user_assets/chat/selfie.png"]',
+            likes_count: 0,
+            created_at: '2026-05-26 00:00:00',
+            is_deleted: 0
+          }]];
+        }
+        throw new Error(`Unexpected query: ${sql}`);
+      }
+    },
+    requireCharacter: async (userId, characterId) => {
+      assert.equal(userId, 1);
+      assert.equal(characterId, 6);
+      return { id: 6, user_id: 1, name: '小白', persona: '温柔' };
+    }
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const draftResponse = await fetch(`${baseUrl}/api/moments/draft`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ character_id: 6, media_url: '/user_assets/chat/selfie.png' })
+    });
+    assert.equal(draftResponse.status, 400);
+
+    const postResponse = await fetch(`${baseUrl}/api/moments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        character_id: 6,
+        content: '自拍兜底文案',
+        images: ['/user_assets/chat/selfie.png'],
+        mood: '随手自拍'
+      })
+    });
+    const payload = await postResponse.json();
+
+    assert.equal(postResponse.status, 201);
+    assert.equal(payload.item.character_id, 6);
+    assert.equal(inserted.length, 1);
+
+    const replayResponse = await fetch(`${baseUrl}/api/moments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ character_id: 6, content: '重复冒用' })
+    });
+    assert.equal(replayResponse.status, 403);
   });
 });
 
@@ -408,6 +590,10 @@ test('POST /api/moments/:id/comment creates a comment', async () => {
         return [[{ id: 8 }]];
       }
 
+      if (sql.includes('SELECT character_id, content FROM moments')) {
+        return [[{ character_id: 6, content: '原动态' }]];
+      }
+
       if (sql.includes('INSERT INTO moment_comments')) {
         assert.deepEqual(params, [8, 1, null, 'nice']);
         return [{ insertId: 11 }];
@@ -445,5 +631,28 @@ test('POST /api/moments/:id/comment creates a comment', async () => {
     assert.equal(payload.success, true);
     assert.equal(payload.item.id, 11);
     assert.equal(payload.item.content, 'nice');
+  });
+});
+
+test('POST /api/moments/:id/comment rejects character identity', async () => {
+  const router = createMomentsRouter({
+    pool: { query: async () => { throw new Error('角色评论不应写入数据库'); } },
+    withTransaction: async () => { throw new Error('角色评论不应开启事务'); }
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/moments/8/comment`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-character-id': '6'
+      },
+      body: JSON.stringify({ content: '冒充角色评论' })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 403);
+    assert.equal(payload.success, false);
+    assert.match(payload.error, /评论只能由你发布/);
   });
 });

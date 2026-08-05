@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { pool as defaultPool, withTransaction as defaultWithTransaction } from './db.js';
 import { asyncHandler, clamp, getActiveCharacter, parseInteger, toBoolean } from './helpers.js';
 import { guessModelCapabilities } from './model-capabilities.js';
+import { buildIdentityPack } from './identity-pack.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -92,13 +93,88 @@ function modelSupportsChat(capabilities, modelId) {
   return new Set([...values, ...guessModelCapabilities(modelId)]).has('chat');
 }
 
+const AUTO_MOMENT_PROFILE_FIELDS = ['temperament', 'face', 'eyes', 'hair', 'skin', 'expression', 'other'];
+const AUTO_MOMENT_TEMPLATE_FIELDS = ['categories', 'selfie_scenes', 'poses', 'moods', 'custom'];
+const AUTO_MOMENT_RESOLUTIONS = new Set(['channel', '1k', '2k', '4k']);
+
+function parseStructuredValue(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeChoiceList(value, maxItems = 16) {
+  const values = Array.isArray(value) ? value : String(value || '').split(/[,，]/);
+  return [...new Set(values
+    .map(item => String(item || '').trim().slice(0, 60))
+    .filter(Boolean))]
+    .slice(0, maxItems);
+}
+
+function sanitizeAutoMomentImageProfile(value) {
+  if (value === null || value === '') return null;
+  const source = parseStructuredValue(value);
+  if (!source) return null;
+
+  const name = String(source.name || '').trim().slice(0, 60);
+  const ageFeel = String(source.age_feel ?? source.ageFeel ?? '').trim().slice(0, 60);
+  if (!name || !ageFeel) return null;
+
+  const profile = { name, age_feel: ageFeel };
+  for (const field of AUTO_MOMENT_PROFILE_FIELDS) {
+    const choices = normalizeChoiceList(source[field]);
+    if (choices.length) profile[field] = choices;
+  }
+  return JSON.stringify(profile);
+}
+
+function sanitizeAutoMomentTemplates(value) {
+  if (value === null || value === '') return null;
+  const source = parseStructuredValue(value);
+  if (!source) return null;
+
+  const templates = {};
+  for (const field of AUTO_MOMENT_TEMPLATE_FIELDS) {
+    templates[field] = normalizeChoiceList(source[field]);
+  }
+  return JSON.stringify(templates);
+}
+
+function normalizeAutoMomentImageResolution(value) {
+  const normalized = String(value || 'channel').trim().toLowerCase();
+  return AUTO_MOMENT_RESOLUTIONS.has(normalized) ? normalized : 'channel';
+}
+
+function serializeRole(row) {
+  if (!row) return row;
+  return {
+    ...row,
+    auto_moments_image_resolution: normalizeAutoMomentImageResolution(row.auto_moments_image_resolution),
+    auto_moments_image_profile: parseStructuredValue(row.auto_moments_image_profile),
+    auto_moments_templates: parseStructuredValue(row.auto_moments_templates)
+  };
+}
+
+function hasIncompleteAutoMomentImageProfile(body, payload) {
+  const raw = body?.auto_moments_image_profile ?? body?.autoMomentsImageProfile;
+  return raw !== undefined && raw !== null && raw !== '' && !payload.auto_moments_image_profile;
+}
+
 function sanitizeCharacterPayload(body = {}) {
   const autoMomentsEnabled = Object.prototype.hasOwnProperty.call(body, 'auto_moments_enabled')
     ? toBoolean(body.auto_moments_enabled)
     : false;
-  const dailyMin = clamp(parseInteger(body.auto_moments_daily_min, autoMomentsEnabled ? 2 : 0), 0, 6);
-  const dailyMax = clamp(parseInteger(body.auto_moments_daily_max, autoMomentsEnabled ? 6 : 0), 0, 6);
-  const minIntervalHours = clamp(parseInteger(body.auto_moments_min_interval_hours, 4), 4, 24);
+  const autoMomentsImagesEnabled = Object.prototype.hasOwnProperty.call(body, 'auto_moments_images_enabled')
+    ? toBoolean(body.auto_moments_images_enabled)
+    : false;
+  const dailyMin = clamp(parseInteger(body.auto_moments_daily_min, autoMomentsEnabled ? 2 : 0), 0, 12);
+  const dailyMax = clamp(parseInteger(body.auto_moments_daily_max, autoMomentsEnabled ? 6 : 0), 0, 12);
+  const minIntervalHours = clamp(parseInteger(body.auto_moments_min_interval_hours, 4), 1, 24);
   const rawPortraitId = body.portrait_id === null || body.portraitId === null
     ? null
     : parseInteger(body.portrait_id ?? body.portraitId, null);
@@ -119,6 +195,10 @@ function sanitizeCharacterPayload(body = {}) {
     intimacy: Math.min(100, Math.max(0, parseInteger(body.intimacy, 50))),
     speech_style: ['natural', 'compact', 'roleplay'].includes(body.speech_style) ? body.speech_style : 'natural',
     auto_moments_enabled: autoMomentsEnabled ? 1 : 0,
+    auto_moments_images_enabled: autoMomentsImagesEnabled ? 1 : 0,
+    auto_moments_image_resolution: normalizeAutoMomentImageResolution(body.auto_moments_image_resolution ?? body.autoMomentsImageResolution),
+    auto_moments_image_profile: sanitizeAutoMomentImageProfile(body.auto_moments_image_profile ?? body.autoMomentsImageProfile),
+    auto_moments_templates: sanitizeAutoMomentTemplates(body.auto_moments_templates ?? body.autoMomentsTemplates),
     auto_moments_daily_min: autoMomentsEnabled ? Math.min(dailyMin, dailyMax) : 0,
     auto_moments_daily_max: autoMomentsEnabled ? Math.max(dailyMin, dailyMax) : 0,
     auto_moments_min_interval_hours: minIntervalHours
@@ -236,7 +316,8 @@ async function loadRoles(userId, { includeDeleted = false } = {}, connection = p
   const [rows] = await connection.query(
     `
       SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
-             auto_moments_enabled, auto_moments_daily_min, auto_moments_daily_max,
+             auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution, auto_moments_daily_min, auto_moments_daily_max,
+             auto_moments_image_profile, auto_moments_templates,
              auto_moments_min_interval_hours, auto_moments_last_posted_at,
              is_active, is_deleted, delete_after, created_at
       FROM characters
@@ -246,7 +327,7 @@ async function loadRoles(userId, { includeDeleted = false } = {}, connection = p
     [userId]
   );
 
-  return rows;
+  return rows.map(serializeRole);
 }
 
 router.get('/', asyncHandler(async (req, res) => {
@@ -262,6 +343,9 @@ router.get('/', asyncHandler(async (req, res) => {
 
 router.post('/', asyncHandler(async (req, res) => {
   const payload = sanitizeCharacterPayload(req.body);
+  if (hasIncompleteAutoMomentImageProfile(req.body, payload)) {
+    return res.status(400).json({ success: false, error: '固定形象请至少填写姓名和年龄感' });
+  }
   if (!payload.name) {
     return res.status(400).json({ success: false, error: '角色名称不能为空' });
   }
@@ -282,11 +366,12 @@ router.post('/', asyncHandler(async (req, res) => {
           (
             user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy,
             speech_style,
-            auto_moments_enabled, auto_moments_daily_min, auto_moments_daily_max,
+            auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution, auto_moments_daily_min, auto_moments_daily_max,
+            auto_moments_image_profile, auto_moments_templates,
             auto_moments_min_interval_hours,
             is_active, is_deleted, delete_after, created_at
           )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NOW())
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NOW())
       `,
       [
         req.userId,
@@ -301,8 +386,12 @@ router.post('/', asyncHandler(async (req, res) => {
         payload.intimacy,
         payload.speech_style,
         payload.auto_moments_enabled,
+        payload.auto_moments_images_enabled,
+        payload.auto_moments_image_resolution,
         payload.auto_moments_daily_min,
         payload.auto_moments_daily_max,
+        payload.auto_moments_image_profile,
+        payload.auto_moments_templates,
         payload.auto_moments_min_interval_hours,
         activeRows.length === 0 ? 1 : 0
       ]
@@ -311,7 +400,8 @@ router.post('/', asyncHandler(async (req, res) => {
     const [rows] = await connection.query(
       `
         SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
-               auto_moments_enabled, auto_moments_daily_min, auto_moments_daily_max,
+               auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution, auto_moments_daily_min, auto_moments_daily_max,
+               auto_moments_image_profile, auto_moments_templates,
                auto_moments_min_interval_hours, auto_moments_last_posted_at,
                is_active, is_deleted, delete_after, created_at
         FROM characters
@@ -321,7 +411,7 @@ router.post('/', asyncHandler(async (req, res) => {
       [result.insertId, req.userId]
     );
 
-    return rows[0];
+    return serializeRole(rows[0]);
   });
 
   return res.status(201).json({ success: true, item: created });
@@ -334,6 +424,9 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   }
 
   const payload = sanitizeCharacterPayload(req.body);
+  if (hasIncompleteAutoMomentImageProfile(req.body, payload)) {
+    return res.status(400).json({ success: false, error: '固定形象请至少填写姓名和年龄感' });
+  }
   if (req.body?.name !== undefined && !payload.name) {
     return res.status(400).json({ success: false, error: '角色名称不能为空' });
   }
@@ -442,6 +535,10 @@ router.patch('/:id', asyncHandler(async (req, res) => {
           chat_model_id = CASE WHEN ? = 1 THEN ? ELSE chat_model_id END,
           chat_thinking_level = CASE WHEN ? = 1 THEN ? ELSE chat_thinking_level END,
           auto_moments_enabled = COALESCE(?, auto_moments_enabled),
+          auto_moments_images_enabled = COALESCE(?, auto_moments_images_enabled),
+          auto_moments_image_resolution = COALESCE(?, auto_moments_image_resolution),
+          auto_moments_image_profile = CASE WHEN ? = 1 THEN ? ELSE auto_moments_image_profile END,
+          auto_moments_templates = CASE WHEN ? = 1 THEN ? ELSE auto_moments_templates END,
           auto_moments_daily_min = COALESCE(?, auto_moments_daily_min),
           auto_moments_daily_max = COALESCE(?, auto_moments_daily_max),
           auto_moments_min_interval_hours = COALESCE(?, auto_moments_min_interval_hours),
@@ -468,6 +565,14 @@ router.patch('/:id', asyncHandler(async (req, res) => {
         chatThinkingProvided ? 1 : 0,
         nextChatThinkingLevel,
         req.body?.auto_moments_enabled !== undefined ? payload.auto_moments_enabled : null,
+        req.body?.auto_moments_images_enabled !== undefined ? payload.auto_moments_images_enabled : null,
+        req.body?.auto_moments_image_resolution !== undefined || req.body?.autoMomentsImageResolution !== undefined
+          ? payload.auto_moments_image_resolution
+          : null,
+        (req.body?.auto_moments_image_profile !== undefined || req.body?.autoMomentsImageProfile !== undefined) ? 1 : 0,
+        payload.auto_moments_image_profile,
+        (req.body?.auto_moments_templates !== undefined || req.body?.autoMomentsTemplates !== undefined) ? 1 : 0,
+        payload.auto_moments_templates,
         req.body?.auto_moments_daily_min !== undefined ? payload.auto_moments_daily_min : null,
         req.body?.auto_moments_daily_max !== undefined ? payload.auto_moments_daily_max : null,
         req.body?.auto_moments_min_interval_hours !== undefined ? payload.auto_moments_min_interval_hours : null,
@@ -481,7 +586,8 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     const [updatedRows] = await connection.query(
       `
         SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
-               auto_moments_enabled, auto_moments_daily_min, auto_moments_daily_max,
+               auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution, auto_moments_daily_min, auto_moments_daily_max,
+               auto_moments_image_profile, auto_moments_templates,
                auto_moments_min_interval_hours, auto_moments_last_posted_at,
                is_active, is_deleted, delete_after, created_at
         FROM characters
@@ -491,10 +597,51 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       [characterId, req.userId]
     );
 
-    return updatedRows[0];
+    return serializeRole(updatedRows[0]);
   });
 
   return res.json({ success: true, item: updated });
+}));
+
+router.get('/:id/identity-pack', asyncHandler(async (req, res) => {
+  const characterId = parseInteger(req.params.id);
+  if (!characterId) return res.status(400).json({ success: false, error: '角色 ID 非法' });
+
+  const [characterRows] = await pool.query(
+    `
+      SELECT id, user_id, name, tag, persona, avatar, speech_style, portrait_id, portrait_custom_url,
+             mood, intimacy, auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution,
+             auto_moments_image_profile, auto_moments_templates,
+             auto_moments_daily_min, auto_moments_daily_max, auto_moments_min_interval_hours
+      FROM characters
+      WHERE id = ? AND user_id = ? AND is_deleted = 0
+      LIMIT 1
+    `,
+    [characterId, req.userId]
+  );
+  if (!characterRows[0]) return res.status(404).json({ success: false, error: '角色不存在' });
+
+  const [[runtimeRows], [memoryRows]] = await Promise.all([
+    pool.query(
+      `SELECT state_json, relationship_json FROM character_runtime_states WHERE user_id = ? AND character_id = ? LIMIT 1`,
+      [req.userId, characterId]
+    ),
+    pool.query(
+      `
+        SELECT id, content, tag, category, memory_type, source_type, source_id,
+               review_status, confidence, weight, is_important, appointment_at, appointment_status
+        FROM memories
+        WHERE user_id = ? AND character_id = ? AND is_deleted = 0
+        ORDER BY is_important DESC, weight DESC, created_at DESC, id DESC
+      `,
+      [req.userId, characterId]
+    )
+  ]);
+
+  return res.json({
+    success: true,
+    item: buildIdentityPack({ character: characterRows[0], runtime: runtimeRows[0], memories: memoryRows })
+  });
 }));
 
 router.post('/:id/portrait', asyncHandler(async (req, res) => {
@@ -650,7 +797,7 @@ router.post('/:id/restore', asyncHandler(async (req, res) => {
     const [updatedRows] = await connection.query(
       `
         SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
-               auto_moments_enabled, auto_moments_daily_min, auto_moments_daily_max,
+               auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution, auto_moments_daily_min, auto_moments_daily_max,
                auto_moments_min_interval_hours, auto_moments_last_posted_at,
                is_active, is_deleted, delete_after, created_at
         FROM characters

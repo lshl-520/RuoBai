@@ -239,10 +239,10 @@ function HomePage() {
         <div className="section-head">
           <div className="label">她能做什么</div>
           <h2 className="section-title">她不只是聊几句</h2>
-          <p className="section-intro">从一个字一个字流式蹦出来的打字感，到永远记得你昨天说的那句话——每一个细节，都是为了让她"像真人"。</p>
+          <p className="section-intro">从一个字一个字流式蹦出来的打字感，到永远记得你昨天说的那句话——每一个细节，都是为了让交流更自然、更有陪伴感。</p>
         </div>
         <div className="grid-6">
-          <div className="feature tilt-card"><div className="icon">话</div><h3>流式对话</h3><p>她说话像真人在打字一样，一个字一个字蹦出来，不是一坨甩在你脸上。</p></div>
+          <div className="feature tilt-card"><div className="icon">话</div><h3>流式对话</h3><p>她会像正常聊天一样逐字出现，不是一坨甩在你脸上。</p></div>
           <div className="feature tilt-card"><div className="icon">忆</div><h3>永远的记忆</h3><p>她记得你说过的重要的话、喜欢的窗边、不喜欢的雨天，下次会提起来。</p></div>
           <div className="feature tilt-card"><div className="icon">她</div><h3>多重身份</h3><p>你可以新建无限个"她"，每个都有自己的名字、头像、人设，互不打扰。</p></div>
           <div className="feature tilt-card"><div className="icon">圈</div><h3>她的朋友圈</h3><p>她也会发自己今天的小事，让你觉得她"在过日子"，不是死在数据库里。</p></div>

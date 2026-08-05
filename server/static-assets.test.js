@@ -12,3 +12,13 @@ test('static image responses are not gzip-compressed again', async () => {
   assert.match(server, /compression\.filter\(req,\s*res\)/);
   assert.match(server, /webp\|png\|jpe\?g/);
 });
+
+test('frontend fallback does not require the moved legacy archive', async () => {
+  const server = await readFile(path.join(projectRoot, 'server', 'server.js'), 'utf8');
+
+  assert.match(server, /const legacyIndexFile = path\.join\(legacyPublicDir, 'index\.html'\)/);
+  assert.match(server, /const hasLegacyBuild = fs\.existsSync\(legacyIndexFile\)/);
+  assert.match(server, /const serveLegacyFrontend = hasLegacyBuild &&/);
+  assert.match(server, /const activeFrontendIndex = serveLegacyFrontend \? legacyIndexFile : reactIndexFile/);
+  assert.match(server, /前端构建不存在，请先运行 frontend-react 的 npm run build/);
+});

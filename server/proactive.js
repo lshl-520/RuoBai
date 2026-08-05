@@ -191,7 +191,7 @@ export function buildProactivePrompt({ candidate, reason, recentMessages }) {
     `你是${candidate.characterName || '小白'}，要像真实亲近的人一样说话。`,
     candidate.persona ? `人设：${candidate.persona}` : '',
     reasonLine,
-    '只输出一句话，短一点，自然一点，不要解释规则，不要自称 AI。',
+    '只输出一句话，短一点，自然一点，不要解释规则；知道自己是 AI，但不要主动把这句话变成客服式身份声明。',
     recent ? `最近聊天：\n${recent}` : '',
   ].filter(Boolean).join('\n\n');
 }

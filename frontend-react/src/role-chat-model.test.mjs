@@ -9,7 +9,7 @@ test("聊天室保留清爽的模型入口和推理深度", () => {
   assert.match(source, /function ModelPanel/);
   assert.match(source, /推理深度/);
   assert.match(source, /关闭/);
-  assert.match(source, /超高/);
+  assert.match(source, /深入/);
   assert.doesNotMatch(source, /这里的选择仅用于/);
   assert.doesNotMatch(source, /跟随“我的”默认模型/);
   assert.doesNotMatch(source, /· 仅\$\{agent\.name\}/);

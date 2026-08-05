@@ -13,21 +13,27 @@ import { publishGeneratedSelfieMoment, shouldPublishGeneratedSelfie } from "../l
 import { loadVoiceSettings, speechRecognitionErrorMessage } from "../lib/voice-settings.js";
 import { speakTextWithSystemVoice, stopSystemTextSpeech } from "../lib/native-tts.js";
 import { recordDiagnostic, withDiagnosticId } from "../lib/diagnostics.js";
+import { GUIDED_IMAGE_OPTIONS, buildGuidedImageSubject } from "../lib/guided-image.js";
 /* 聊天列表 + 聊天室(沉浸: 常驻立绘随情绪变化 / 全屏立绘 / 语音 / 表情包 / 思考过程 / 搜索) */
 const { useState: useStateC, useRef: useRefC, useEffect: useEffectC } = React;
 
 /* ====== 模型 + 推理深度面板 ====== */
 const THINK_LEVELS = [
   { key: "off", label: "关闭" },
-  { key: "low", label: "低" },
-  { key: "mid", label: "中" },
-  { key: "high", label: "高" },
-  { key: "ultra", label: "超高" },
+  { key: "low", label: "简洁" },
+  { key: "mid", label: "细腻" },
+  { key: "high", label: "深入" },
 ];
+
+function normalizeInnerOsLevel(level) {
+  return THINK_LEVELS.some((item) => item.key === level)
+    ? level
+    : level === "ultra" ? "high" : "off";
+}
 
 function ModelPanel({ current, onPick, onClose }) {
   const [caps, setCaps] = useStateC(null);
-  const [thinkLevel, setThinkLevel] = useStateC(current?.thinkLevel || "off");
+  const [thinkLevel, setThinkLevel] = useStateC(normalizeInnerOsLevel(current?.thinkLevel));
   const [saving, setSaving] = useStateC(false);
   const [error, setError] = useStateC("");
 
@@ -109,13 +115,17 @@ function ModelPanel({ current, onPick, onClose }) {
           </div>
           <div className="mp-divider" />
           <div className="mp-right">
-            <div className="mp-title">推理深度</div>
+            <div className="mp-title">内心 OS 深度</div>
             {THINK_LEVELS.map((t) => (
               <button disabled={saving} key={t.key} className={"mp-think" + (thinkLevel === t.key ? " on" : "")} onClick={() => pickThink(t.key)}>
                 <span className="mp-radio" />{t.label}
               </button>
             ))}
-            <div className="mp-hint">陪聊用关闭/低，复杂任务用高/超高</div>
+            <div className="mp-hint">
+              {thinkLevel === "off"
+                ? "关闭后只显示她的回复，不请求可展示摘要。"
+                : `当前为${THINK_LEVELS.find((item) => item.key === thinkLevel)?.label || ""}：会请求可展示的回应摘要，不会展示模型原始思考链；不同中转的回传能力可能不同。`}
+            </div>
           </div>
         </div>
       </div>
@@ -264,15 +274,24 @@ function extractThink(text) {
   return { content, think: think.trim() };
 }
 
-function ThinkCard({ text }) {
+function ThinkCard({ text, pending = false, unavailable = false }) {
   const [open, setOpen] = useStateC(false);
+  const hasSummary = Boolean(text?.trim());
+  const body = hasSummary
+    ? text
+    : "这一轮的小心思暂时没有写出来。";
+
   return (
-    <div className={"think" + (open ? " open" : "")}>
-      <button className="think-toggle" onClick={() => setOpen(!open)}>
-        <Icon name="thinking" /> 她在想什么
-        <Icon name="chevronD" className="think-chev" />
+    <div className={"think" + (open ? " open" : "") + (pending ? " pending" : "") + (unavailable && !hasSummary ? " unavailable" : "")}>
+      <button className="think-toggle" onClick={() => setOpen(!open)} disabled={pending} aria-expanded={open}>
+        <span className="think-label"><Icon name="brain" /> 她在想什么</span>
+        {pending
+          ? <span className="think-pending-dot" aria-label="正在写下她的小心思" />
+          : unavailable && !hasSummary
+            ? <span className="think-empty-mark">暂时没写出</span>
+            : <Icon name="chevronD" className="think-chev" />}
       </button>
-      {open && <div className="think-body">{text}</div>}
+      {open && <div className="think-body">{body}</div>}
     </div>
   );
 }
@@ -680,7 +699,8 @@ function Bubble({ m, agent, tts, voice, myAvatar, onDelete, onOpenImage, onRetry
     );
   }
 
-  const { content: herText, think: herThink } = !isMe ? extractThink(m.text) : { content: m.text, think: "" };
+  const { content: herText } = !isMe ? extractThink(m.text) : { content: m.text };
+  const hasAssistantBubble = m.type === "voice" || Boolean(herText) || Boolean(m.images?.length);
 
   return (
     <>
@@ -690,14 +710,22 @@ function Bubble({ m, agent, tts, voice, myAvatar, onDelete, onOpenImage, onRetry
         <div className="row her">
           <div className="row-avatar"><img src={agent.avatar} alt="" onError={fallbackToDefaultRoleAvatar} /></div>
           <div className="her-stack">
-            <div className={"bubble her-bubble" + (m.type === "proactive" ? " proactive" : "")}>
-              <MessageImages images={m.images} onOpenImage={onOpenImage} />
-              {m.type === "voice" ? <VoiceBubble dur={m.dur} src={m.audioUrl} /> : (herText && <span className="msg-text">{herText}</span>)}
-            </div>
+            {hasAssistantBubble && (
+              <div className={"bubble her-bubble" + (m.type === "proactive" ? " proactive" : "")}>
+                <MessageImages images={m.images} onOpenImage={onOpenImage} />
+                {m.type === "voice" ? <VoiceBubble dur={m.dur} src={m.audioUrl} /> : (herText && <span className="msg-text">{herText}</span>)}
+              </div>
+            )}
             {m.time && <span className="msg-time">{m.time}</span>}
             {tts && m.type === "text" && herText && <TTSButton messageId={m.id} text={herText} voice={voice} />}
             {m.type === "voice" && herText && <VoiceTranscriptButton transcript={herText} />}
-            {(m.think || herThink) && <ThinkCard text={m.think || herThink} />}
+            {(m.think || m.reasoningRequested) && (
+              <ThinkCard
+                text={m.think}
+                pending={Boolean(m.reasoningPending)}
+                unavailable={Boolean(m.reasoningUnavailable)}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -751,6 +779,8 @@ function toMsg(m) {
     who: m.role === "user" ? "me" : "her",
     type: m.message_type || "text",
     text: isGeneratedImageCaption ? "" : (m.content || ""),
+    // 旧 reasoning_summary 可能是英文原始摘要，不能冒充角色内心。
+    think: m.inner_os_source === "character_reflection" ? (m.inner_os_content || "") : "",
     images: (m.message_type === "image" && m.media_url) ? [m.media_url] : [],
     audioUrl: m.message_type === "voice" ? (m.media_url || m.audio_url || "") : "",
     dur: m.dur || "",
@@ -824,6 +854,67 @@ function EmojiPanel({ agent, onSendSticker, onInsertEmoji }) {
   );
 }
 
+const GUIDED_IMAGE_FIELDS = [
+  { key: "scene", label: "想看她做什么" },
+  { key: "style", label: "想要什么感觉" },
+  { key: "place", label: "场景在哪里" },
+  { key: "state", label: "她是什么状态" },
+  { key: "outfit", label: "她穿什么" },
+];
+const GUIDED_IMAGE_RESOLUTIONS = [
+  { value: "channel", label: "跟随渠道" },
+  { value: "1k", label: "1K" },
+  { value: "2k", label: "2K" },
+  { value: "4k", label: "4K" },
+];
+
+function GuidedImageSheet({ agent, onClose, onSubmit, submitting }) {
+  const [values, setValues] = useStateC(() => Object.fromEntries(
+    GUIDED_IMAGE_FIELDS.map(({ key }) => [key, GUIDED_IMAGE_OPTIONS[key][0]])
+  ));
+  const [resolution, setResolution] = useStateC("channel");
+
+  const update = (key, value) => setValues((current) => ({ ...current, [key]: value }));
+
+  return (
+    <div className="sheet-mask guided-image-mask" onClick={() => { if (!submitting) onClose(); }}>
+      <section className="sheet guided-image-sheet" role="dialog" aria-modal="true" aria-labelledby="guided-image-title" onClick={(event) => event.stopPropagation()}>
+        <div className="sheet-grip" />
+        <div className="sheet-head">
+          <div>
+            <h2 id="guided-image-title">给她拍一张</h2>
+            <div className="guided-image-sub">选几个日常选项，{agent.name}就知道怎么画了</div>
+          </div>
+          <button type="button" className="icon-btn" style={{ width: 34, height: 34 }} onClick={onClose} disabled={submitting} aria-label="关闭引导画图">×</button>
+        </div>
+        <div className="sheet-body guided-image-body">
+          <div className="guided-image-note">不用写提示词。使用“画图发图”渠道，可能产生费用。</div>
+          <label className="guided-image-field">
+            <span>这次图片清晰度</span>
+            <select className="fld" value={resolution} disabled={submitting} onChange={(event) => setResolution(event.target.value)}>
+              {GUIDED_IMAGE_RESOLUTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+          {GUIDED_IMAGE_FIELDS.map(({ key, label }) => (
+            <label className="guided-image-field" key={key}>
+              <span>{label}</span>
+              <select className="fld" value={values[key]} disabled={submitting} onChange={(event) => update(key, event.target.value)}>
+                {GUIDED_IMAGE_OPTIONS[key].map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+            </label>
+          ))}
+        </div>
+        <div className="sheet-foot">
+          <button type="button" className="pill pill-ghost" onClick={onClose} disabled={submitting}>先不画</button>
+          <button type="button" className="pill pill-primary guided-image-submit" onClick={() => onSubmit({ ...values, resolution })} disabled={submitting}>
+            {submitting ? "正在画…" : "开始画图"}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 /* ---------------- 聊天室 ---------------- */
 function ChatRoom({ agent, onBack }) {
   const hasEmo = false; // 统一用 portrait_id 那套逻辑，所有角色一视同仁
@@ -846,6 +937,8 @@ function ChatRoom({ agent, onBack }) {
   const [moreOpen, setMoreOpen] = useStateC(false); // 更多菜单
   const [modelOpen, setModelOpen] = useStateC(false);
   const [previewImage, setPreviewImage] = useStateC("");
+  const [guidedImageOpen, setGuidedImageOpen] = useStateC(false);
+  const [guidedImageBusy, setGuidedImageBusy] = useStateC(false);
   const [modelChoice, setModelChoice] = useStateC(() => ({
     credentialId: agent._raw?.chat_credential_id || null,
     modelId: agent._raw?.chat_model_id || null,
@@ -938,6 +1031,48 @@ function ChatRoom({ agent, onBack }) {
   useEffectC(() => { scroll(); }, [msgs, typing]);
 
   const now = () => { const n = new Date(); return n.getHours() + ":" + String(n.getMinutes()).padStart(2, "0"); };
+
+  const runGuidedImage = async (options) => {
+    if (typing || uploading || guidedImageBusy) return;
+    const subject = buildGuidedImageSubject({ characterName: agent.name, ...options });
+    const displayText = `我想看看${agent.name}现在的样子。`;
+    const clientId = `guided-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setGuidedImageOpen(false);
+    setGuidedImageBusy(true);
+    setChatError("");
+    setMomentNotice("");
+    setMsgs((current) => [...current, { who: "me", type: "text", text: displayText, time: now(), _clientId: clientId }]);
+    setTyping(true);
+
+    try {
+      const result = await drawImage(roleId, subject, displayText, { resolution: options.resolution });
+      const aiMsg = result?.ai_message;
+      setMsgs((current) => {
+        const next = current.map((message) => message._clientId === clientId
+          ? { ...message, id: result?.user_message?.id, _clientId: undefined }
+          : message);
+        return [...next, {
+          who: "her",
+          type: "image",
+          images: [result.media_url],
+          text: "",
+          id: aiMsg?.id,
+          time: now(),
+        }];
+      });
+    } catch (error) {
+      setChatError("画图失败：" + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setTyping(false);
+      setGuidedImageBusy(false);
+    }
+  };
+
+  const openGuidedImage = () => {
+    if (typing || uploading || guidedImageBusy) return;
+    setStickerOpen(false);
+    setGuidedImageOpen(true);
+  };
 
   /* 真实图片：选图/粘贴 → 上传后端拿到 media_url（支持多张） */
   const handleImageFiles = async (files) => {
@@ -1069,9 +1204,17 @@ function ChatRoom({ agent, onBack }) {
       // 2) 流式请求 AI 回复
       // 图片已存到数据库，后端 loadRecentMessages 会拉到全部图，不需要再单独传
       let fullReply = "";
+      let fullInnerOs = "";
       const replyId = Date.now();
+      const reasoningRequested = modelChoice.thinkLevel && modelChoice.thinkLevel !== "off";
+      const reasoningLevel = THINK_LEVELS.find((item) => item.key === modelChoice.thinkLevel)?.label || "";
 
-      setMsgs((p) => [...p, { who: "her", type: "text", text: "", time: "", _streaming: true, _id: replyId }]);
+      setMsgs((p) => [...p, {
+        who: "her", type: "text", text: "", time: "", _streaming: true, _id: replyId,
+        reasoningRequested,
+        reasoningPending: reasoningRequested,
+        reasoningLevel,
+      }]);
       setTyping(false);
 
       const basePayload = images.length > 0
@@ -1089,6 +1232,17 @@ function ChatRoom({ agent, onBack }) {
           fullReply += token;
           setMsgs((p) => p.map((m) => m._id === replyId ? { ...m, text: fullReply } : m));
         },
+        onInnerOs: (content) => {
+          fullInnerOs = content;
+          setMsgs((p) => p.map((m) => m._id === replyId ? {
+            ...m, think: fullInnerOs, reasoningPending: false, reasoningUnavailable: false,
+          } : m));
+        },
+        onInnerOsError: () => {
+          setMsgs((p) => p.map((m) => m._id === replyId ? {
+            ...m, reasoningPending: false, reasoningUnavailable: true,
+          } : m));
+        },
         onError: (errMsg) => {
           streamError = String(errMsg || "发送失败，请检查后端和模型配置。");
         },
@@ -1096,12 +1250,25 @@ function ChatRoom({ agent, onBack }) {
       if (streamError) throw new Error(streamError);
 
       // 流式结束，更新时间和去掉 streaming 标记
-      setMsgs((p) => p.map((m) => m._id === replyId ? { ...m, time: now(), _streaming: false } : m));
+      setMsgs((p) => p.map((m) => m._id === replyId ? {
+        ...m,
+        time: now(),
+        _streaming: false,
+        reasoningPending: false,
+        reasoningUnavailable: reasoningRequested && !fullInnerOs.trim(),
+      } : m));
 
       // 3) 把 AI 回复也存进数据库（保存失败不阻断），并把真实 id 写回 state 供删除使用
       if (fullReply.trim()) {
         try {
-          const saved = await saveMessage(roleId, { role: "assistant", content: fullReply });
+          const saved = await saveMessage(roleId, {
+            role: "assistant",
+            content: fullReply,
+            ...(fullInnerOs.trim() ? {
+              inner_os_content: fullInnerOs,
+              inner_os_source: "character_reflection",
+            } : {}),
+          });
           if (saved?.item?.id) {
             setMsgs((p) => p.map((m) => m._id === replyId ? { ...m, id: saved.item.id } : m));
           }
@@ -1165,7 +1332,15 @@ function ChatRoom({ agent, onBack }) {
       });
       const replyId = "_voice_" + Date.now();
       let fullReply = "";
-      setMsgs((p) => [...p, { who: "her", type: "text", text: "", time: now(), _id: replyId }]);
+      let fullInnerOs = "";
+      const reasoningRequested = modelChoice.thinkLevel && modelChoice.thinkLevel !== "off";
+      const reasoningLevel = THINK_LEVELS.find((item) => item.key === modelChoice.thinkLevel)?.label || "";
+      setMsgs((p) => [...p, {
+        who: "her", type: "text", text: "", time: now(), _id: replyId,
+        reasoningRequested,
+        reasoningPending: reasoningRequested,
+        reasoningLevel,
+      }]);
       await streamAssistantReply(roleId, {
         content: textForAI,
         role: "user",
@@ -1177,16 +1352,40 @@ function ChatRoom({ agent, onBack }) {
           fullReply += token;
           setMsgs((p) => p.map((m) => m._id === replyId ? { ...m, text: fullReply } : m));
         },
+        onInnerOs: (content) => {
+          fullInnerOs = content;
+          setMsgs((p) => p.map((m) => m._id === replyId ? {
+            ...m, think: fullInnerOs, reasoningPending: false, reasoningUnavailable: false,
+          } : m));
+        },
+        onInnerOsError: () => {
+          setMsgs((p) => p.map((m) => m._id === replyId ? {
+            ...m, reasoningPending: false, reasoningUnavailable: true,
+          } : m));
+        },
         onError: (err) => { setTyping(false); setChatError(String(err)); },
       });
       setTyping(false);
+
+      setMsgs((p) => p.map((m) => m._id === replyId ? {
+        ...m,
+        reasoningPending: false,
+        reasoningUnavailable: reasoningRequested && !fullInnerOs.trim(),
+      } : m));
 
       if (!fullReply.trim()) return;
 
       // 先保存文字回复，云端语音需要用真实消息 ID 生成并持久化音频。
       let savedReply = null;
       try {
-        savedReply = await saveMessage(roleId, { role: "assistant", content: fullReply });
+        savedReply = await saveMessage(roleId, {
+          role: "assistant",
+          content: fullReply,
+          ...(fullInnerOs.trim() ? {
+            inner_os_content: fullInnerOs,
+            inner_os_source: "character_reflection",
+          } : {}),
+        });
         if (savedReply?.item?.id) {
           setMsgs((p) => p.map((m) => m._id === replyId ? { ...m, id: savedReply.item.id } : m));
         }
@@ -1326,6 +1525,15 @@ function ChatRoom({ agent, onBack }) {
 
       {previewImage && <ChatImagePreview src={previewImage} onClose={() => setPreviewImage("")} />}
 
+      {guidedImageOpen && (
+        <GuidedImageSheet
+          agent={agent}
+          submitting={guidedImageBusy}
+          onClose={() => setGuidedImageOpen(false)}
+          onSubmit={runGuidedImage}
+        />
+      )}
+
       {calling && <CallScreen agent={agent} figSrc={figSrc} onClose={() => setCalling(false)} />}
 
       <footer className="input-bar">
@@ -1369,6 +1577,7 @@ function ChatRoom({ agent, onBack }) {
             <>
               <button className="ib-tool" onClick={() => setCalling(true)} aria-label="开始实时通话" title="开始实时通话"><Icon name="phone" /></button>
               <button className="ib-tool" onClick={openPicker} disabled={uploading} style={(atts.length || uploading) ? { color: "var(--rose)" } : null} aria-label="选择图片" title="选择图片"><Icon name="image" /></button>
+              <button className={"ib-tool" + (guidedImageOpen ? " on" : "")} onClick={openGuidedImage} disabled={typing || uploading || guidedImageBusy} aria-label="引导画图" title="不用写提示词，选几个选项让她画"><Icon name="spark" /></button>
               <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={onPickImage} />
               <button className="ib-tool" onClick={() => setStickerOpen(!stickerOpen)} style={stickerOpen ? { color: "var(--rose)" } : null} aria-label="打开表情包" title="打开表情包"><Icon name="star" /></button>
               <div className="ib-field">
@@ -1402,6 +1611,7 @@ function ChatRoom({ agent, onBack }) {
       {stickerOpen && (
         <EmojiPanel agent={agent} onSendSticker={sendSticker} onInsertEmoji={(em) => { setDraft((d) => d + em); setStickerOpen(false); }} />
       )}
+
     </div>
   );
 }

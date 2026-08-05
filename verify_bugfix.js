@@ -13,6 +13,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const legacyPublicDir = path.join(__dirname, '..', '旧主题归档', 'legacy-html-3.13-20260803', 'public');
 let passed = 0, failed = 0;
 
 function check(name, condition, detail) {
@@ -29,6 +30,14 @@ function check(name, condition, detail) {
 function readFile(relPath) {
   try {
     return fs.readFileSync(path.join(__dirname, relPath), 'utf-8');
+  } catch {
+    return null;
+  }
+}
+
+function readLegacyFile(relPath) {
+  try {
+    return fs.readFileSync(path.join(legacyPublicDir, relPath), 'utf-8');
   } catch {
     return null;
   }
@@ -55,7 +64,7 @@ if (serverMemory) {
 }
 
 // ========== BUG-2: memory.js intimacyDash null check ==========
-const frontMemory = readFile('public/js/memory.js');
+const frontMemory = readLegacyFile('js/memory.js');
 if (frontMemory) {
   const intimacySection = frontMemory.substring(
     frontMemory.indexOf('function intimacyDash'),
@@ -69,7 +78,7 @@ if (frontMemory) {
     hasNullCheck,
     'getCurrentChar() 返回空时仍会崩溃');
 } else {
-  check('BUG-2: public/js/memory.js 文件存在', false, '文件不存在');
+  check('BUG-2: 归档 HTML/js/memory.js 文件存在', false, '文件不存在');
 }
 
 // ========== BUG-4: posts.js 删除前验证归属 ==========
@@ -122,14 +131,14 @@ if (serverMain) {
 }
 
 // ========== BUG-7: components.js bindNav 选择器 ==========
-const components = readFile('public/js/components.js');
+const components = readLegacyFile('js/components.js');
 if (components) {
   const hasTooWideSelector = /querySelectorAll\s*\(\s*'\[data-char\]'\s*\)/.test(components);
   check('BUG-7: bindNav 不再用过宽的 [data-char] 选择器',
     !hasTooWideSelector,
     '仍然绑定所有 [data-char] 元素');
 } else {
-  check('BUG-7: public/js/components.js 文件存在', false, '文件不存在');
+  check('BUG-7: 归档 HTML/js/components.js 文件存在', false, '文件不存在');
 }
 
 // ========== BUG-9: chat.js 流式错误处理 ==========
@@ -150,13 +159,14 @@ import { execSync } from 'child_process';
 
 const jsFiles = [
   ...fs.readdirSync(path.join(__dirname, 'server')).filter(f => f.endsWith('.js')).map(f => `server/${f}`),
-  ...fs.readdirSync(path.join(__dirname, 'public/js')).filter(f => f.endsWith('.js')).map(f => `public/js/${f}`)
+  ...fs.readdirSync(path.join(legacyPublicDir, 'js')).filter(f => f.endsWith('.js')).map(f => path.join(legacyPublicDir, 'js', f))
 ];
 
 let syntaxErrors = [];
 for (const f of jsFiles) {
   try {
-    execSync(`node --check ${path.join(__dirname, f)}`, { encoding: 'utf-8', stdio: 'pipe' });
+    const absoluteFile = path.isAbsolute(f) ? f : path.join(__dirname, f);
+    execSync(`node --check "${absoluteFile}"`, { encoding: 'utf-8', stdio: 'pipe' });
   } catch {
     syntaxErrors.push(f);
   }

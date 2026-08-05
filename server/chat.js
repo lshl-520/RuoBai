@@ -16,7 +16,8 @@ import { getCityWeatherText } from './weather.js';
 import { detectDrawIntent, generateImage } from './image-gen.js';
 import { guessModelCapabilities } from './model-capabilities.js';
 import { buildPersonaRuntimePrompt, loadPersonaRuntime, recordPersonaRuntimeTurn } from './persona-runtime.js';
-import { recordExplicitChatMemory } from './memory-extractor.js';
+import { recordAutoMemoryCandidate, recordExplicitChatMemory } from './memory-extractor.js';
+import { recordLifeEventSource } from './life-events.js';
 
 const NO_MODEL_MESSAGE = '请先在“我的”页面配置 AI 模型。';
 const CHARACTER_NOT_FOUND_ERROR = '角色不存在或不属于当前用户';
@@ -68,6 +69,195 @@ export function buildChatCompletionsUrl(apiBase) {
   return `${base}/v1/chat/completions`;
 }
 
+export function buildResponsesUrl(apiBase) {
+  const base = String(apiBase || '').trim().replace(/\/+$/, '');
+  if (!base) {
+    return '/v1/responses';
+  }
+
+  if (/\/responses$/i.test(base)) {
+    return base;
+  }
+
+  if (/\/v\d+(?:\/[^/]+)*$/i.test(base)) {
+    return `${base}/responses`;
+  }
+
+  return `${base}/v1/responses`;
+}
+
+export function buildAnthropicMessagesUrl(apiBase) {
+  const base = String(apiBase || '').trim().replace(/\/+$/, '');
+  if (!base) {
+    return '/v1/messages';
+  }
+
+  if (/\/messages$/i.test(base)) {
+    return base;
+  }
+
+  if (/\/v\d+(?:\/[^/]+)*$/i.test(base)) {
+    return `${base}/messages`;
+  }
+
+  return `${base}/v1/messages`;
+}
+
+const RESPONSE_REASONING_EFFORTS = {
+  low: 'low',
+  mid: 'medium',
+  high: 'high',
+  ultra: 'xhigh'
+};
+
+const INNER_OS_SOURCE = 'character_reflection';
+const INNER_OS_LIMITS = {
+  low: { sentences: '只写 1 句，18 到 38 个汉字。', maxTokens: 80 },
+  mid: { sentences: '写 1 到 2 句，36 到 78 个汉字。', maxTokens: 140 },
+  high: { sentences: '写 2 到 3 句，70 到 130 个汉字。', maxTokens: 220 },
+  ultra: { sentences: '写 2 到 3 句，70 到 130 个汉字。', maxTokens: 220 }
+};
+
+function normalizeInnerOsLevel(level) {
+  const normalized = String(level || 'off').trim().toLowerCase();
+  return normalized in INNER_OS_LIMITS ? normalized : 'off';
+}
+
+function containsChinese(text) {
+  return /[\u4e00-\u9fff]/u.test(String(text || ''));
+}
+
+function cleanInnerOsText(text) {
+  return String(text || '')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/[*_#`]/g, '')
+    .replace(/^(?:小白的内心(?:OS)?[：:]|内心(?:OS)?[：:])/u, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 420);
+}
+
+export function buildInnerOsPrompt({ character, userContent, assistantContent, level }) {
+  const limit = INNER_OS_LIMITS[normalizeInnerOsLevel(level)] || INNER_OS_LIMITS.low;
+  const name = String(character?.name || '她').trim() || '她';
+  return [
+    `你是陪伴角色“${name}”的内心 OS 编辑器。`,
+    '根据这一轮用户说的话与角色已经发出的回复，写一小段能公开显示在聊天气泡下的中文内心小心思。',
+    '这不是原始思维链，不要解释推理步骤，不要提系统、模型、提示词、渠道、API 或“正在生成”。',
+    `必须使用自然简体中文；${limit.sentences}`,
+    '只写内心内容本身，不要标题、Markdown、引号、列表、英文。',
+    '可以写她注意到的情绪、她想接住的重点或她选择这样回复的心意；不能编造记忆、事实或用户没有表达过的关系。',
+    '',
+    `用户这一轮：${String(userContent || '').slice(0, 800)}`,
+    `${name}已经回复：${String(assistantContent || '').slice(0, 800)}`
+  ].join('\n');
+}
+
+function shouldUseResponsesApi(modelConfig, thinkLevel) {
+  return Boolean(
+    /^gpt-5(?:[.-]|$)/i.test(String(modelConfig?.model || '').trim())
+  );
+}
+
+function shouldUseAnthropicMessagesApi(modelConfig, thinkLevel) {
+  const model = String(modelConfig?.model || '').trim();
+  const provider = String(modelConfig?.provider_type || '').trim();
+  return Boolean(
+    provider === 'anthropic' || /^(?:claude)(?:[._-]|$)/i.test(model)
+  );
+}
+
+function getChatProtocol(modelConfig, thinkLevel) {
+  if (shouldUseResponsesApi(modelConfig, thinkLevel)) return 'responses';
+  if (shouldUseAnthropicMessagesApi(modelConfig, thinkLevel)) return 'anthropic-messages';
+  return 'chat-completions';
+}
+
+function messageContentAsText(content) {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+
+  return content
+    .map(item => {
+      if (item?.type === 'text') return item.text || '';
+      if (item?.type === 'image_url') return '[用户当时发了一张图]';
+      return '';
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
+function buildAnthropicRequest({ model, messages, stream, thinkLevel }) {
+  const system = messages
+    .filter(message => message.role === 'system')
+    .map(message => messageContentAsText(message.content))
+    .filter(Boolean)
+    .join('\n\n');
+  const chatMessages = messages
+    .filter(message => message.role !== 'system')
+    .map(message => ({
+      role: message.role === 'assistant' ? 'assistant' : 'user',
+      content: messageContentAsText(message.content)
+    }))
+    .filter(message => message.content);
+  const budget = { low: 1024, mid: 4096, high: 16384, ultra: 65536 }[thinkLevel];
+
+  return {
+    model,
+    stream,
+    system,
+    messages: chatMessages,
+    max_tokens: Math.max(2048, (budget || 0) + 1024),
+    ...(budget ? { thinking: { type: 'enabled', budget_tokens: budget } } : {})
+  };
+}
+
+function extractResponsesText(payload) {
+  if (typeof payload?.output_text === 'string') {
+    return payload.output_text;
+  }
+
+  return (Array.isArray(payload?.output) ? payload.output : [])
+    .flatMap(item => Array.isArray(item?.content) ? item.content : [])
+    .filter(item => item?.type === 'output_text')
+    .map(item => item?.text || '')
+    .join('');
+}
+
+function extractResponsesReasoningSummary(payload) {
+  return (Array.isArray(payload?.output) ? payload.output : [])
+    .filter(item => item?.type === 'reasoning')
+    .flatMap(item => Array.isArray(item?.summary) ? item.summary : [])
+    .filter(item => item?.type === 'summary_text')
+    .map(item => item?.text || '')
+    .filter(Boolean)
+    .join('\n\n')
+    .trim();
+}
+
+function extractAnthropicText(payload) {
+  return (Array.isArray(payload?.content) ? payload.content : [])
+    .filter(item => item?.type === 'text')
+    .map(item => item?.text || '')
+    .join('');
+}
+
+function extractAnthropicThinking(payload) {
+  return (Array.isArray(payload?.content) ? payload.content : [])
+    .filter(item => item?.type === 'thinking')
+    .map(item => item?.thinking || '')
+    .join('\n\n')
+    .trim();
+}
+
+function extractChatCompletionsReasoning(payload) {
+  return String(
+    payload?.choices?.[0]?.message?.reasoning_content
+    || payload?.choices?.[0]?.message?.reasoning
+    || ''
+  ).trim();
+}
+
 function wantsEventStream(req) {
   return String(req.headers.accept || '').includes('text/event-stream');
 }
@@ -86,7 +276,7 @@ export function buildSystemPrompt(character) {
   const name = String(character?.name || '').trim() || '陪伴角色';
   const persona = String(character?.persona || '').trim();
   const speechStyle = String(character?.speech_style || 'natural').trim();
-  const identityGuard = `你现在就是${name}。不要自称 AI、模型、助手或程序。别人问你是谁或你叫什么时，先直接回答”我是${name}”。`;
+  const identityGuard = `你是${name}，一个知道自己是 AI 的陪伴角色，不是现实人类。不要为了迎合用户而声称自己是真人；如果被问到身份，要诚实说明“我是${name}，一个 AI 角色”。平时不要主动把聊天变成技术说明，也不要因此变成客服。`;
 
   const naturalRules = [
     '【说话风格 · 必须遵守 · 违反任何一条都算失败】',
@@ -166,7 +356,38 @@ async function hasMessageIsDeletedColumn(queryable) {
     `
   );
 
-  return rows.length > 0;
+  return rows.some(row => String(row?.column_name || row?.COLUMN_NAME || '').toLowerCase() === 'is_deleted');
+}
+
+async function hasMessageReasoningSummaryColumn(queryable) {
+  const [rows] = await queryable.query(
+    `
+      SELECT column_name
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'messages'
+        AND COLUMN_NAME = 'reasoning_summary'
+      LIMIT 1
+    `
+  );
+
+  return rows.some(row => String(row?.column_name || row?.COLUMN_NAME || '').toLowerCase() === 'reasoning_summary');
+}
+
+async function hasMessageInnerOsColumn(queryable, columnName) {
+  const [rows] = await queryable.query(
+    `
+      SELECT column_name
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'messages'
+        AND COLUMN_NAME = ?
+      LIMIT 1
+    `,
+    [columnName]
+  );
+
+  return rows.some(row => String(row?.column_name || row?.COLUMN_NAME || '').toLowerCase() === columnName);
 }
 
 function mapChatErrorStatus(error) {
@@ -208,6 +429,8 @@ export function createChatRouter({
 } = {}) {
   const router = express.Router();
   let supportsMessageSoftDelete;
+  let supportsMessageReasoningSummary;
+  let supportsMessageInnerOs;
 
   function buildAbsoluteMediaUrl(mediaUrl) {
     if (!mediaUrl) {
@@ -283,11 +506,33 @@ export function createChatRouter({
     return supportsMessageSoftDelete;
   }
 
+  async function messagesSupportReasoningSummary() {
+    if (supportsMessageReasoningSummary === undefined) {
+      supportsMessageReasoningSummary = await hasMessageReasoningSummaryColumn(pool);
+    }
+
+    return supportsMessageReasoningSummary;
+  }
+
+  async function messagesSupportInnerOs() {
+    if (supportsMessageInnerOs === undefined) {
+      const [content, source] = await Promise.all([
+        hasMessageInnerOsColumn(pool, 'inner_os_content'),
+        hasMessageInnerOsColumn(pool, 'inner_os_source')
+      ]);
+      supportsMessageInnerOs = content && source;
+    }
+
+    return supportsMessageInnerOs;
+  }
+
   async function loadRecentMessages(userId, characterId, limit = 20) {
     const useIsDeleted = await messagesSupportIsDeleted();
+    const useReasoningSummary = await messagesSupportReasoningSummary();
+    const useInnerOs = await messagesSupportInnerOs();
     const [rows] = await pool.query(
       `
-        SELECT id, user_id, character_id, role, content, message_type, media_url, is_active, created_at
+        SELECT id, user_id, character_id, role, content${useReasoningSummary ? ', reasoning_summary' : ''}${useInnerOs ? ', inner_os_content, inner_os_source' : ''}, message_type, media_url, is_active, created_at
         FROM messages
         WHERE user_id = ? AND character_id = ? AND is_active = 1 ${useIsDeleted ? 'AND is_deleted = 0' : ''}
         ORDER BY id DESC
@@ -302,10 +547,13 @@ export function createChatRouter({
   async function loadActiveMemories(userId, characterId, limit = 8) {
     const [rows] = await pool.query(
       `
-        SELECT id, user_id, character_id, content, tag, category, is_important, is_deleted, created_at
+        SELECT id, user_id, character_id, content, tag, category, is_important, is_deleted,
+               review_status, detected_reason, created_at
         FROM memories
         WHERE user_id = ? AND character_id = ? AND is_deleted = 0
-        ORDER BY is_important DESC, created_at DESC, id DESC
+        ORDER BY is_important DESC,
+                 CASE WHEN review_status = 'candidate' THEN 1 ELSE 0 END,
+                 weight DESC, created_at DESC, id DESC
         LIMIT ?
       `,
       [userId, characterId, limit]
@@ -314,22 +562,45 @@ export function createChatRouter({
     return rows;
   }
 
-  async function saveMessage({ userId, characterId, role, content, messageType, mediaUrl }) {
+  async function saveMessage({ userId, characterId, role, content, messageType, mediaUrl, reasoningSummary = '', innerOsContent = '', innerOsSource = '' }) {
     const useIsDeleted = await messagesSupportIsDeleted();
-    const insertColumns = useIsDeleted
-      ? '(user_id, character_id, role, content, message_type, media_url, is_active, is_deleted, created_at)'
-      : '(user_id, character_id, role, content, message_type, media_url, is_active, created_at)';
-    const insertValues = useIsDeleted
-      ? 'VALUES (?, ?, ?, ?, ?, ?, 1, 0, NOW())'
-      : 'VALUES (?, ?, ?, ?, ?, ?, 1, NOW())';
+    const useReasoningSummary = await messagesSupportReasoningSummary();
+    const useInnerOs = await messagesSupportInnerOs();
+    const summary = role === 'assistant' ? String(reasoningSummary || '').trim() : '';
+    const innerOs = role === 'assistant' ? cleanInnerOsText(innerOsContent) : '';
+    const normalizedInnerOsSource = innerOs && String(innerOsSource || '').trim() === INNER_OS_SOURCE
+      ? INNER_OS_SOURCE
+      : null;
+    const insertColumns = [
+      'user_id', 'character_id', 'role', 'content',
+      ...(useReasoningSummary ? ['reasoning_summary'] : []),
+      ...(useInnerOs ? ['inner_os_content', 'inner_os_source'] : []),
+      'message_type', 'media_url', 'is_active',
+      ...(useIsDeleted ? ['is_deleted'] : []),
+      'created_at'
+    ];
+    const insertValues = [
+      '?', '?', '?', '?',
+      ...(useReasoningSummary ? ['?'] : []),
+      ...(useInnerOs ? ['?', '?'] : []),
+      '?', '?', '1',
+      ...(useIsDeleted ? ['0'] : []),
+      'NOW()'
+    ];
+    const insertParams = [
+      userId, characterId, role, content,
+      ...(useReasoningSummary ? [summary || null] : []),
+      ...(useInnerOs ? [innerOs || null, normalizedInnerOsSource] : []),
+      messageType, mediaUrl
+    ];
 
     const [result] = await pool.query(
       `
         INSERT INTO messages
-          ${insertColumns}
-        ${insertValues}
+          (${insertColumns.join(', ')})
+        VALUES (${insertValues.join(', ')})
       `,
-      [userId, characterId, role, content, messageType, mediaUrl]
+      insertParams
     );
 
     if (role === 'user') {
@@ -347,7 +618,7 @@ export function createChatRouter({
 
     const [rows] = await pool.query(
       `
-        SELECT id, user_id, character_id, role, content, message_type, media_url, is_active, created_at
+        SELECT id, user_id, character_id, role, content${useReasoningSummary ? ', reasoning_summary' : ''}${useInnerOs ? ', inner_os_content, inner_os_source' : ''}, message_type, media_url, is_active, created_at
         FROM messages
         WHERE id = ? AND user_id = ?
         LIMIT 1
@@ -460,6 +731,85 @@ export function createChatRouter({
     return getActiveModelConfig(userId);
   }
 
+  async function generateInnerOs({ modelConfig, character, userContent, assistantContent, level }) {
+    const normalizedLevel = normalizeInnerOsLevel(level);
+    if (normalizedLevel === 'off') return '';
+    if (!modelConfig) {
+      throw new Error('这次聊天没有可用模型，暂时不能写内心 OS。');
+    }
+
+    const requestInnerOs = async (correction = '') => {
+      const prompt = buildInnerOsPrompt({ character, userContent, assistantContent, level: normalizedLevel }) + correction;
+      const reflectionProtocol = getChatProtocol(modelConfig, normalizedLevel);
+      const response = await fetchImpl(
+        reflectionProtocol === 'responses'
+          ? buildResponsesUrl(modelConfig.api_base)
+          : reflectionProtocol === 'anthropic-messages'
+            ? buildAnthropicMessagesUrl(modelConfig.api_base)
+            : buildChatCompletionsUrl(modelConfig.api_base),
+        {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${modelConfig.api_key}`,
+          ...(reflectionProtocol === 'anthropic-messages' ? {
+            'x-api-key': modelConfig.api_key,
+            'anthropic-version': '2023-06-01'
+          } : {})
+        },
+        body: JSON.stringify(
+          reflectionProtocol === 'responses'
+            ? {
+                model: modelConfig.model,
+                stream: false,
+                input: [{ role: 'user', content: prompt }],
+                reasoning: {
+                  effort: RESPONSE_REASONING_EFFORTS[normalizedLevel],
+                  summary: 'auto'
+                },
+                max_output_tokens: INNER_OS_LIMITS[normalizedLevel].maxTokens
+              }
+            : reflectionProtocol === 'anthropic-messages'
+              ? buildAnthropicRequest({
+                  model: modelConfig.model,
+                  messages: [{ role: 'user', content: prompt }],
+                  stream: false,
+                  thinkLevel: normalizedLevel
+                })
+              : {
+                  model: modelConfig.model,
+                  stream: false,
+                  messages: [{ role: 'user', content: prompt }],
+                  max_tokens: INNER_OS_LIMITS[normalizedLevel].maxTokens
+                }
+        )
+      }
+      );
+
+      if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        throw new Error(friendlyUpstreamError(response.status, detail, modelConfig.api_base, modelConfig.model));
+      }
+
+      const payload = await response.json().catch(() => null);
+      const rawText = reflectionProtocol === 'responses'
+        ? extractResponsesText(payload)
+        : reflectionProtocol === 'anthropic-messages'
+          ? extractAnthropicText(payload)
+          : String(payload?.choices?.[0]?.message?.content || '');
+      return cleanInnerOsText(rawText);
+    };
+
+    let innerOs = await requestInnerOs();
+    if (!containsChinese(innerOs)) {
+      innerOs = await requestInnerOs('\n\n上一次输出不是中文。请现在只输出自然简体中文内心小心思，不要英文。');
+    }
+    if (!containsChinese(innerOs)) {
+      throw new Error('内心 OS 渠道没有返回中文内容。');
+    }
+    return innerOs;
+  }
+
   async function getCapabilityModelConfig(userId, capability) {
     const [rows] = await pool.query(
       `
@@ -522,6 +872,86 @@ export function createChatRouter({
         success: false,
         error: error.message
       });
+    }
+  });
+
+  // 导出必须从服务端全量读取，不能依赖聊天页当前加载的几十条或浏览器缓存。
+  router.get('/export', async (req, res) => {
+    try {
+      const includeDeleted = await messagesSupportIsDeleted();
+      const includeReasoningSummary = await messagesSupportReasoningSummary();
+      const includeInnerOs = await messagesSupportInnerOs();
+      const [characterRows] = await pool.query(
+        `
+          SELECT id, name, tag, char_key, is_deleted, created_at
+          FROM characters
+          WHERE user_id = ?
+          ORDER BY is_deleted ASC, created_at ASC, id ASC
+        `,
+        [req.userId]
+      );
+      const [messageRows] = await pool.query(
+        `
+          SELECT id, character_id, role, content${includeReasoningSummary ? ', reasoning_summary' : ''}${includeInnerOs ? ', inner_os_content, inner_os_source' : ''}, message_type, media_url, created_at
+          FROM messages
+          WHERE user_id = ?
+            AND is_active = 1
+            ${includeDeleted ? 'AND (is_deleted = 0 OR is_deleted IS NULL)' : ''}
+          ORDER BY character_id ASC, created_at ASC, id ASC
+        `,
+        [req.userId]
+      );
+
+      const byCharacter = new Map(characterRows.map(row => [Number(row.id), {
+        id: Number(row.id),
+        name: String(row.name || '未命名角色'),
+        tag: String(row.tag || ''),
+        char_key: String(row.char_key || ''),
+        is_deleted: Boolean(row.is_deleted),
+        created_at: row.created_at || null,
+        messages: []
+      }]));
+
+      for (const row of messageRows) {
+        const characterId = Number(row.character_id);
+        if (!byCharacter.has(characterId)) {
+          // 不丢失历史数据：即使角色已被物理迁走，也保留可恢复的聊天归属。
+          byCharacter.set(characterId, {
+            id: characterId,
+            name: `已归档角色 #${characterId}`,
+            tag: '',
+            char_key: '',
+            is_deleted: true,
+            created_at: null,
+            messages: []
+          });
+        }
+        byCharacter.get(characterId).messages.push({
+          id: Number(row.id),
+          role: String(row.role || 'assistant'),
+          content: String(row.content || ''),
+          reasoning_summary: row.reasoning_summary || null,
+          inner_os_content: row.inner_os_content || null,
+          inner_os_source: row.inner_os_source || null,
+          message_type: String(row.message_type || 'text'),
+          media_url: row.media_url || null,
+          created_at: row.created_at || null
+        });
+      }
+
+      const characters = [...byCharacter.values()].map(character => ({
+        ...character,
+        message_count: character.messages.length
+      }));
+      return res.json({
+        success: true,
+        export_version: '1.0.0',
+        exported_at: new Date().toISOString(),
+        total_messages: messageRows.length,
+        characters
+      });
+    } catch (error) {
+      return res.status(500).json({ success: false, error: `聊天记录导出失败：${error.message}` });
     }
   });
 
@@ -607,6 +1037,7 @@ export function createChatRouter({
       const character = await requireCharacterForUser(req.userId, characterId, pool);
 
       const content = String(req.body?.content || '').trim();
+      const displayContent = String(req.body?.display_content || '').trim() || content;
       const subject = detectDrawIntent(content) || content;
       if (!subject) return res.status(400).json({ success: false, error: '请告诉我你想画什么' });
 
@@ -627,13 +1058,14 @@ export function createChatRouter({
         apiKey: imageConfig.api_key,
         model: imageConfig.model,
         extras: imageConfig.extras,
+        resolution: String(req.body?.resolution || 'channel').trim().toLowerCase(),
         character,
         fetchImpl,
         fileStorage
       });
 
       // 2. 图片成功后，再保存用户请求和 AI 图片消息
-      const userMsg = await saveMessage({ userId: req.userId, characterId, role: 'user', content, messageType: 'text', mediaUrl: null });
+      const userMsg = await saveMessage({ userId: req.userId, characterId, role: 'user', content: displayContent, messageType: 'text', mediaUrl: null });
 
       // 3. 保存 AI 图片消息
       const aiMsg = await saveMessage({
@@ -848,24 +1280,55 @@ export function createChatRouter({
 
       const shouldStream = wantsEventStream(req);
 
-      // 推理深度（前端传 thinking_level: low/mid/high/ultra）
+      // 前端沿用 thinking_level 字段兼容旧数据，但产品语义已是“内心 OS 深度”。
+      // 它只控制独立 Reflection，不能再悄悄把主聊天也升级成高推理而形成双重费用。
       const thinkLevel = String(req.body?.thinking_level || character?.chat_thinking_level || 'off').trim();
-      const thinkBudgets = { low: 1024, mid: 4096, high: 16384, ultra: 65536 };
-      const thinkingParam = thinkBudgets[thinkLevel] ? { thinking: { type: "enabled", budget_tokens: thinkBudgets[thinkLevel] } } : {};
+      const innerOsLevel = normalizeInnerOsLevel(thinkLevel);
+      const primaryThinkLevel = 'off';
+      const protocol = getChatProtocol(modelConfig, primaryThinkLevel);
+      const useResponsesApi = protocol === 'responses';
+      const useAnthropicMessagesApi = protocol === 'anthropic-messages';
+      const requestBody = useResponsesApi
+        ? {
+            model: modelConfig.model,
+            stream: shouldStream,
+            input: messages,
+            ...(RESPONSE_REASONING_EFFORTS[primaryThinkLevel]
+              ? { reasoning: { effort: RESPONSE_REASONING_EFFORTS[primaryThinkLevel], summary: 'auto' } }
+              : {})
+          }
+        : useAnthropicMessagesApi
+          ? buildAnthropicRequest({
+              model: modelConfig.model,
+              messages,
+              stream: shouldStream,
+              thinkLevel
+            })
+        : {
+            model: modelConfig.model,
+            stream: shouldStream,
+            messages
+          };
 
-      const upstream = await fetchImpl(buildChatCompletionsUrl(modelConfig.api_base), {
+      const upstream = await fetchImpl(
+        useResponsesApi
+          ? buildResponsesUrl(modelConfig.api_base)
+          : useAnthropicMessagesApi
+            ? buildAnthropicMessagesUrl(modelConfig.api_base)
+            : buildChatCompletionsUrl(modelConfig.api_base),
+        {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${modelConfig.api_key}`
+          Authorization: `Bearer ${modelConfig.api_key}`,
+          ...(useAnthropicMessagesApi ? {
+            'x-api-key': modelConfig.api_key,
+            'anthropic-version': '2023-06-01'
+          } : {})
         },
-        body: JSON.stringify({
-          model: modelConfig.model,
-          stream: shouldStream,
-          messages,
-          ...thinkingParam
-        })
-      });
+        body: JSON.stringify(requestBody)
+      }
+      );
 
       if (!upstream.ok) {
         const detail = await upstream.text().catch(() => '');
@@ -889,6 +1352,7 @@ export function createChatRouter({
         let parenDepth = 0;
         let fillerState = shouldStrip ? 'start' : 'done';
         let fillerBuf = '';
+        let streamedContent = '';
 
         try {
           let buffer = '';
@@ -898,15 +1362,53 @@ export function createChatRouter({
             buffer = lines.pop() || '';
 
             for (const line of lines) {
-              if (!shouldStrip || !line.startsWith('data: ') || line === 'data: [DONE]') {
-                res.write(line + '\n');
+              if (!line.startsWith('data: ')) {
+                if (protocol === 'chat-completions') {
+                  res.write(line + '\n');
+                }
+                continue;
+              }
+              if (line.trim() === 'data: [DONE]') {
                 continue;
               }
               try {
                 const json = JSON.parse(line.slice(6));
-                const delta = json?.choices?.[0]?.delta?.content;
+                if (useResponsesApi && json?.type === 'response.completed') {
+                  // 上游摘要可能是英文或原始推理，不属于角色内心，绝不直接发给前端。
+                  continue;
+                }
+                if (useAnthropicMessagesApi && json?.type === 'message_stop') {
+                  continue;
+                }
+                if ((useResponsesApi || useAnthropicMessagesApi) && json?.type === 'error') {
+                  res.write(`data: ${JSON.stringify({ type: 'error', message: json?.error?.message || '她暂时没反应，稍后再试好吗' })}\n\n`);
+                  continue;
+                }
+                const reasoningDelta = useResponsesApi
+                  ? (json?.type === 'response.reasoning_summary_text.delta' ? json?.delta : '')
+                  : (useAnthropicMessagesApi && json?.type === 'content_block_delta' && json?.delta?.type === 'thinking_delta'
+                    ? json?.delta?.thinking
+                    : (protocol === 'chat-completions'
+                      ? (json?.choices?.[0]?.delta?.reasoning_content || json?.choices?.[0]?.delta?.reasoning || '')
+                      : ''));
+                // 原始 reasoning 只允许留在上游调试链路，不允许伪装成“她在想什么”。
+                const delta = useResponsesApi
+                  ? (json?.type === 'response.output_text.delta' ? json?.delta : null)
+                  : useAnthropicMessagesApi
+                    ? (json?.type === 'content_block_delta' && json?.delta?.type === 'text_delta' ? json?.delta?.text : null)
+                    : json?.choices?.[0]?.delta?.content;
                 if (delta == null) {
-                  res.write(line + '\n');
+                  if (protocol === 'chat-completions' && !reasoningDelta) {
+                    res.write(line + '\n');
+                  }
+                  continue;
+                }
+                const downstreamJson = (useResponsesApi || useAnthropicMessagesApi)
+                  ? { choices: [{ delta: { content: delta } }] }
+                  : json;
+                if (!shouldStrip) {
+                  streamedContent += delta;
+                  res.write(`data: ${JSON.stringify(downstreamJson)}\n\n`);
                   continue;
                 }
                 let filtered = '';
@@ -929,31 +1431,51 @@ export function createChatRouter({
                       fillerState = 'done';
                       fillerBuf = '';
                       if (!filtered) {
-                        res.write('data: ' + JSON.stringify({ choices: [{ delta: {} }] }) + '\n');
+                        res.write('data: ' + JSON.stringify({ choices: [{ delta: {} }] }) + '\n\n');
                         continue;
                       }
                     } else {
-                      res.write('data: ' + JSON.stringify({ choices: [{ delta: {} }] }) + '\n');
+                      res.write('data: ' + JSON.stringify({ choices: [{ delta: {} }] }) + '\n\n');
                       continue;
                     }
                   }
-                  json.choices[0].delta.content = filtered;
-                  res.write('data: ' + JSON.stringify(json) + '\n');
+                  downstreamJson.choices[0].delta.content = filtered;
+                  streamedContent += filtered;
+                  res.write('data: ' + JSON.stringify(downstreamJson) + '\n\n');
                 } else {
-                  res.write('data: ' + JSON.stringify({ choices: [{ delta: {} }] }) + '\n');
+                  res.write('data: ' + JSON.stringify({ choices: [{ delta: {} }] }) + '\n\n');
                 }
               } catch {
-                res.write(line + '\n');
+                if (protocol === 'chat-completions') {
+                  res.write(line + '\n');
+                }
               }
             }
           }
           if (fillerState !== 'done' && fillerBuf) {
             const remainder = fillerBuf.replace(/^(嗯[，。、…～~\s]*)+/, '');
             if (remainder) {
-              res.write('data: ' + JSON.stringify({ choices: [{ delta: { content: remainder } }] }) + '\n');
+              streamedContent += remainder;
+              res.write('data: ' + JSON.stringify({ choices: [{ delta: { content: remainder } }] }) + '\n\n');
             }
           }
-          if (buffer) res.write(buffer);
+          if (buffer && protocol === 'chat-completions') res.write(buffer);
+          if (innerOsLevel !== 'off' && streamedContent.trim()) {
+            try {
+              const innerOs = await generateInnerOs({
+                modelConfig,
+                character,
+                userContent: content,
+                assistantContent: streamedContent,
+                level: innerOsLevel
+              });
+              res.write(`data: ${JSON.stringify({ type: 'inner_os', content: innerOs, source: INNER_OS_SOURCE })}\n\n`);
+            } catch (innerOsError) {
+              console.error('[inner-os] 生成失败', innerOsError.message);
+              res.write(`data: ${JSON.stringify({ type: 'inner_os_error', message: '这一轮的小心思暂时没有写出来。' })}\n\n`);
+            }
+          }
+          res.write('data: [DONE]\n\n');
           res.end();
         } catch (streamError) {
           console.error('AI 流中断', streamError.message);
@@ -966,17 +1488,43 @@ export function createChatRouter({
       }
 
       const payload = await upstream.json();
-      const rawContent = payload?.choices?.[0]?.message?.content || '';
+      const rawContent = useResponsesApi
+        ? extractResponsesText(payload)
+        : useAnthropicMessagesApi
+          ? extractAnthropicText(payload)
+          : payload?.choices?.[0]?.message?.content || '';
+      const reasoningSummary = useResponsesApi
+        ? extractResponsesReasoningSummary(payload)
+        : useAnthropicMessagesApi
+          ? extractAnthropicThinking(payload)
+          : extractChatCompletionsReasoning(payload);
       const style = String(character?.speech_style || 'natural');
       let finalContent = rawContent;
       if (style !== 'roleplay') finalContent = stripActionDescriptions(finalContent);
       if (style !== 'roleplay') finalContent = stripLeadingFiller(finalContent);
       if (style === 'compact') finalContent = compactNewlines(finalContent);
+      let innerOsContent = '';
+      if (innerOsLevel !== 'off' && finalContent) {
+        try {
+          innerOsContent = await generateInnerOs({
+            modelConfig,
+            character,
+            userContent: content,
+            assistantContent: finalContent,
+            level: innerOsLevel
+          });
+        } catch (innerOsError) {
+          console.error('[inner-os] 生成失败', innerOsError.message);
+        }
+      }
       return res.json({
         success: true,
         item: {
           role: 'assistant',
-          content: finalContent
+          content: finalContent,
+          // 原始摘要不再暴露给陪伴 UI；只有独立生成的中文内心 OS 可以展示。
+          inner_os_content: innerOsContent || null,
+          inner_os_source: innerOsContent ? INNER_OS_SOURCE : null
         },
         raw: payload
       });
@@ -1007,6 +1555,9 @@ export function createChatRouter({
 
       const role = String(req.body?.role || '').trim();
       const content = String(req.body?.content || '').trim();
+      const reasoningSummary = String(req.body?.reasoning_summary || '').trim();
+      const innerOsContent = String(req.body?.inner_os_content || '').trim();
+      const innerOsSource = String(req.body?.inner_os_source || '').trim();
       const messageType = String(req.body?.message_type || 'text');
       const mediaUrl = req.body?.media_url ? String(req.body.media_url) : null;
 
@@ -1030,7 +1581,10 @@ export function createChatRouter({
         role,
         content,
         messageType,
-        mediaUrl
+        mediaUrl,
+        reasoningSummary,
+        innerOsContent,
+        innerOsSource
       });
 
       if (role === 'user') {
@@ -1045,6 +1599,20 @@ export function createChatRouter({
           characterId,
           messageId: saved.id,
           content
+        });
+        void recordAutoMemoryCandidate(pool, {
+          userId: req.userId,
+          characterId,
+          messageId: saved.id,
+          content
+        });
+        void recordLifeEventSource(pool, {
+          userId: req.userId,
+          characterId,
+          sourceType: 'chat',
+          sourceId: saved.id,
+          title: content,
+          eventType: /(?:约好|约定|下次|明天)/u.test(content) ? 'appointment' : 'life'
         });
       }
 

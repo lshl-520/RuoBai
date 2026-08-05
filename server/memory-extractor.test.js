@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractExplicitMemory, recordExplicitChatMemory } from './memory-extractor.js';
+import { extractExplicitMemory, recordAutoMemoryCandidate, recordExplicitChatMemory } from './memory-extractor.js';
 
 test('only extracts an explicit remember request', () => {
   assert.equal(extractExplicitMemory('今天吃了西瓜，真甜'), null);
@@ -31,4 +31,27 @@ test('records one explicit chat memory per source message', async () => {
   assert.equal(result.id, 45);
   assert.ok(calls.some(call => call.sql.includes("source_type = 'chat'")));
   assert.ok(calls.some(call => call.sql.includes('INSERT INTO memories')));
+});
+
+test('records personal statements as low-priority candidates without treating likes as memory', async () => {
+  const calls = [];
+  const pool = {
+    query: async (sql, params) => {
+      calls.push({ sql, params });
+      if (sql.includes('SELECT id FROM memories')) return [[]];
+      return [{ insertId: 46 }];
+    }
+  };
+
+  const candidate = await recordAutoMemoryCandidate(pool, {
+    userId: 1, characterId: 2, messageId: 4, content: '我喜欢下班后安静地听歌。'
+  });
+  assert.equal(candidate.id, 46);
+  assert.equal(candidate.review_status, 'candidate');
+  assert.equal(candidate.is_important, 0);
+  assert.equal(recordAutoMemoryCandidate.length > 0, true);
+  assert.equal(await recordAutoMemoryCandidate(pool, {
+    userId: 1, characterId: 2, messageId: 5, content: '这条动态我点了赞。'
+  }), null);
+  assert.ok(calls.some(call => call.sql.includes('review_status')));
 });

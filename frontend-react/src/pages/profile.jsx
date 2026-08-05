@@ -1,7 +1,7 @@
 import React from "react";
 import { Icon, Bars, useLockBody } from "../store.jsx";
 import { ModelsSection } from "./models.jsx";
-import { getSessionProfile, getUsageStats, logoutSession, uploadAvatarImage, updateNickname, updateRole } from "../lib/profile.js";
+import { getFullChatExport, getSessionProfile, getUsageStats, logoutSession, uploadAvatarImage, updateNickname, updateRole } from "../lib/profile.js";
 import { getRoles, getRoleAvatarRound } from "../lib/roles.js";
 import {
   enableNativePush,
@@ -71,8 +71,25 @@ function StatusDot({ status, detail }) {
 /* ====== 导出聊天记录 ====== */
 function ExportSheet({ agents, onClose }) {
   useLockBody();
-  const counts = (id) => (window.getFullHistory ? window.getFullHistory(id) : []).filter((m) => m.type !== "time").length;
-  const exp = (a) => { if (window.downloadHistory) window.downloadHistory(a, window.getFullHistory(a.id)); };
+  const [backup, setBackup] = useStateP(null);
+  const [loading, setLoading] = useStateP(true);
+  const [error, setError] = useStateP("");
+  useEffectP(() => {
+    let active = true;
+    getFullChatExport().then((result) => {
+      if (active) setBackup(result);
+    }).catch((reason) => {
+      if (active) setError(reason instanceof Error ? reason.message : "聊天记录读取失败");
+    }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
+  const download = (filename, payload, type = "application/json;charset=utf-8") => {
+    const url = URL.createObjectURL(new Blob([payload], { type }));
+    const link = document.createElement("a");
+    link.href = url; link.download = filename; document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  };
+  const exportRole = (role) => download(`与${role.name}的完整聊天记录.json`, JSON.stringify({ ...role, exported_at: backup?.exported_at, export_version: backup?.export_version }, null, 2));
   return (
     <div className="sheet-mask" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "76%" }}>
@@ -84,12 +101,14 @@ function ExportSheet({ agents, onClose }) {
           </button>
         </div>
         <div className="sheet-body">
-          <div className="date-hint">选一位,导出成纯文本 .txt —— 按日期排好、能直接打开看。聊天与记忆都在你这边,随时备份、搬家不丢。</div>
+          <div className="date-hint">数据直接从服务器全量读取，不受当前页面加载数量影响。每位角色可单独备份为 JSON。</div>
+          {loading && <div className="route-note">正在读取服务器里的完整聊天记录…</div>}
+          {error && <div className="route-note" style={{ color: "var(--rose-deep)" }}>{error}</div>}
           <div className="cap-card">
-            {agents.map((a, i) => (
-              <button key={a.id} className={"prow" + (i === agents.length - 1 ? " last" : "")} onClick={() => exp(a)}>
-                <span className="prow-ic"><img src={a.avatar} alt="" onError={fallbackToDefaultRoleAvatar} style={{ width: "100%", height: "100%", borderRadius: 12, objectFit: "cover" }} /></span>
-                <span className="prow-main"><span className="prow-t">{a.name}</span><span className="prow-s">共 {counts(a.id)} 条</span></span>
+            {(backup?.characters || agents).map((a, i, rows) => (
+              <button key={a.id} disabled={!backup} className={"prow" + (i === rows.length - 1 ? " last" : "")} onClick={() => exportRole(a)}>
+                <span className="prow-ic"><img src={agents.find((agent) => String(agent.id) === String(a.id))?.avatar || DEFAULT_ROLE_AVATAR} alt="" onError={fallbackToDefaultRoleAvatar} style={{ width: "100%", height: "100%", borderRadius: 12, objectFit: "cover" }} /></span>
+                <span className="prow-main"><span className="prow-t">{a.name}</span><span className="prow-s">服务器共 {a.message_count ?? "…"} 条</span></span>
                 <span className="route-val"><Icon name="download" /> 导出</span>
               </button>
             ))}
@@ -105,7 +124,7 @@ function ThemeSheet({ current, onClose, onPick }) {
   useLockBody();
   const themes = [
     { id: "", name: "微光", sub: "暖米白 · 柔粉薰衣草 · 2.0 默认", sw: ["#faf6f2", "#c16579", "#9a8fc0"] },
-    { id: "classic", name: "原版 3.13", sub: "粉紫玻璃 · 独立布局 · 从最初一路走来", sw: ["#fff6fb", "#ff6aa8", "#9b72ff"] },
+    { id: "classic", name: "原版 3.13", sub: "粉紫玻璃 · 旧版风格", sw: ["#fff6fb", "#ff6aa8", "#9b72ff"] },
   ];
   return (
     <div className="sheet-mask" onClick={onClose}>
@@ -118,7 +137,7 @@ function ThemeSheet({ current, onClose, onPick }) {
           </button>
         </div>
         <div className="sheet-body">
-          <div className="date-hint">同一套功能和数据，两套完整外观。切换后布局、卡片、标题、背景、间距和导航都会一起变化。</div>
+          <div className="date-hint">同一套功能和数据，两套完整外观。切换后布局、卡片、标题、背景、间距和导航会一起变化。</div>
           {themes.map((t) => (
             <button key={t.id} className={"theme-row" + ((current || "") === t.id ? " on" : "")} onClick={() => onPick(t.id)}>
               <span className="theme-sw">{t.sw.map((c, i) => <i key={i} style={{ background: c }} />)}</span>
@@ -356,7 +375,21 @@ function PrivacySheet({ agents, onClose }) {
   useLockBody();
   const [done, setDone] = useStateP(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useStateP(false);
-  const exportAll = () => { agents.forEach((a) => window.downloadHistory && window.downloadHistory(a, window.getFullHistory(a.id))); };
+  const [exporting, setExporting] = useStateP(false);
+  const [exportError, setExportError] = useStateP("");
+  const exportAll = async () => {
+    setExporting(true); setExportError("");
+    try {
+      const backup = await getFullChatExport();
+      const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: "application/json;charset=utf-8" }));
+      const link = document.createElement("a");
+      link.href = url; link.download = `若白-全部聊天记录-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } catch (reason) {
+      setExportError(reason instanceof Error ? reason.message : "完整聊天记录导出失败");
+    } finally { setExporting(false); }
+  };
   const clearLocal = () => { try { Object.keys(localStorage).filter((k) => k.startsWith("ruobai")).forEach((k) => localStorage.removeItem(k)); } catch (e) {} setDone(true); setTimeout(() => setDone(false), 1800); };
   return (
     <div className="sheet-mask" onClick={onClose}>
@@ -375,7 +408,7 @@ function PrivacySheet({ agents, onClose }) {
           </div>
           <div className="priv-card">
             <span className="priv-ic"><Icon name="download" /></span>
-            <div><div className="priv-t">随时带走</div><div className="priv-s">一键导出全部聊天为文本,搬家、备份、留念都行。</div></div>
+            <div><div className="priv-t">随时带走</div><div className="priv-s">一键导出全部聊天为 JSON 备份,搬家、备份、留念都行。</div></div>
           </div>
           <div className="priv-card">
             <span className="priv-ic rose"><Icon name="trash" /></span>
@@ -388,7 +421,8 @@ function PrivacySheet({ agents, onClose }) {
           </button>
 
           <div className="section-label" style={{ margin: "18px 0 12px" }}><span>这里能做什么</span><span className="sl-line" /></div>
-          <button className="pill pill-ghost grow" style={{ width: "100%", marginBottom: 10 }} onClick={exportAll}><Icon name="download" /> 导出全部聊天记录</button>
+          <button className="pill pill-ghost grow" disabled={exporting} style={{ width: "100%", marginBottom: 10 }} onClick={exportAll}><Icon name="download" /> {exporting ? "正在读取完整聊天记录…" : "导出全部聊天记录"}</button>
+          {exportError && <div className="route-note" style={{ color: "var(--rose-deep)", marginBottom: 10 }}>{exportError}</div>}
           <button className="pill pill-ghost grow" style={{ width: "100%", color: "var(--rose-deep)" }} onClick={clearLocal}>
             <Icon name={done ? "check" : "trash"} /> {done ? "本机缓存已清除" : "清除本机缓存(不影响服务器)"}
           </button>
@@ -761,7 +795,7 @@ function ProfileScreen({ user: userProp, onOnboard, onGoMemory, onLogout }) {
         <div className="cap-card">
           <Row icon="palette" tint="rose" title="外观与主题" sub="微光 / 原版 两套皮肤" onClick={() => setSheet("theme")} trailing={<StatusDot status="on" detail={theme === "classic" ? "原版 3.13" : "微光 2.0"} />} />
           <Row icon="bell" title="通知与主动消息" sub="她想你的时候提醒你" onClick={() => setSheet("notif")} trailing={<Icon name="chevron" className="row-chev" />} />
-          <Row icon="download" tint="lav" title="导出聊天记录" sub="存成 .txt,自己留底 / 搬家" onClick={() => setSheet("export")} trailing={<Icon name="chevron" className="row-chev" />} />
+          <Row icon="download" tint="lav" title="导出聊天记录" sub="服务器全量 JSON 备份，自己留底 / 搬家" onClick={() => setSheet("export")} trailing={<Icon name="chevron" className="row-chev" />} />
           <Row icon="shield" tint="lav" title="隐私与数据" sub="数据存哪、清理、注销" onClick={() => setSheet("privacy")} trailing={<Icon name="chevron" className="row-chev" />} />
           {isOwner && <Row icon="settings" tint="rose" title="管理后台" sub="用户、邀请码、系统状态与网站更新" onClick={() => { window.location.href = "/admin"; }} trailing={<Icon name="chevron" className="row-chev" />} />}
           <Row icon="spark" tint="rose" title="关于若白" sub="为什么会有她 · v2.0" last onClick={() => setSheet("about")} trailing={<Icon name="chevron" className="row-chev" />} />

@@ -4,8 +4,11 @@ import {
   buildImageGenerationsUrl,
   buildImagePrompt,
   detectDrawIntent,
-  generateImage
+  extractContactSheetCenter,
+  generateImage,
+  isThreeByThreeContactSheet
 } from './image-gen.js';
+import sharp from 'sharp';
 
 const SELFIE_REQUEST = '林夏，你陪我一段时间了,我想看看你的样子。请生成一张类似你自己用iPhone 随手自拍的照片：没有明确主题、没有刻意构图，只是很普通、甚至有点失败的快照。照片略带运动模糊，光线不均、轻微曝光过度，角度尴尬，构图混乱，整体呈现出一种“过于真实的随手一拍感”，就像是从口袋里拿出手机不小心按到的自拍。';
 
@@ -37,6 +40,101 @@ test('buildImageGenerationsUrl supports bases with and without v1', () => {
     buildImageGenerationsUrl('https://example.com'),
     'https://example.com/v1/images/generations'
   );
+});
+
+test('isThreeByThreeContactSheet identifies a nine-tile contact sheet but not a normal image', async () => {
+  const tile = await sharp({ create: { width: 94, height: 94, channels: 3, background: '#5b3f76' } }).png().toBuffer();
+  const grid = await sharp({ create: { width: 300, height: 300, channels: 3, background: '#ffffff' } })
+    .composite(Array.from({ length: 9 }, (_, index) => ({
+      input: tile,
+      left: (index % 3) * 103,
+      top: Math.floor(index / 3) * 103
+    })))
+    .png()
+    .toBuffer();
+  const single = await sharp({ create: { width: 300, height: 300, channels: 3, background: '#5b3f76' } }).png().toBuffer();
+
+  assert.equal(await isThreeByThreeContactSheet(grid), true);
+  assert.equal(await isThreeByThreeContactSheet(single), false);
+});
+
+test('isThreeByThreeContactSheet identifies a contact sheet with image-to-image seams instead of white gutters', async () => {
+  const tile = await sharp({ create: { width: 99, height: 99, channels: 3, background: '#345d75' } }).png().toBuffer();
+  const grid = await sharp({ create: { width: 300, height: 300, channels: 3, background: '#171717' } })
+    .composite(Array.from({ length: 9 }, (_, index) => ({
+      input: tile,
+      left: (index % 3) * 100,
+      top: Math.floor(index / 3) * 100
+    })))
+    .png()
+    .toBuffer();
+
+  assert.equal(await isThreeByThreeContactSheet(grid), true);
+});
+
+test('extractContactSheetCenter keeps the middle candidate as one image', async () => {
+  const colors = ['#5b3f76', '#5b3f76', '#5b3f76', '#5b3f76', '#39c983', '#5b3f76', '#5b3f76', '#5b3f76', '#5b3f76'];
+  const grid = await sharp({ create: { width: 300, height: 300, channels: 3, background: '#ffffff' } })
+    .composite(await Promise.all(colors.map(async (color, index) => ({
+      input: await sharp({ create: { width: 94, height: 94, channels: 3, background: color } }).png().toBuffer(),
+      left: (index % 3) * 103,
+      top: Math.floor(index / 3) * 103
+    }))))
+    .png()
+    .toBuffer();
+  const extracted = await extractContactSheetCenter(grid);
+  const { data } = await sharp(extracted).resize({ width: 1, height: 1 }).raw().toBuffer({ resolveWithObject: true });
+
+  assert.ok(extracted?.length);
+  assert.ok(data[1] > data[0] && data[1] > data[2]);
+});
+
+test('generateImage does not save a contact sheet for dynamic single-image output', async () => {
+  const writes = [];
+  await assert.rejects(
+    generateImage('一张单人自拍', {
+      apiBase: 'https://example.com/v1',
+      apiKey: 'image-key',
+      model: 'image-model',
+      expectedSingleImage: true,
+      inspectImageImpl: async () => true,
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ data: [{ b64_json: Buffer.from('image-result').toString('base64') }] })
+      }),
+      fileStorage: {
+        mkdir: async () => {},
+        writeFile: async (...args) => writes.push(args)
+      }
+    }),
+    /九宫格候选图/
+  );
+  assert.equal(writes.length, 0);
+});
+
+test('generateImage returns contact-sheet handling details when dynamic output extracts a candidate', async () => {
+  const result = await generateImage('一张单人自拍', {
+    apiBase: 'https://example.com/v1',
+    apiKey: 'image-key',
+    model: 'image-model',
+    expectedSingleImage: true,
+    contactSheetStrategy: 'extract-center',
+    returnResult: true,
+    inspectImageImpl: async () => true,
+    extractContactSheetImpl: async () => Buffer.from('center-candidate'),
+    optimizeImage: async buffer => {
+      assert.equal(buffer.toString(), 'center-candidate');
+      return '/user_assets/chat/center.webp';
+    },
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ data: [{ b64_json: Buffer.from('image-result').toString('base64') }] })
+    })
+  });
+
+  assert.deepEqual(result, { url: '/user_assets/chat/center.webp', outputHandling: 'contact_sheet_center' });
 });
 
 test('generateImage uses selected capability credentials and model and stores base64 output', async () => {
@@ -145,6 +243,80 @@ test('generateImage retries temporary upstream 503 responses before succeeding',
   assert.match(imagePath, /^\/user_assets\/chat\/draw-/);
   assert.equal(generationCalls, 3);
   assert.deepEqual(waits, [5000, 15000]);
+});
+
+test('generateImage maps explicit 1K, 2K, and 4K choices to standard sizes', async () => {
+  const sizes = [];
+  for (const resolution of ['1k', '2k', '4k']) {
+    await generateImage('请生成一张小白的日常自拍', {
+      apiBase: 'https://middle.example.com/v1',
+      apiKey: 'image-key',
+      model: 'gpt-image-2',
+      resolution,
+      optimizeImage: async () => '/user_assets/chat/resolution.png',
+      fetchImpl: async (_url, options) => {
+        sizes.push(JSON.parse(options.body).size);
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ data: [{ b64_json: Buffer.from('image-result').toString('base64') }] })
+        };
+      }
+    });
+  }
+
+  assert.deepEqual(sizes, ['1024x1024', '1536x1024', '2048x2048']);
+});
+
+test('generateImage preserves channel defaults and supports declared resolution labels', async () => {
+  const sizes = [];
+  await generateImage('请生成一张日常自拍', {
+    apiBase: 'https://middle.example.com/v1',
+    apiKey: 'image-key',
+    model: 'gpt-image-1',
+    resolution: 'channel',
+    extras: { size: '1536x1024' },
+    optimizeImage: async () => '/user_assets/chat/channel.png',
+    fetchImpl: async (_url, options) => {
+      sizes.push(JSON.parse(options.body).size);
+      return { ok: true, status: 200, text: async () => JSON.stringify({ data: [{ b64_json: Buffer.from('image-result').toString('base64') }] }) };
+    }
+  });
+  await generateImage('请生成一张日常自拍', {
+    apiBase: 'https://middle.example.com/v1',
+    apiKey: 'image-key',
+    model: 'gpt-image-1',
+    resolution: '4k',
+    extras: { resolution_format: 'label' },
+    optimizeImage: async () => '/user_assets/chat/label.png',
+    fetchImpl: async (_url, options) => {
+      sizes.push(JSON.parse(options.body).size);
+      return { ok: true, status: 200, text: async () => JSON.stringify({ data: [{ b64_json: Buffer.from('image-result').toString('base64') }] }) };
+    }
+  });
+  assert.deepEqual(sizes, ['1536x1024', '4k']);
+});
+
+test('generateImage accepts up to five retries when the selected channel needs a larger retry budget', async () => {
+  let generationCalls = 0;
+  const waits = [];
+  const imagePath = await generateImage('请生成一张真实自拍照片', {
+    apiBase: 'https://middle.example.com',
+    apiKey: 'image-key',
+    model: 'gpt-image-2',
+    generationMaxAttempts: 5,
+    sleepImpl: async ms => waits.push(ms),
+    fetchImpl: async () => {
+      generationCalls += 1;
+      if (generationCalls < 5) return { ok: false, status: 502, text: async () => JSON.stringify({ error: { message: 'Service busy' } }) };
+      return { ok: true, status: 200, text: async () => JSON.stringify({ data: [{ b64_json: Buffer.from('retry-success').toString('base64') }] }) };
+    },
+    fileStorage: { mkdir: async () => {}, writeFile: async () => {} }
+  });
+
+  assert.match(imagePath, /^\/user_assets\/chat\/draw-/);
+  assert.equal(generationCalls, 5);
+  assert.deepEqual(waits, [5000, 15000, 30000, 30000]);
 });
 
 test('generateImage reports a friendly error after repeated upstream failures', async () => {

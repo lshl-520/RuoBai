@@ -1,35 +1,81 @@
-async function parseJson(response) {
+import { recordDiagnostic } from "./diagnostics.js";
+
+async function parseJson(response, path = "") {
   const data = await response.json().catch(() => null);
 
-  if (!response.ok && (!data || typeof data !== "object")) {
-    throw new Error(`Request failed with status ${response.status}`);
+  if (!response.ok) {
+    if (path) {
+      recordDiagnostic({
+        area: path.includes("upload-image") ? "image" : "app",
+        action: path.includes("upload-image") ? "upload-image" : "request",
+        status: response.status,
+        error: data?.error || `HTTP ${response.status}`,
+      });
+    }
+    throw new Error(data?.error || `请求失败（HTTP ${response.status}）`);
   }
 
   return data;
 }
 
 async function request(path, options = {}) {
-  const response = await fetch(path, {
-    credentials: "same-origin",
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers ?? {}),
-    },
-  });
+  try {
+    const response = await fetch(path, {
+      credentials: "same-origin",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers ?? {}),
+      },
+    });
 
-  return parseJson(response);
+    return parseJson(response, path);
+  } catch (error) {
+    if (!(error instanceof Error && /HTTP \d+/.test(error.message))) {
+      recordDiagnostic({
+        area: path.includes("upload-image") ? "image" : "app",
+        action: path.includes("upload-image") ? "upload-image" : "request",
+        error,
+      });
+    }
+    throw error;
+  }
 }
 
-export function getMoments({ characterId = "", limit = 50 } = {}) {
+export function getMoments({ characterId = "", scope = "all", viewerCharacterId = "", limit = 20, offset = 0 } = {}) {
   const params = new URLSearchParams({ limit: String(limit) });
+  if (scope) params.set("scope", String(scope));
   if (characterId) {
     params.set("character_id", String(characterId));
   }
+  if (viewerCharacterId) params.set("viewer_character_id", String(viewerCharacterId));
+  if (offset) params.set("offset", String(offset));
 
   return request(`/api/moments?${params.toString()}`, {
     method: "GET",
   });
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("读取图片失败"));
+    reader.readAsDataURL(file);
+  });
+}
+
+export async function uploadMomentImage(file) {
+  if (!file || !String(file.type || "").startsWith("image/")) {
+    throw new Error("这里只能添加图片");
+  }
+  const imageData = await readFileAsDataUrl(file);
+  const data = await request("/api/chat/upload-image", {
+    method: "POST",
+    body: JSON.stringify({ image_data: imageData }),
+  });
+  if (!data?.success || !data.media_url) throw new Error(data?.error || "图片上传失败");
+  return data.media_url;
 }
 
 export function createMoment(payload) {
@@ -39,11 +85,12 @@ export function createMoment(payload) {
   });
 }
 
-export function generateMomentDraft(characterId) {
+export function generateMomentDraft(characterId, mediaUrl = "") {
   return request("/api/moments/draft", {
     method: "POST",
     body: JSON.stringify({
       character_id: characterId,
+      media_url: mediaUrl,
     }),
   });
 }
@@ -74,7 +121,7 @@ export async function publishGeneratedSelfieMoment({ characterId, mediaUrl }) {
 
   let content = GENERATED_SELFIE_FALLBACK;
   try {
-    const draft = await generateMomentDraft(characterId);
+    const draft = await generateMomentDraft(characterId, mediaUrl);
     const generated = String(draft?.item?.content || "").trim();
     if (draft?.success && generated) content = generated;
   } catch {
@@ -120,6 +167,19 @@ export function commentMoment(momentId, payload) {
 
 export function deleteMoment(momentId) {
   return request(`/api/moments/${encodeURIComponent(momentId)}`, {
+    method: "DELETE",
+  });
+}
+
+export function shareMoment(momentId, characterIds = []) {
+  return request(`/api/moments/${encodeURIComponent(momentId)}/share`, {
+    method: "POST",
+    body: JSON.stringify({ character_ids: characterIds }),
+  });
+}
+
+export function unshareMoment(momentId, characterId) {
+  return request(`/api/moments/${encodeURIComponent(momentId)}/share/${encodeURIComponent(characterId)}`, {
     method: "DELETE",
   });
 }

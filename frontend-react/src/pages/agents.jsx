@@ -1,8 +1,22 @@
 import React from "react";
 import { Icon } from "../store.jsx";
-import { getRoles, getRolePortraitSrc, createRole, updateRole, switchRole, buildRolePayload, restoreRole } from "../lib/roles.js";
+import { getRoles, getRolePortraitSrc, createRole, updateRole, switchRole, buildRolePayload, restoreRole, getIdentityPack, testAutoMoment } from "../lib/roles.js";
+import { Live2DStage } from "../components/Live2DStage.jsx";
+import { getProactiveEvents } from "../lib/proactive.js";
 /* 角色 — 列表(Hero + 网格) + 详情 + 创建/编辑 */
 const { useState: useStateA, useEffect: useEffectA, useRef: useRefA } = React;
+const MOMENT_FREQ_PRESETS = [2, 4, 6];
+const IMAGE_RESOLUTION_OPTIONS = [
+  { value: "channel", label: "跟随渠道" },
+  { value: "1k", label: "1K" },
+  { value: "2k", label: "2K" },
+  { value: "4k", label: "4K" },
+];
+
+function normalizeMomentFrequency(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 1 && number <= 12 ? Math.round(number) : 4;
+}
 
 /* 后端角色 → 2.0 agent 格式 */
 function getFullPortrait(role) {
@@ -26,7 +40,9 @@ function toAgent(role) {
     online: Boolean(role.is_active),
     isDefault: Boolean(role.is_active),
     autoMoments: Boolean(role.auto_moments_enabled),
-    momentFreq: [2, 4, 6].includes(Number(role.auto_moments_daily_max)) ? Number(role.auto_moments_daily_max) : 4,
+    autoMomentsImages: Boolean(role.auto_moments_images_enabled),
+    live2dModelUrl: String(role.live2d_model_url || role.live2dModelUrl || ""),
+    momentFreq: normalizeMomentFrequency(role.auto_moments_daily_max),
     handle: role.tag || "角色",
     _raw: role,
   };
@@ -36,12 +52,15 @@ function toAgent(role) {
 function AgentHero({ agent, onChat, onDetail }) {
   return (
     <div className="hero">
-      <img className="hero-bg" src={agent.cover} alt={agent.name} onClick={() => onDetail(agent)} />
+      <div className="hero-live2d-click" onClick={() => onDetail(agent)}>
+        <Live2DStage className="hero-bg" modelUrl={agent.live2dModelUrl} staticSrc={agent.cover} fallbackSrc={agent.cover} alt={agent.name} />
+      </div>
       <div className="hero-scrim" />
       <div className="hero-top">
         <span className="tag tag-rose" style={{ background: "rgba(255,255,255,.85)", color: "var(--rose-deep)" }}>
           <Icon name="heartFill" style={{ width: 11, height: 11 }} /> 主陪伴
         </span>
+        {agent.proactiveUnread > 0 && <span className="agent-proactive-hint" title="她有一条主动消息">💡</span>}
         <button className="hero-edit" onClick={() => onDetail(agent)}><Icon name="more" /></button>
       </div>
       <div className="hero-body">
@@ -63,11 +82,12 @@ function AgentCard({ agent, onDetail }) {
   return (
     <div className="agent-card" onClick={() => onDetail(agent)}>
       <div className="ac-photo">
-        <img src={agent.cover} alt={agent.name} />
+        <Live2DStage className="detail-live2d" modelUrl={agent.live2dModelUrl} staticSrc={agent.cover} fallbackSrc={agent.cover} alt={agent.name} />
         <div className="ac-scrim" />
         {agent.online && <span className="ac-online" />}
           <div className="ac-overlay">
             <div className="ac-name serif">{agent.name}</div>
+            {agent.proactiveUnread > 0 && <span className="agent-proactive-hint" title="她有一条主动消息">💡</span>}
           </div>
       </div>
       <div className="ac-meta">
@@ -81,6 +101,7 @@ function AgentCard({ agent, onDetail }) {
 
 function AgentsScreen({ agents: fallbackAgents, onChat, onDetail, onCreate, onRestore }) {
   const [agents, setAgents] = useStateA(null);
+  const [proactiveByRole, setProactiveByRole] = useStateA({});
   const seqRef = useRefA(0);
 
   useEffectA(() => {
@@ -92,6 +113,14 @@ function AgentsScreen({ agents: fallbackAgents, onChat, onDetail, onCreate, onRe
         if (cancelled || seqRef.current !== id) return;
         const items = Array.isArray(data) ? data : (data?.items || []);
         setAgents(items.map(toAgent));
+        try {
+          const proactive = await getProactiveEvents();
+          const next = {};
+          (proactive?.items || []).filter((item) => item.unread).forEach((item) => {
+            next[item.character_id] = (next[item.character_id] || 0) + 1;
+          });
+          setProactiveByRole(next);
+        } catch { setProactiveByRole({}); }
       } catch {
         // 后端没开就用兜底
       }
@@ -110,7 +139,10 @@ function AgentsScreen({ agents: fallbackAgents, onChat, onDetail, onCreate, onRe
     };
   }, []);
 
-  const list = agents ?? fallbackAgents ?? [];
+  const list = (agents ?? fallbackAgents ?? []).map((agent) => ({
+    ...agent,
+    proactiveUnread: proactiveByRole[agent.id] || 0,
+  }));
 
   if (agents === null) {
     return (
@@ -188,6 +220,7 @@ function CharacterDetail({ agent, onClose, onChat, onEdit, onDelete, onSetMain, 
   const [deleting, setDeleting] = useStateA(false);
   const [deleteError, setDeleteError] = useStateA("");
   const [mainError, setMainError] = useStateA("");
+  const [packError, setPackError] = useStateA("");
 
   const handleDelete = async (options = {}) => {
     if (!onDelete || deleting) return;
@@ -210,6 +243,25 @@ function CharacterDetail({ agent, onClose, onChat, onEdit, onDelete, onSetMain, 
       await onSetMain(agent.id);
     } catch (err) {
       setMainError(err instanceof Error ? err.message : "设置主陪伴失败");
+    }
+  };
+
+  const handleExportIdentityPack = async () => {
+    setPackError("");
+    try {
+      const result = await getIdentityPack(agent.id);
+      if (!result?.success || !result.item) throw new Error(result?.error || "身份包暂时没有生成成功");
+      const blob = new Blob([JSON.stringify(result.item, null, 2)], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${agent.name || "角色"}-identity-pack-v${result.item.version || "1.0.0"}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setPackError(error instanceof Error ? error.message : "身份包暂时没有导出成功");
     }
   };
 
@@ -254,14 +306,20 @@ function CharacterDetail({ agent, onClose, onChat, onEdit, onDelete, onSetMain, 
             : <button className="set-main-btn" onClick={handleSetMain}>设为主陪伴</button>}
         </div>
         {mainError && <div className="chat-error" style={{ marginTop: -2 }}>{mainError}</div>}
+        {packError && <div className="chat-error" style={{ marginTop: -2 }}>{packError}</div>}
 
         <div className="detail-row">
           <span className="dr-l">主动发动态</span>
           <span className="dr-r">{agent.autoMoments ? "已开启" : "已关闭"}</span>
         </div>
+        <div className="detail-row">
+          <span className="dr-l">自动动态配图</span>
+          <span className="dr-r">{agent.autoMomentsImages ? "已开启" : "已关闭"}</span>
+        </div>
       </div>
 
       <div className="detail-foot">
+        <button className="icon-btn" onClick={handleExportIdentityPack} title="导出身份包" aria-label="导出身份包"><Icon name="book" /></button>
         <button className="icon-btn det-edit" onClick={() => onEdit(agent)}><Icon name="edit" /></button>
         <button className="icon-btn det-del" onClick={() => setConfirm(true)}><Icon name="trash" /></button>
         <button className="pill pill-primary grow" onClick={() => onChat(agent)}><Icon name="chat" /> 开始聊天</button>
@@ -296,6 +354,93 @@ function CharacterDetail({ agent, onClose, onChat, onEdit, onDelete, onSetMain, 
 
 /* ============ 创建 / 编辑 ============ */
 const PORTRAIT_OPTIONS = Array.from({ length: 18 }, (_, i) => `/assets/portraits/square/${i}.png`);
+const DYNAMIC_PROFILE_CHOICES = {
+  temperament: ["温柔", "安静", "治愈", "不故意卖萌", "有陪伴感", "自然亲近"],
+  face: ["小巧鹅蛋脸", "五官柔和", "不网红脸"],
+  eyes: ["蓝灰偏浅", "眼神温柔", "不夸张大眼"],
+  hair: ["白银色", "柔顺自然", "中长发"],
+};
+const DYNAMIC_TEMPLATE_CHOICES = {
+  categories: ["自拍", "日常片段", "心情记录", "和你有关"],
+  selfie_scenes: ["镜子自拍", "床上自拍", "抱猫自拍", "沙发自拍", "洗漱自拍", "阳台自拍", "做饭自拍", "看电影自拍"],
+  poses: ["侧看", "回眸", "抱枕", "托腮", "双手托脸", "靠窗"],
+  moods: ["开心", "困困", "害羞", "想你", "放松", "生病", "撒娇"],
+};
+
+function cleanChoices(value) {
+  return Array.isArray(value) ? value.filter(Boolean) : [];
+}
+
+function DynamicSettingsSheet({ roleName, initialProfile, initialTemplates, onClose, onSave }) {
+  const [profile, setProfile] = useStateA(() => ({
+    name: initialProfile?.name || roleName || "",
+    age_feel: initialProfile?.age_feel || "",
+    ...Object.fromEntries(Object.keys(DYNAMIC_PROFILE_CHOICES).map((key) => [key, cleanChoices(initialProfile?.[key])])),
+    other: cleanChoices(initialProfile?.other),
+  }));
+  const [templates, setTemplates] = useStateA(() => ({
+    ...Object.fromEntries(Object.keys(DYNAMIC_TEMPLATE_CHOICES).map((key) => [key, cleanChoices(initialTemplates?.[key])])),
+    custom: cleanChoices(initialTemplates?.custom),
+  }));
+  const [profileOther, setProfileOther] = useStateA(cleanChoices(initialProfile?.other).join("，"));
+  const [templateOther, setTemplateOther] = useStateA(cleanChoices(initialTemplates?.custom).join("，"));
+  const [error, setError] = useStateA("");
+  const toggle = (setter, key, choice) => setter((current) => ({
+    ...current,
+    [key]: current[key].includes(choice) ? current[key].filter((item) => item !== choice) : [...current[key], choice],
+  }));
+
+  const choiceBlock = (title, note, source, setter, key) => {
+    const selected = setter === setProfile ? profile[key] : templates[key];
+    return (
+      <div style={{ marginTop: 18 }}>
+        <div className="field-label" style={{ margin: 0 }}>{title}<span className="lbl-hint">{note}</span></div>
+        <div className="type-grid" style={{ marginTop: 8 }}>
+          {source.map((choice) => <button key={choice} type="button" className={"type-chip" + (selected.includes(choice) ? " on" : "")} onClick={() => toggle(setter, key, choice)}>{choice}</button>)}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="sheet-mask" onClick={onClose}>
+      <div className="sheet" onClick={(event) => event.stopPropagation()} style={{ maxHeight: "90%" }}>
+        <div className="sheet-grip" />
+        <div className="sheet-head">
+          <h2 className="serif">{roleName}的动态生活</h2>
+          <button className="icon-btn" onClick={onClose} aria-label="关闭" style={{ width: 34, height: 34 }}><span style={{ fontSize: 24, lineHeight: 1 }}>×</span></button>
+        </div>
+        <div className="sheet-body">
+          <div className="onboard-card" style={{ marginTop: 4 }}>
+            <span className="ob-main"><span className="ob-t serif">她会有自己的生活感</span><span className="ob-s">聊天只提供合适灵感。系统会避开重复和不适合分享的话，再决定文字、自拍或第三人称画面。</span></span>
+          </div>
+          <div className="detail-section-t" style={{ marginTop: 20 }}>固定形象</div>
+          <label className="field-label">姓名 <span className="lbl-hint">必填</span></label>
+          <input className="fld" value={profile.name} onChange={(event) => setProfile((value) => ({ ...value, name: event.target.value }))} />
+          <label className="field-label">年龄感 <span className="lbl-hint">必填</span></label>
+          <input className="fld" value={profile.age_feel} onChange={(event) => setProfile((value) => ({ ...value, age_feel: event.target.value }))} placeholder="例如：20岁左右" />
+          {Object.entries(DYNAMIC_PROFILE_CHOICES).map(([key, options]) => <React.Fragment key={key}>{choiceBlock({ temperament: "气质", face: "脸型", eyes: "眼睛", hair: "头发" }[key], "可多选", options, setProfile, key)}</React.Fragment>)}
+          <label className="field-label" style={{ marginTop: 18 }}>形象其他补充 <span className="lbl-hint">中文逗号分隔</span></label>
+          <input className="fld" value={profileOther} onChange={(event) => setProfileOther(event.target.value)} placeholder="例如：皮肤自然白，安静微笑" />
+          <div className="detail-section-t" style={{ marginTop: 24 }}>生活模板</div>
+          {Object.entries(DYNAMIC_TEMPLATE_CHOICES).map(([key, options]) => <React.Fragment key={key}>{choiceBlock({ categories: "动态大类别", selfie_scenes: "自拍", poses: "姿势和镜头感", moods: "心情" }[key], "可多选", options, setTemplates, key)}</React.Fragment>)}
+          <label className="field-label" style={{ marginTop: 18 }}>还有别的想要？ <span className="lbl-hint">中文逗号分隔</span></label>
+          <input className="fld" value={templateOther} onChange={(event) => setTemplateOther(event.target.value)} placeholder="例如：雨天撑伞，逛书店" />
+        </div>
+        <div className="sheet-foot">
+          {error && <div className="chat-error" style={{ marginBottom: 10 }}>{error}</div>}
+          <button className="pill pill-primary grow" onClick={() => {
+            if (!profile.name.trim() || !profile.age_feel.trim()) { setError("固定形象需要姓名和年龄感"); return; }
+            onSave({
+              profile: { ...profile, name: profile.name.trim(), age_feel: profile.age_feel.trim(), other: profileOther.split(/[,，]/).map((item) => item.trim()).filter(Boolean) },
+              templates: { ...templates, custom: templateOther.split(/[,，]/).map((item) => item.trim()).filter(Boolean) },
+            });
+          }}>保存动态生活</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function AgentEditor({ agent, onClose, onSave }) {
   const editing = !!agent;
@@ -305,12 +450,21 @@ function AgentEditor({ agent, onClose, onSave }) {
   const [portrait, setPortrait] = useStateA(agent?.avatar || PORTRAIT_OPTIONS[0]);
   const [uploads, setUploads] = useStateA([]); // 用户上传的自定义头像(dataURL)
   const [tagsStr, setTagsStr] = useStateA((agent?.tags || []).join(" "));
-  const [auto, setAuto] = useStateA(agent?.autoMoments ?? true);
-  const [freq, setFreq] = useStateA(agent?.momentFreq ?? 4);
-  const momentIntervalHours = Math.max(4, Math.round(24 / freq));
+  const [auto, setAuto] = useStateA(agent?.autoMoments ?? false);
+  const [autoImages, setAutoImages] = useStateA(agent?.autoMomentsImages ?? false);
+  const [imageProfile, setImageProfile] = useStateA(agent?._raw?.auto_moments_image_profile || null);
+  const [momentTemplates, setMomentTemplates] = useStateA(agent?._raw?.auto_moments_templates || null);
+  const [dynamicSheet, setDynamicSheet] = useStateA(false);
+  const initialFreq = normalizeMomentFrequency(agent?.momentFreq ?? 4);
+  const [freq, setFreq] = useStateA(initialFreq);
+  const [customFreq, setCustomFreq] = useStateA(MOMENT_FREQ_PRESETS.includes(initialFreq) ? "" : String(initialFreq));
+  const [imageResolution, setImageResolution] = useStateA(agent?._raw?.auto_moments_image_resolution || "channel");
+  const isCustomFreq = !MOMENT_FREQ_PRESETS.includes(freq);
+  const momentIntervalHours = Math.max(1, Math.round(24 / freq));
   const [compact, setCompact] = useStateA((agent?._raw?.speech_style || "") === "compact");
   const [busy, setBusy] = useStateA(false);
   const [error, setError] = useStateA("");
+  const [momentTest, setMomentTest] = useStateA(null);
 
   const onUpload = (e) => {
     const file = e.target.files && e.target.files[0];
@@ -381,12 +535,53 @@ function AgentEditor({ agent, onClose, onSave }) {
           </div>
           {auto && (
             <div className="freq-row">
-              <span className="sr-s">每天约</span>
-              {[2, 4, 6].map((f) => (
+              <span className="sr-s">每天最多</span>
+              {MOMENT_FREQ_PRESETS.map((f) => (
                 <button key={f} className={"freq-chip" + (freq === f ? " on" : "")} onClick={() => setFreq(f)}>{f} 条</button>
               ))}
+              <button className={"freq-chip" + (isCustomFreq ? " on" : "")} onClick={() => { setFreq(8); setCustomFreq("8"); }}>自定义</button>
+              {isCustomFreq && <input className="fld freq-custom-input" type="number" min="1" max="12" step="1" value={customFreq} aria-label="每天最多发几条动态" onChange={(e) => {
+                const value = e.target.value;
+                setCustomFreq(value);
+                const number = Number(value);
+                if (Number.isFinite(number) && number >= 1 && number <= 12) setFreq(Math.round(number));
+              }} />}
             </div>
           )}
+          <div className="switch-row">
+            <div>
+              <div className="sr-t">动态发图</div>
+              <div className="sr-s">只控制她自己发动态时是否允许带图，不影响聊天里让她画图</div>
+            </div>
+            <button className={"toggle" + (autoImages ? " on" : "")} onClick={() => setAutoImages(!autoImages)} disabled={!auto}><i /></button>
+          </div>
+          {auto && autoImages && <div className="image-resolution-row">
+            <label className="sr-s" htmlFor="auto-moment-resolution">图片清晰度</label>
+            <select id="auto-moment-resolution" className="fld" value={imageResolution} onChange={(e) => setImageResolution(e.target.value)}>
+              {IMAGE_RESOLUTION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+            <div className="route-note">默认跟随当前动态渠道；只有渠道支持时，1K/2K/4K 才会生效。</div>
+          </div>}
+          {auto && <button type="button" className="onboard-card" style={{ marginTop: 14 }} onClick={() => setDynamicSheet(true)}>
+            <span className="ob-main"><span className="ob-t serif">{name || "她"}的动态生活</span><span className="ob-s">固定形象、生活模板和系统画面判断</span></span>
+            <Icon name="chevron" className="row-chev" />
+          </button>}
+          {auto && editing && agent?._raw?.id && <>
+            <button type="button" className="onboard-card" style={{ marginTop: 10 }} disabled={momentTest?.loading} onClick={async () => {
+              setMomentTest({ loading: true, message: "正在试发..." });
+              try {
+                const result = await testAutoMoment(agent._raw.id);
+                if (!result?.success) throw new Error(result?.error || "试发失败");
+                setMomentTest({ loading: false, message: result.message || "试发完成" });
+              } catch (err) {
+                setMomentTest({ loading: false, message: err instanceof Error ? err.message : "试发失败" });
+              }
+            }}>
+              <span className="ob-main"><span className="ob-t serif">{momentTest?.loading ? "正在测试动态发图渠道" : "现在测试动态发图"}</span><span className="ob-s">跳过聊天判断，直接生成一条测试图文动态，可能消耗一次额度</span></span>
+              <Icon name="chevron" className="row-chev" />
+            </button>
+            {momentTest?.message && !momentTest.loading && <div className="route-note" style={{ marginTop: 8 }}>{momentTest.message}</div>}
+          </>}
 
           <div className="switch-row">
             <div>
@@ -415,6 +610,10 @@ function AgentEditor({ agent, onClose, onSave }) {
                 portrait_id: portraitId,
                 portrait_custom_url: portraitCustomUrl,
                 auto_moments_enabled: auto,
+                auto_moments_images_enabled: auto && autoImages,
+                auto_moments_image_resolution: auto && autoImages ? imageResolution : "channel",
+                auto_moments_image_profile: auto ? imageProfile : null,
+                auto_moments_templates: auto ? momentTemplates : null,
                 auto_moments_daily_min: auto ? freq : 0,
                 auto_moments_daily_max: auto ? freq : 0,
                 auto_moments_min_interval_hours: momentIntervalHours,
@@ -425,7 +624,7 @@ function AgentEditor({ agent, onClose, onSave }) {
               } else {
                 await createRole(payload);
               }
-              onSave({ id: agent?.id, name, persona, tagline, avatar: portrait, tags: tagsStr.split(/\s+/).filter(Boolean), autoMoments: auto, momentFreq: freq });
+              onSave({ id: agent?.id, name, persona, tagline, avatar: portrait, tags: tagsStr.split(/\s+/).filter(Boolean), autoMoments: auto, autoMomentsImages: auto && autoImages, momentFreq: freq, auto_moments_image_resolution: auto && autoImages ? imageResolution : "channel", auto_moments_image_profile: auto ? imageProfile : null, auto_moments_templates: auto ? momentTemplates : null });
             } catch (err) {
               setError(err instanceof Error ? err.message : "保存失败");
             } finally { setBusy(false); }
@@ -434,6 +633,7 @@ function AgentEditor({ agent, onClose, onSave }) {
           </button>
         </div>
       </div>
+      {dynamicSheet && <DynamicSettingsSheet roleName={name || agent?.name || "她"} initialProfile={imageProfile} initialTemplates={momentTemplates} onClose={() => setDynamicSheet(false)} onSave={({ profile, templates }) => { setImageProfile(profile); setMomentTemplates(templates); setDynamicSheet(false); }} />}
     </div>
   );
 }

@@ -20,6 +20,8 @@ function mapMemory(row) {
     memory_type: row.memory_type || 'life',
     memory_type_label: memoryTypeLabel(row.memory_type || 'life'),
     source_type: row.source_type || 'manual',
+    review_status: row.review_status || 'active',
+    detected_reason: row.detected_reason || '',
     confidence: Number(row.confidence ?? 1),
     weight: Number(row.weight ?? 50),
     is_important: Boolean(row.is_important),
@@ -31,6 +33,7 @@ async function getOwnedMemory(memoryId, userId) {
   const [rows] = await pool.query(
     `
       SELECT id, user_id, character_id, content, tag, category, memory_type, source_type, source_id,
+             review_status, detected_reason,
              occurred_at, confidence, weight, appointment_at, appointment_status, is_important, is_deleted, created_at, updated_at
       FROM memories
       WHERE id = ? AND user_id = ?
@@ -64,6 +67,7 @@ router.get('/', async (req, res) => {
     const [rows] = await pool.query(
       `
         SELECT id, user_id, character_id, content, tag, category, memory_type, source_type, source_id,
+               review_status, detected_reason,
                occurred_at, confidence, weight, appointment_at, appointment_status, is_important, is_deleted, created_at, updated_at
         FROM memories
         WHERE user_id = ? AND character_id = ? ${whereDeletedClause}
@@ -149,6 +153,12 @@ router.patch('/:id', async (req, res) => {
     const tag = hasTag ? String(req.body.tag || '').trim() : memory.tag;
     const category = hasCategory ? String(req.body.category || '').trim() : memory.category;
     const fields = normalizeMemoryFields(req.body, memory);
+    const reviewStatus = Object.prototype.hasOwnProperty.call(req.body || {}, 'review_status')
+      ? (['candidate', 'active', 'important'].includes(String(req.body.review_status)) ? String(req.body.review_status) : memory.review_status)
+      : (fields.is_important ? 'important' : memory.review_status);
+    const detectedReason = Object.prototype.hasOwnProperty.call(req.body || {}, 'detected_reason')
+      ? String(req.body.detected_reason || '').trim().slice(0, 255)
+      : memory.detected_reason;
 
     if (hasContent && !content) {
       return res.status(400).json({ success: false, error: '记忆内容不能为空' });
@@ -158,11 +168,11 @@ router.patch('/:id', async (req, res) => {
       `
         UPDATE memories
         SET character_id = ?, content = ?, tag = ?, category = ?, memory_type = ?, occurred_at = ?, weight = ?,
-            appointment_at = ?, appointment_status = ?, is_important = ?
+            appointment_at = ?, appointment_status = ?, is_important = ?, review_status = ?, detected_reason = ?
         WHERE id = ? AND user_id = ? AND is_deleted = 0
       `,
       [nextCharacterId, content, tag, category, fields.memory_type, fields.occurred_at, fields.weight,
-        fields.appointment_at, fields.appointment_status, fields.is_important, memoryId, userId]
+        fields.appointment_at, fields.appointment_status, fields.is_important, reviewStatus, detectedReason, memoryId, userId]
     );
 
     const updated = await getOwnedMemory(memoryId, userId);

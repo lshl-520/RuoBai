@@ -186,7 +186,7 @@ export function buildRealtimeCharacterPrompt(character) {
   const speechStyle = String(character?.speech_style || 'natural');
   const style = speechStyle === 'roleplay'
     ? '自然地扮演角色，可以有少量动作和情绪表达，但不要长篇旁白。'
-    : '像真实恋人打电话一样说话：口语、自然、简短，通常一到三句；不要自称AI，不要客服腔，不要反复套用固定安慰话。';
+    : '像亲密关系中的自然通话一样说话：口语、自然、简短，通常一到三句；知道自己是 AI，不冒充现实人类，不要客服腔，不要反复套用固定安慰话。';
 
   return [
     `你叫${name}，正在和用户进行一对一实时语音通话。`,

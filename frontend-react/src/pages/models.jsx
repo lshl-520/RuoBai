@@ -22,12 +22,13 @@ const CAP_INFO = {
   chat: { icon: "chat", name: "文字聊天", tint: "on" },
   vision: { icon: "image", name: "看懂图片", tint: "lav" },
   image: { icon: "image", name: "画图发图", tint: "rose" },
+  dynamic: { icon: "image", name: "动态发图", tint: "rose" },
   tts: { icon: "wave", name: "语音(TTS)", tint: "rose" },
   realtime: { icon: "phone", name: "实时通话", tint: "on" },
 };
 
 /* ====== 能力选择器 Sheet ====== */
-function CapPicker({ cap, options, current, onClose, onPick }) {
+function CapPicker({ cap, options, current, error, saving, onClose, onPick }) {
   useLockBody();
   const grouped = {};
   (options || []).forEach((o) => {
@@ -49,6 +50,7 @@ function CapPicker({ cap, options, current, onClose, onPick }) {
           </button>
         </div>
         <div className="sheet-body">
+          {cap === "dynamic" && <div className="route-note" style={{ marginBottom: 12 }}>动态只显示能稳定返回单张图片的渠道。免费 Agnes 模型可用于“画图发图”，不用于自动动态。</div>}
           {groups.length === 0 && <div className="route-empty">没有可用的供应商。先在下方「接口渠道」添加一个支持此能力的供应商。</div>}
           {groups.map((g) => (
             <div key={g.credId} className="route-channel">
@@ -58,7 +60,7 @@ function CapPicker({ cap, options, current, onClose, onPick }) {
                   {g.models.map((m) => (
                     <button key={m}
                       className={"model-chip" + (current?.credential_id === g.credId && current?.model_id === m ? " on" : "")}
-                      onClick={() => onPick(g.credId, m)}>{m}</button>
+                      onClick={() => onPick(g.credId, m)} disabled={saving}>{m}</button>
                   ))}
                 </div>
               ) : (
@@ -70,6 +72,7 @@ function CapPicker({ cap, options, current, onClose, onPick }) {
               )}
             </div>
           ))}
+          {error && <div className="voice-tip" style={{ color: "#c4566b", marginTop: 12 }}>{error}</div>}
         </div>
       </div>
     </div>
@@ -222,6 +225,7 @@ function ChannelSheet({ channel, isNew, onClose, onSave, onDelete, onTest }) {
     { key: "chat", icon: "chat", label: "聊天" },
     { key: "vision", icon: "image", label: "看图" },
     { key: "image", icon: "image", label: "画图" },
+    { key: "dynamic", icon: "image", label: "动态" },
     { key: "tts", icon: "wave", label: "语音" },
     { key: "realtime", icon: "phone", label: "实时通话" },
   ];
@@ -503,6 +507,8 @@ function ModelsSection() {
   const [capabilities, setCaps] = useStateMo([]);
   const [capLoading, setCapLoading] = useStateMo(true);
   const [capPicker, setCapPicker] = useStateMo(null);
+  const [capError, setCapError] = useStateMo("");
+  const [capSaving, setCapSaving] = useStateMo(false);
 
   React.useEffect(() => {
     getCapabilities().then((res) => {
@@ -516,6 +522,7 @@ function ModelsSection() {
   }).catch(() => null);
 
   const toggleCap = async (capKey, currentEnabled) => {
+    setCapError("");
     if (!currentEnabled) {
       // 开启时：必须带上已有的 credential_id + model_id，否则后端400
       const cap = capabilities.find((c) => c.capability === capKey);
@@ -526,25 +533,43 @@ function ModelsSection() {
       }
       setCaps((prev) => prev.map((c) => c.capability === capKey ? { ...c, enabled: true } : c));
       try {
-        await updateCapability(capKey, {
+        const result = await updateCapability(capKey, {
           enabled: true,
           credential_id: cap.current.credential_id,
           model_id: cap.current.model_id,
         });
-      } catch (e) { refreshCaps(); }
+        if (!result?.success) throw new Error(result?.error || "启用失败");
+      } catch (e) {
+        setCapError(e?.message || "启用失败");
+        refreshCaps();
+      }
     } else {
       // 关闭时不需要带 credential_id/model_id
       setCaps((prev) => prev.map((c) => c.capability === capKey ? { ...c, enabled: false } : c));
-      try { await updateCapability(capKey, { enabled: false }); } catch (e) { refreshCaps(); }
+      try {
+        const result = await updateCapability(capKey, { enabled: false });
+        if (!result?.success) throw new Error(result?.error || "关闭失败");
+      } catch (e) {
+        setCapError(e?.message || "关闭失败");
+        refreshCaps();
+      }
     }
   };
 
   const pickCapModel = async (capKey, credentialId, modelId) => {
+    setCapError("");
+    setCapSaving(true);
     try {
-      await updateCapability(capKey, { credential_id: credentialId, model_id: modelId, enabled: true });
-      refreshCaps();
-    } catch (e) {}
-    setCapPicker(null);
+      const result = await updateCapability(capKey, { credential_id: credentialId, model_id: modelId, enabled: true });
+      if (!result?.success || !result?.item) throw new Error(result?.error || "模型保存失败");
+      setCaps((prev) => prev.map((item) => item.capability === capKey ? result.item : item));
+      setCapPicker(null);
+      await refreshCaps();
+    } catch (e) {
+      setCapError(e?.message || "模型保存失败");
+    } finally {
+      setCapSaving(false);
+    }
   };
 
   /* 从后端拉真实 credentials 作为渠道列表 */
@@ -789,7 +814,8 @@ function ModelsSection() {
             );
           })}
         </div>
-        {!capLoading && <div className="route-note">点能力行选模型，右边开关控制启用。有钱用贵的，想省就切便宜的。</div>}
+        {!capLoading && <div className="route-note">“画图发图”是你在聊天里让她画，免费 Agnes 适合先体验；“动态发图”只用于她自动发动态，已排除会返回九宫格的免费模型，建议选 img 生图或猫图片等稳定单图渠道。两项开关、费用和失败状态各自独立。</div>}
+        {capError && !capPicker && <div className="route-note" style={{ color: "#c4566b" }}>{capError}</div>}
       </div>
 
       {/* 接口渠道 */}
@@ -822,7 +848,7 @@ function ModelsSection() {
         const capData = capabilities.find((c) => c.capability === capPicker);
         return capData ? (
           <CapPicker cap={capPicker} options={capData.options} current={capData.current}
-            onClose={() => setCapPicker(null)} onPick={(credId, modelId) => pickCapModel(capPicker, credId, modelId)} />
+            error={capError} saving={capSaving} onClose={() => { setCapError(""); setCapPicker(null); }} onPick={(credId, modelId) => pickCapModel(capPicker, credId, modelId)} />
         ) : null;
       })()}
       {voiceSheet && (

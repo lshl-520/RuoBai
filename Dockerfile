@@ -23,7 +23,6 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY server ./server
-COPY public ./public
 COPY --from=server-deps /app/server/node_modules ./server/node_modules
 COPY --from=frontend-build /app/frontend-react/dist ./frontend-react/dist
 COPY docker-entrypoint.sh ./docker-entrypoint.sh

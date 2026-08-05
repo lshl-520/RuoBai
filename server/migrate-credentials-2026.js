@@ -32,7 +32,7 @@ const createTableStatements = [
     CREATE TABLE IF NOT EXISTS capability_assignments (
       id INT AUTO_INCREMENT PRIMARY KEY,
       user_id INT NOT NULL,
-      capability ENUM('chat', 'vision', 'image', 'tts', 'realtime') NOT NULL,
+      capability ENUM('chat', 'vision', 'image', 'dynamic', 'tts', 'realtime') NOT NULL,
       credential_id INT NOT NULL,
       model_id VARCHAR(100) NOT NULL,
       enabled TINYINT(1) DEFAULT 1,

@@ -1,8 +1,8 @@
 ﻿async function parseJson(response) {
   const data = await response.json().catch(() => null);
 
-  if (!response.ok && (!data || typeof data !== "object")) {
-    throw new Error(`Request failed with status ${response.status}`);
+  if (!response.ok) {
+    throw new Error(data?.error || data?.message || `Request failed with status ${response.status}`);
   }
 
   return data;
@@ -33,6 +33,12 @@ export function getRoles(options = {}) {
   });
 }
 
+export function getIdentityPack(roleId) {
+  return request(`/api/roles/${encodeURIComponent(roleId)}/identity-pack`, {
+    method: "GET",
+  });
+}
+
 export function createRole(payload) {
   return request("/api/roles", {
     method: "POST",
@@ -44,6 +50,12 @@ export function updateRole(roleId, payload) {
   return request(`/api/roles/${encodeURIComponent(roleId)}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
+  });
+}
+
+export function testAutoMoment(roleId) {
+  return request(`/api/auto-moments/characters/${encodeURIComponent(roleId)}/test`, {
+    method: "POST",
   });
 }
 
@@ -170,6 +182,8 @@ export function buildRolePayload(values = {}) {
     mood: 80,
     speech_style: values.speechCompact ? "compact" : "natural",
     auto_moments_enabled: Boolean(values.autoMomentsEnabled),
+    auto_moments_images_enabled: Boolean(values.autoMomentsImagesEnabled),
+    auto_moments_image_resolution: String(values.autoMomentsImageResolution || "channel").toLowerCase(),
     auto_moments_daily_min: Number(values.autoMomentsDailyMin ?? 0) || 0,
     auto_moments_daily_max: Number(values.autoMomentsDailyMax ?? 0) || 0,
     auto_moments_min_interval_hours: Number(values.autoMomentsMinIntervalHours ?? 4) || 4,
@@ -209,6 +223,8 @@ export function buildRoleUpdatePayload(values = {}, currentRole = {}) {
       : 80,
     speech_style: values.speechCompact ? "compact" : "natural",
     auto_moments_enabled: Boolean(values.autoMomentsEnabled),
+    auto_moments_images_enabled: Boolean(values.autoMomentsImagesEnabled),
+    auto_moments_image_resolution: String(values.autoMomentsImageResolution || "channel").toLowerCase(),
     auto_moments_daily_min: Number(values.autoMomentsDailyMin ?? 0) || 0,
     auto_moments_daily_max: Number(values.autoMomentsDailyMax ?? 0) || 0,
     auto_moments_min_interval_hours: Number(values.autoMomentsMinIntervalHours ?? 4) || 4,

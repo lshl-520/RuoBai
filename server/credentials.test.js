@@ -12,7 +12,7 @@ function createApp(router, userId = 7) {
   });
   app.use('/api/credentials', router);
   app.use((error, _req, res, _next) => {
-    res.status(500).json({ success: false, error: error.message });
+    res.status(Number(error?.statusCode) || 500).json({ success: false, error: error.message });
   });
   return app;
 }
@@ -388,7 +388,7 @@ test('task image credential can be created without a key and stores both address
     const payload = await response.json();
     assert.equal(response.status, 201);
     assert.equal(payload.success, true);
-    assert.deepEqual(insertedModels, [{ model: 'task-image-default', capabilities: ['image'] }]);
+    assert.deepEqual(insertedModels, [{ model: 'task-image-default', capabilities: ['image', 'dynamic'] }]);
   });
 });
 
@@ -463,7 +463,7 @@ test('task image refresh uses a fixed model and connectivity test uses the auxil
     const refreshPayload = await refreshResponse.json();
     assert.equal(refreshResponse.status, 200);
     assert.deepEqual(refreshPayload.summary.image, ['task-image-default']);
-    assert.deepEqual(insertedModels, [{ model: 'task-image-default', capabilities: ['image'] }]);
+    assert.deepEqual(insertedModels, [{ model: 'task-image-default', capabilities: ['image', 'dynamic'] }]);
 
     const testResponse = await fetch(`${baseUrl}/api/credentials/13/test`, { method: 'POST' });
     assert.equal(testResponse.status, 200);
@@ -581,6 +581,73 @@ test('POST /api/credentials/:id/apply saves selected model and switches selected
     assert.equal(calls.filter(call => call.sql.includes('UPDATE capability_assignments') && call.sql.includes('enabled = 1')).length, 2);
     assert.ok(calls.some(call => call.sql.includes('SET enabled = 0') && call.params?.includes('image')));
     assert.ok(calls.some(call => String(call.params?.[0]).includes('vision')));
+  });
+});
+
+test('POST /api/credentials/:id/apply saves dynamic as an independent image purpose', async () => {
+  const calls = [];
+  const router = createCredentialsRouter({
+    pool: {
+      query: async sql => {
+        if (sql.includes('FROM credentials') && sql.includes('WHERE id = ? AND user_id = ?')) {
+          return [[{ id: 8, user_id: 7, name: '图片渠道', provider_type: 'openai-compatible', api_base: 'https://example.com', api_aux_base: '', api_key: 'key', is_enabled: 1 }]];
+        }
+        throw new Error(`Unexpected pool query: ${sql}`);
+      }
+    },
+    withTransaction: async work => work({
+      query: async (sql, params) => {
+        calls.push({ sql, params });
+        if (sql.includes('SELECT id, capabilities FROM credential_models')) return [[{ id: 30, capabilities: '["image"]' }]];
+        if (sql.includes('SELECT id FROM capability_assignments')) return [[]];
+        if (sql.includes('INSERT INTO credential_models') || sql.includes('INSERT INTO capability_assignments')) return [{ insertId: 41 }];
+        if (sql.includes('UPDATE credential_models') || sql.includes('UPDATE capability_assignments')) return [{ affectedRows: 1 }];
+        throw new Error(`Unexpected tx query: ${sql}`);
+      }
+    })
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials/8/apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ purposes: ['image', 'dynamic'], model_id: 'gpt-image-2' })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(payload.applied.map(item => item.capability), ['image', 'dynamic']);
+    assert.ok(calls.some(call => call.sql.includes('INSERT INTO capability_assignments') && call.params?.[1] === 'dynamic'));
+  });
+});
+
+test('POST /api/credentials/:id/apply rejects Agnes for dynamic purpose', async () => {
+  const router = createCredentialsRouter({
+    pool: {
+      query: async sql => {
+        if (sql.includes('FROM credentials') && sql.includes('WHERE id = ? AND user_id = ?')) {
+          return [[{ id: 8, user_id: 7, name: '免费', provider_type: 'openai-compatible', api_base: 'https://example.com', api_aux_base: '', api_key: 'key', is_enabled: 1 }]];
+        }
+        throw new Error(`Unexpected pool query: ${sql}`);
+      }
+    },
+    withTransaction: async work => work({
+      query: async sql => {
+        if (sql.includes('SELECT id, capabilities FROM credential_models')) return [[{ id: 30, capabilities: '["image"]' }]];
+        if (sql.includes('SET enabled = 0')) return [{ affectedRows: 1 }];
+        throw new Error(`Unexpected tx query: ${sql}`);
+      }
+    })
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials/8/apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ purposes: ['dynamic'], model_id: 'agnes-image-2.1-flash' })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 400);
+    assert.match(payload.error, /九宫格/);
   });
 });
 

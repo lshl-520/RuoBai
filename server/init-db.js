@@ -39,6 +39,10 @@ const statements = [
       chat_thinking_level VARCHAR(20) DEFAULT 'off',
       first_chat_at DATETIME DEFAULT NULL,
       auto_moments_enabled TINYINT(1) DEFAULT 0,
+      auto_moments_images_enabled TINYINT(1) DEFAULT 0,
+      auto_moments_image_resolution VARCHAR(16) DEFAULT 'channel',
+      auto_moments_image_profile JSON,
+      auto_moments_templates JSON,
       auto_moments_daily_min INT DEFAULT 0,
       auto_moments_daily_max INT DEFAULT 0,
       auto_moments_min_interval_hours INT DEFAULT 4,
@@ -58,6 +62,9 @@ const statements = [
       character_id INT NOT NULL,
       role ENUM('user', 'assistant', 'system') NOT NULL,
       content TEXT NOT NULL,
+      reasoning_summary TEXT,
+      inner_os_content TEXT,
+      inner_os_source VARCHAR(50) DEFAULT NULL,
       message_type VARCHAR(20) DEFAULT 'text',
       media_url VARCHAR(500) DEFAULT NULL,
       is_active TINYINT(1) DEFAULT 1,
@@ -79,6 +86,8 @@ const statements = [
       memory_type VARCHAR(32) DEFAULT 'life',
       source_type VARCHAR(32) DEFAULT 'manual',
       source_id BIGINT DEFAULT NULL,
+      review_status VARCHAR(20) DEFAULT 'active',
+      detected_reason VARCHAR(255) DEFAULT '',
       occurred_at DATETIME DEFAULT NULL,
       confidence DECIMAL(4,3) DEFAULT 1.000,
       weight INT DEFAULT 50,
@@ -152,8 +161,13 @@ const statements = [
       id INT AUTO_INCREMENT PRIMARY KEY,
       user_id INT NOT NULL,
       character_id INT DEFAULT NULL,
+      visibility_mode VARCHAR(20) DEFAULT 'private',
       content TEXT NOT NULL,
       images JSON,
+      image_generation_status VARCHAR(32) DEFAULT 'manual',
+      image_generation_error VARCHAR(255) DEFAULT NULL,
+      image_mode VARCHAR(20) DEFAULT 'single',
+      image_generation_metadata JSON DEFAULT NULL,
       mood VARCHAR(50) DEFAULT NULL,
       likes_count INT DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -163,6 +177,20 @@ const statements = [
       INDEX idx_user_moments (user_id),
       INDEX idx_user_character_moments (user_id, character_id),
       INDEX idx_user_deleted_moments (user_id, is_deleted)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS moment_audiences (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      moment_id INT NOT NULL,
+      user_id INT NOT NULL,
+      character_id INT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (moment_id) REFERENCES moments(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+      UNIQUE KEY unique_moment_audience (moment_id, character_id),
+      INDEX idx_moment_audience_character (user_id, character_id, moment_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `,
   `
@@ -188,6 +216,36 @@ const statements = [
       FOREIGN KEY (moment_id) REFERENCES moments(id) ON DELETE CASCADE,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
       UNIQUE KEY unique_moment_like (moment_id, user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS life_events (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      character_id INT NOT NULL,
+      title VARCHAR(500) NOT NULL,
+      event_type VARCHAR(32) DEFAULT 'life',
+      status VARCHAR(20) DEFAULT 'active',
+      occurred_at DATETIME DEFAULT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+      INDEX idx_life_event_character (user_id, character_id, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS life_event_sources (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      event_id BIGINT NOT NULL,
+      user_id INT NOT NULL,
+      source_type VARCHAR(32) NOT NULL,
+      source_id BIGINT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (event_id) REFERENCES life_events(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE KEY unique_life_event_source (user_id, source_type, source_id),
+      INDEX idx_life_event_source_event (event_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `,
   `
@@ -298,6 +356,7 @@ const statements = [
       status VARCHAR(20) DEFAULT 'created',
       error_message VARCHAR(500) DEFAULT '',
       sent_at DATETIME DEFAULT NULL,
+      viewed_at DATETIME DEFAULT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
@@ -330,6 +389,10 @@ const schemaFixups = [
   { table: 'characters', column: 'is_deleted', definition: 'TINYINT(1) DEFAULT 0', after: 'is_active' },
   { table: 'characters', column: 'delete_after', definition: 'DATETIME DEFAULT NULL', after: 'is_deleted' },
   { table: 'characters', column: 'auto_moments_enabled', definition: 'TINYINT(1) DEFAULT 0', after: 'intimacy' },
+  { table: 'characters', column: 'auto_moments_images_enabled', definition: 'TINYINT(1) DEFAULT 0', after: 'auto_moments_enabled' },
+  { table: 'characters', column: 'auto_moments_image_resolution', definition: "VARCHAR(16) DEFAULT 'channel'", after: 'auto_moments_images_enabled' },
+  { table: 'characters', column: 'auto_moments_image_profile', definition: 'JSON', after: 'auto_moments_images_enabled' },
+  { table: 'characters', column: 'auto_moments_templates', definition: 'JSON', after: 'auto_moments_image_profile' },
   { table: 'characters', column: 'first_chat_at', definition: 'DATETIME DEFAULT NULL', after: 'intimacy' },
   { table: 'characters', column: 'auto_moments_daily_min', definition: 'INT DEFAULT 0', after: 'auto_moments_enabled' },
   { table: 'characters', column: 'auto_moments_daily_max', definition: 'INT DEFAULT 0', after: 'auto_moments_daily_min' },
@@ -341,13 +404,35 @@ const schemaFixups = [
   { table: 'characters', column: 'chat_credential_id', definition: 'INT DEFAULT NULL', after: 'intimacy' },
   { table: 'characters', column: 'chat_model_id', definition: 'VARCHAR(100) DEFAULT NULL', after: 'chat_credential_id' },
   { table: 'characters', column: 'chat_thinking_level', definition: "VARCHAR(20) DEFAULT 'off'", after: 'chat_model_id' },
+  { table: 'messages', column: 'reasoning_summary', definition: 'TEXT', after: 'content' },
+  { table: 'messages', column: 'inner_os_content', definition: 'TEXT', after: 'reasoning_summary' },
+  { table: 'messages', column: 'inner_os_source', definition: 'VARCHAR(50) DEFAULT NULL', after: 'inner_os_content' },
   { table: 'memories', column: 'category', definition: "VARCHAR(50) DEFAULT ''", after: 'tag' },
+  { table: 'memories', column: 'review_status', definition: "VARCHAR(20) DEFAULT 'active'", after: 'source_id' },
+  { table: 'memories', column: 'detected_reason', definition: "VARCHAR(255) DEFAULT ''", after: 'review_status' },
   { table: 'memories', column: 'is_important', definition: 'TINYINT(1) DEFAULT 0', after: 'category' },
   { table: 'memories', column: 'is_deleted', definition: 'TINYINT(1) DEFAULT 0', after: 'is_important' },
   { table: 'moments', column: 'character_id', definition: 'INT DEFAULT NULL', modify: true },
+  { table: 'moments', column: 'visibility_mode', definition: "VARCHAR(20) DEFAULT 'private'", after: 'character_id' },
   { table: 'moments', column: 'images', definition: 'JSON', after: 'content' },
+  { table: 'moments', column: 'image_generation_status', definition: "VARCHAR(32) DEFAULT 'manual'", after: 'images' },
+  { table: 'moments', column: 'image_generation_error', definition: 'VARCHAR(255) DEFAULT NULL', after: 'image_generation_status' },
+  { table: 'moments', column: 'image_mode', definition: "VARCHAR(20) DEFAULT 'single'", after: 'image_generation_error' },
+  { table: 'moments', column: 'image_generation_metadata', definition: 'JSON DEFAULT NULL', after: 'image_mode' },
   { table: 'moments', column: 'likes_count', definition: 'INT DEFAULT 0', after: 'images' },
   { table: 'moments', column: 'is_deleted', definition: 'TINYINT(1) DEFAULT 0', after: 'created_at' },
+  {
+    table: 'moments',
+    requiredColumns: ['character_id', 'visibility_mode'],
+    sql: `
+      UPDATE moments
+      SET visibility_mode = CASE
+        WHEN character_id IS NULL THEN 'private'
+        ELSE 'publisher'
+      END
+      WHERE visibility_mode IS NULL OR visibility_mode = ''
+    `
+  },
   { table: 'credentials', column: 'api_aux_base', definition: "VARCHAR(500) DEFAULT ''", after: 'api_base' },
   { table: 'credentials', column: 'is_enabled', definition: 'TINYINT(1) DEFAULT 1', after: 'api_key' },
   { table: 'model_configs', column: 'provider_type', definition: "VARCHAR(50) DEFAULT 'openai-compatible'", after: 'name' },

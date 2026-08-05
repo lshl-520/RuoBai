@@ -35,6 +35,26 @@ const CHARACTER_RUNTIME_COLUMNS = [
     after: 'first_chat_at'
   },
   {
+    name: 'auto_moments_images_enabled',
+    definition: 'TINYINT(1) DEFAULT 0',
+    after: 'auto_moments_enabled'
+  },
+  {
+    name: 'auto_moments_image_resolution',
+    definition: "VARCHAR(16) DEFAULT 'channel'",
+    after: 'auto_moments_images_enabled'
+  },
+  {
+    name: 'auto_moments_image_profile',
+    definition: 'JSON DEFAULT NULL',
+    after: 'auto_moments_images_enabled'
+  },
+  {
+    name: 'auto_moments_templates',
+    definition: 'JSON DEFAULT NULL',
+    after: 'auto_moments_image_profile'
+  },
+  {
     name: 'auto_moments_daily_min',
     definition: 'INT DEFAULT 0',
     after: 'auto_moments_enabled'
@@ -78,6 +98,8 @@ const MEMORY_RUNTIME_COLUMNS = [
   { name: 'memory_type', definition: "VARCHAR(32) DEFAULT 'life'", after: 'category' },
   { name: 'source_type', definition: "VARCHAR(32) DEFAULT 'manual'", after: 'memory_type' },
   { name: 'source_id', definition: 'BIGINT DEFAULT NULL', after: 'source_type' },
+  { name: 'review_status', definition: "VARCHAR(20) DEFAULT 'active'", after: 'source_id' },
+  { name: 'detected_reason', definition: "VARCHAR(255) DEFAULT ''", after: 'review_status' },
   { name: 'occurred_at', definition: 'DATETIME DEFAULT NULL', after: 'source_id' },
   { name: 'confidence', definition: 'DECIMAL(4,3) DEFAULT 1.000', after: 'occurred_at' },
   { name: 'weight', definition: 'INT DEFAULT 50', after: 'confidence' },
@@ -126,6 +148,7 @@ const PUSH_RUNTIME_TABLES = [
       status VARCHAR(20) DEFAULT 'created',
       error_message VARCHAR(500) DEFAULT '',
       sent_at DATETIME DEFAULT NULL,
+      viewed_at DATETIME DEFAULT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
@@ -149,6 +172,79 @@ const PERSONA_RUNTIME_TABLES = [
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
       UNIQUE KEY unique_character_runtime_state (user_id, character_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `
+];
+
+const MESSAGE_RUNTIME_COLUMNS = [
+  {
+    name: 'reasoning_summary',
+    definition: 'TEXT',
+    after: 'content'
+  },
+  {
+    name: 'inner_os_content',
+    definition: 'TEXT',
+    after: 'reasoning_summary'
+  },
+  {
+    name: 'inner_os_source',
+    definition: 'VARCHAR(50) DEFAULT NULL',
+    after: 'inner_os_content'
+  }
+];
+
+const MOMENT_RUNTIME_COLUMNS = [
+  { name: 'visibility_mode', definition: "VARCHAR(20) DEFAULT 'private'", after: 'character_id' },
+  { name: 'image_generation_status', definition: "VARCHAR(32) DEFAULT 'manual'", after: 'images' },
+  { name: 'image_generation_error', definition: 'VARCHAR(255) DEFAULT NULL', after: 'image_generation_status' },
+  { name: 'image_mode', definition: "VARCHAR(20) DEFAULT 'single'", after: 'image_generation_error' },
+  { name: 'image_generation_metadata', definition: 'JSON DEFAULT NULL', after: 'image_mode' },
+];
+
+const FUNCTIONAL_RUNTIME_TABLES = [
+  `
+    CREATE TABLE IF NOT EXISTS moment_audiences (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      moment_id INT NOT NULL,
+      user_id INT NOT NULL,
+      character_id INT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (moment_id) REFERENCES moments(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+      UNIQUE KEY unique_moment_audience (moment_id, character_id),
+      INDEX idx_moment_audience_character (user_id, character_id, moment_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS life_events (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      character_id INT NOT NULL,
+      title VARCHAR(500) NOT NULL,
+      event_type VARCHAR(32) DEFAULT 'life',
+      status VARCHAR(20) DEFAULT 'active',
+      occurred_at DATETIME DEFAULT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+      INDEX idx_life_event_character (user_id, character_id, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS life_event_sources (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      event_id BIGINT NOT NULL,
+      user_id INT NOT NULL,
+      source_type VARCHAR(32) NOT NULL,
+      source_id BIGINT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (event_id) REFERENCES life_events(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE KEY unique_life_event_source (user_id, source_type, source_id),
+      INDEX idx_life_event_source_event (event_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `
 ];
@@ -197,9 +293,73 @@ export async function ensureMemoryRuntimeColumns(db) {
   }
 }
 
+export async function ensureMessageRuntimeColumns(db) {
+  for (const column of MESSAGE_RUNTIME_COLUMNS) {
+    if (await columnExists(db, 'messages', column.name)) continue;
+    await db.query(`ALTER TABLE messages ADD COLUMN ${column.name} ${column.definition} AFTER ${column.after}`);
+  }
+}
+
+async function tableExists(db, tableName) {
+  const [rows] = await db.query(
+    `
+      SELECT TABLE_NAME
+      FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+      LIMIT 1
+    `,
+    [tableName]
+  );
+
+  return rows.length > 0;
+}
+
+export async function ensureDynamicCapabilityAssignment(db) {
+  if (!(await tableExists(db, 'capability_assignments'))) return;
+
+  const [rows] = await db.query(
+    `
+      SELECT COLUMN_TYPE
+      FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'capability_assignments'
+        AND COLUMN_NAME = 'capability'
+      LIMIT 1
+    `
+  );
+
+  if (String(rows[0]?.COLUMN_TYPE || '').includes("'dynamic'")) return;
+
+  await db.query(
+    "ALTER TABLE capability_assignments MODIFY COLUMN capability ENUM('chat', 'vision', 'image', 'dynamic', 'tts', 'realtime') NOT NULL"
+  );
+}
+
+export async function ensureMomentRuntimeColumns(db) {
+  for (const column of MOMENT_RUNTIME_COLUMNS) {
+    if (await columnExists(db, 'moments', column.name)) continue;
+    await db.query(`ALTER TABLE moments ADD COLUMN ${column.name} ${column.definition} AFTER ${column.after}`);
+  }
+  if (await columnExists(db, 'moments', 'visibility_mode')) {
+    await db.query(`
+      UPDATE moments
+      SET visibility_mode = CASE WHEN character_id IS NULL THEN 'private' ELSE 'publisher' END
+      WHERE visibility_mode IS NULL OR visibility_mode = ''
+    `);
+  }
+}
+
 export async function ensurePushRuntimeTables(db) {
   for (const statement of PUSH_RUNTIME_TABLES) {
     await db.query(statement);
+  }
+  try {
+    if (!(await columnExists(db, 'proactive_events', 'viewed_at'))) {
+      await db.query(`ALTER TABLE proactive_events ADD COLUMN viewed_at DATETIME DEFAULT NULL AFTER sent_at`);
+    }
+  } catch {
+    // Older test doubles and read-only deployments may not expose INFORMATION_SCHEMA.
   }
 }
 
@@ -209,10 +369,20 @@ export async function ensurePersonaRuntimeTables(db) {
   }
 }
 
+export async function ensureFunctionalRuntimeTables(db) {
+  for (const statement of FUNCTIONAL_RUNTIME_TABLES) {
+    await db.query(statement);
+  }
+}
+
 export async function ensureRuntimeSchema(db) {
+  await ensureDynamicCapabilityAssignment(db);
   await ensureCharacterRuntimeColumns(db);
   await ensureCredentialRuntimeColumns(db);
+  await ensureMessageRuntimeColumns(db);
   await ensureMemoryRuntimeColumns(db);
+  await ensureMomentRuntimeColumns(db);
   await ensurePushRuntimeTables(db);
   await ensurePersonaRuntimeTables(db);
+  await ensureFunctionalRuntimeTables(db);
 }
