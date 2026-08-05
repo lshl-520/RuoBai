@@ -105,6 +105,7 @@ export function createUpdateService(options = {}) {
   const healthCheck = options.healthCheck || defaultHealthCheck;
   const historyFile = options.historyFile || path.join(projectRoot, 'logs', 'update-history.json');
   const deployMode = options.deployMode || process.env.DEPLOY_MODE || '';
+  const RELEASE_MESSAGE = '当前是成品发布目录，后台不会执行 git/pm2 更新。请在本地构建后按部署流程发布新版本。';
 
   async function run(command, args, extra = {}) {
     return runCommand(command, args, {
@@ -189,6 +190,31 @@ export function createUpdateService(options = {}) {
     await writeHistory([item, ...history]);
   }
 
+  async function hasGitMetadata() {
+    // Tests can provide a command-only filesystem double; real deployments use access().
+    if (typeof fileSystem.access !== 'function') return true;
+    try {
+      await fileSystem.access(path.join(projectRoot, '.git'));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function releaseStatus() {
+    return {
+      disabled: true,
+      deploy_mode: 'release',
+      is_behind: false,
+      current: { hash: 'release', committed_at: '' },
+      remote: { hash: '', committed_at: '' },
+      behind_count: 0,
+      changed_files: ['成品发布目录请从本地构建后重新发布'],
+      time_since_current: '',
+      message: RELEASE_MESSAGE
+    };
+  }
+
   async function checkForUpdates() {
     if (deployMode === 'docker') {
       return {
@@ -202,6 +228,10 @@ export function createUpdateService(options = {}) {
         time_since_current: '',
         message: '当前是 Docker 部署模式，后台不会执行 git/pm2 更新。需要更新时，请在服务器终端重新运行一键部署命令。'
       };
+    }
+
+    if (!(await hasGitMetadata())) {
+      return releaseStatus();
     }
 
     await run('git', ['fetch', 'origin', 'main']);
@@ -235,6 +265,10 @@ export function createUpdateService(options = {}) {
   async function applyUpdate() {
     if (deployMode === 'docker') {
       throw new Error('当前是 Docker 部署模式，请在服务器终端重新运行一键部署脚本更新。');
+    }
+
+    if (!(await hasGitMetadata())) {
+      throw new Error(RELEASE_MESSAGE);
     }
 
     const started = now();

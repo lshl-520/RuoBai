@@ -187,5 +187,7 @@ test('owner system status includes an honest vector memory diagnostic', async ()
     assert.equal(response.status, 200);
     assert.equal(payload.data.vector_memory.status, 'degraded');
     assert.match(payload.data.vector_memory.summary, /聊天不会使用旧回忆/);
+    assert.equal(payload.data.statistics.total_users, 2);
+    assert.equal(payload.data.statistics.total_characters, 3);
   });
 });

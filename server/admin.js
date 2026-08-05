@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import * as os from 'node:os';
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import { pool, withTransaction } from './db.js';
@@ -240,6 +241,9 @@ export function createAdminRouter({
     const memUsage = process.memoryUsage();
     const memUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
     const memTotalMB = Math.round(memUsage.heapTotal / 1024 / 1024);
+    const systemTotalMB = Math.round(os.totalmem() / 1024 / 1024);
+    const systemFreeMB = Math.round(os.freemem() / 1024 / 1024);
+    const systemUsedMB = Math.max(0, systemTotalMB - systemFreeMB);
 
     let dbStatus = 'normal';
     let dbVersion = 'unknown';
@@ -267,7 +271,11 @@ export function createAdminRouter({
         },
         memory: {
           used_mb: memUsedMB,
-          total_mb: memTotalMB
+          total_mb: memTotalMB,
+          rss_mb: Math.round(memUsage.rss / 1024 / 1024),
+          system_used_mb: systemUsedMB,
+          system_total_mb: systemTotalMB,
+          system_free_mb: systemFreeMB
         },
         database: {
           status: dbStatus,
@@ -279,8 +287,8 @@ export function createAdminRouter({
           arch: process.arch
         },
         statistics: {
-          total_users: userCount.count,
-          total_characters: characterCount.count
+          total_users: Number(userCount?.[0]?.count || 0),
+          total_characters: Number(characterCount?.[0]?.count || 0)
         },
         vector_memory: vectorMemory,
         version: 'v1.0.0'
