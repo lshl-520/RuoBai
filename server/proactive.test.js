@@ -226,6 +226,30 @@ test('proactive provider helpers keep Responses output and model routing separat
   assert.equal(extractProactiveText('responses', { output_text: '回来了。' }), '回来了。');
 });
 
+test('reasoning chat-completions models get room for a final proactive sentence', () => {
+  const reasoningRequest = buildProactiveRequest({
+    modelConfig: {
+      api_base: 'https://models.example/v1',
+      api_key: 'test-key',
+      model: 'deepseek-v4-flash',
+    },
+    systemPrompt: '系统提示',
+    userPrompt: '主动说一句话',
+  });
+  const normalRequest = buildProactiveRequest({
+    modelConfig: {
+      api_base: 'https://models.example/v1',
+      api_key: 'test-key',
+      model: 'companion-model',
+    },
+    systemPrompt: '系统提示',
+    userPrompt: '主动说一句话',
+  });
+
+  assert.equal(JSON.parse(reasoningRequest.options.body).max_tokens, 512);
+  assert.equal(JSON.parse(normalRequest.options.body).max_tokens, 120);
+});
+
 test('stored proactive messages carry a dedicated message type', async () => {
   let insert;
   const repository = createMysqlProactiveRepository({

@@ -22,6 +22,11 @@ function getProactiveProtocol(modelConfig) {
   return 'chat-completions';
 }
 
+function getChatCompletionsMaxTokens(modelConfig) {
+  const model = String(modelConfig?.model || '').trim();
+  return /deepseek|reasoner|reasoning|(?:^|[-_.])r1(?:[-_.]|$)/i.test(model) ? 512 : 120;
+}
+
 export function buildProactiveRequest({ modelConfig, systemPrompt, userPrompt }) {
   const protocol = getProactiveProtocol(modelConfig);
   const commonHeaders = {
@@ -82,7 +87,7 @@ export function buildProactiveRequest({ modelConfig, systemPrompt, userPrompt })
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        max_tokens: 120,
+        max_tokens: getChatCompletionsMaxTokens(modelConfig),
       }),
     },
   };
