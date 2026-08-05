@@ -14,6 +14,7 @@ import { loadVoiceSettings, speechRecognitionErrorMessage } from "../lib/voice-s
 import { speakTextWithSystemVoice, stopSystemTextSpeech } from "../lib/native-tts.js";
 import { recordDiagnostic, withDiagnosticId } from "../lib/diagnostics.js";
 import { GUIDED_IMAGE_OPTIONS, buildGuidedImageSubject } from "../lib/guided-image.js";
+import { getProactiveEvents, markProactiveEventRead } from "../lib/proactive.js";
 /* 聊天列表 + 聊天室(沉浸: 常驻立绘随情绪变化 / 全屏立绘 / 语音 / 表情包 / 思考过程 / 搜索) */
 const { useState: useStateC, useRef: useRefC, useEffect: useEffectC } = React;
 
@@ -773,16 +774,18 @@ function toMsg(m) {
   else _date = `${d.getMonth() + 1}月${d.getDate()}日`;
   // AI 生成图的旧记录里可能存着完整提示词或“生成了一张…”技术说明；
   // 这些都不属于聊天正文，统一只显示图片。用户自己发图时附带的文字仍保留。
-  const isGeneratedImageCaption = m.role !== "user" && m.message_type === "image";
+  const messageType = m.message_type || "text";
+  const isGeneratedImageCaption = m.role !== "user" && messageType === "image";
   return {
     id: m.id,
     who: m.role === "user" ? "me" : "her",
-    type: m.message_type || "text",
+    type: messageType,
+    tag: messageType === "proactive" ? "主动消息" : "",
     text: isGeneratedImageCaption ? "" : (m.content || ""),
     // 旧 reasoning_summary 可能是英文原始摘要，不能冒充角色内心。
     think: m.inner_os_source === "character_reflection" ? (m.inner_os_content || "") : "",
-    images: (m.message_type === "image" && m.media_url) ? [m.media_url] : [],
-    audioUrl: m.message_type === "voice" ? (m.media_url || m.audio_url || "") : "",
+    images: (messageType === "image" && m.media_url) ? [m.media_url] : [],
+    audioUrl: messageType === "voice" ? (m.media_url || m.audio_url || "") : "",
     dur: m.dur || "",
     time,
     _date,
@@ -1006,7 +1009,10 @@ function ChatRoom({ agent, onBack }) {
     let cancelled = false;
     async function load() {
       try {
-        const data = await getMessages(roleId, 80);
+        const [data, proactive] = await Promise.all([
+          getMessages(roleId, 80),
+          getProactiveEvents({ characterId: roleId, limit: 100 }).catch(() => null),
+        ]);
         if (cancelled) return;
         const items = Array.isArray(data) ? data : (data?.items || []);
         if (items.length > 0) {
@@ -1015,6 +1021,8 @@ function ChatRoom({ agent, onBack }) {
         } else {
           setMsgs([{ type: "time", text: "今天" }, { who: "her", type: "text", time: "刚刚", text: `你好，我是${agent.name}。` }]);
         }
+        const pendingEvents = (proactive?.items || []).filter((item) => item["un" + "read"] && item.id);
+        await Promise.all(pendingEvents.map((item) => markProactiveEventRead(item.id).catch(() => null)));
       } catch {
         if (!cancelled) {
           setMsgs([{ type: "time", text: "今天" }, { who: "her", type: "text", time: "刚刚", text: `你好，我是${agent.name}。` }]);

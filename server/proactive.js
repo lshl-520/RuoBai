@@ -6,6 +6,112 @@ const ONLINE_THRESHOLD_MS = 10 * 60 * 1000;
 const DEFAULT_SCAN_INTERVAL_MS = 10 * 60 * 1000;
 const MODEL_TIMEOUT_MS = 20 * 1000;
 
+function buildProviderUrl(apiBase, endpoint) {
+  const base = String(apiBase || '').trim().replace(/\/+$/, '');
+  if (!base) return `/v1/${endpoint}`;
+  if (new RegExp(`/${endpoint}$`, 'i').test(base)) return base;
+  if (/\/v\d+(?:\/[^/]+)*$/i.test(base)) return `${base}/${endpoint}`;
+  return `${base}/v1/${endpoint}`;
+}
+
+function getProactiveProtocol(modelConfig) {
+  const model = String(modelConfig?.model || '').trim();
+  const provider = String(modelConfig?.provider_type || '').trim();
+  if (/^gpt-5(?:[.-]|$)/i.test(model)) return 'responses';
+  if (provider === 'anthropic' || /^(?:claude)(?:[._-]|$)/i.test(model)) return 'anthropic-messages';
+  return 'chat-completions';
+}
+
+export function buildProactiveRequest({ modelConfig, systemPrompt, userPrompt }) {
+  const protocol = getProactiveProtocol(modelConfig);
+  const commonHeaders = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${modelConfig.api_key}`,
+  };
+
+  if (protocol === 'responses') {
+    return {
+      protocol,
+      url: buildProviderUrl(modelConfig.api_base, 'responses'),
+      options: {
+        method: 'POST',
+        headers: commonHeaders,
+        body: JSON.stringify({
+          model: modelConfig.model,
+          stream: false,
+          input: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+        }),
+      },
+    };
+  }
+
+  if (protocol === 'anthropic-messages') {
+    return {
+      protocol,
+      url: buildProviderUrl(modelConfig.api_base, 'messages'),
+      options: {
+        method: 'POST',
+        headers: {
+          ...commonHeaders,
+          'x-api-key': modelConfig.api_key,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: modelConfig.model,
+          max_tokens: 256,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userPrompt }],
+        }),
+      },
+    };
+  }
+
+  return {
+    protocol,
+    url: buildProviderUrl(modelConfig.api_base, 'chat/completions'),
+    options: {
+      method: 'POST',
+      headers: commonHeaders,
+      body: JSON.stringify({
+        model: modelConfig.model,
+        stream: false,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        max_tokens: 120,
+      }),
+    },
+  };
+}
+
+function readTextContent(value) {
+  if (typeof value === 'string') return value;
+  if (!Array.isArray(value)) return '';
+  return value
+    .map((item) => typeof item === 'string' ? item : (item?.text || item?.content || ''))
+    .filter(Boolean)
+    .join('');
+}
+
+export function extractProactiveText(protocol, payload) {
+  if (protocol === 'responses') {
+    if (typeof payload?.output_text === 'string') return payload.output_text;
+    return (Array.isArray(payload?.output) ? payload.output : [])
+      .flatMap((item) => Array.isArray(item?.content) ? item.content : [])
+      .filter((item) => item?.type === 'output_text' || item?.type === 'text')
+      .map((item) => item.text || '')
+      .join('');
+  }
+  if (protocol === 'anthropic-messages') {
+    return readTextContent(payload?.content);
+  }
+  return readTextContent(payload?.choices?.[0]?.message?.content);
+}
+
 function parseDate(value) {
   if (!value) return null;
   const parsed = value instanceof Date ? value : new Date(value);
@@ -197,33 +303,26 @@ export function buildProactivePrompt({ candidate, reason, recentMessages }) {
 }
 
 export async function generateProactiveMessage({ repository, candidate, reason, recentMessages, now, fetchImpl = fetch }) {
-  const modelConfig = await repository.getModelConfig(candidate.userId);
+  const modelConfig = await repository.getModelConfig(candidate.userId, candidate.characterId);
   if (!modelConfig) return '';
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), MODEL_TIMEOUT_MS);
 
   try {
-    const response = await fetchImpl(`${String(modelConfig.api_base).replace(/\/$/, '')}/chat/completions`, {
-      method: 'POST',
+    const request = buildProactiveRequest({
+      modelConfig,
+      systemPrompt: buildProactivePrompt({ candidate, reason, recentMessages, now }),
+      userPrompt: '现在给用户发一句主动关心的话。',
+    });
+    const response = await fetchImpl(request.url, {
+      ...request.options,
       signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${modelConfig.api_key}`,
-      },
-      body: JSON.stringify({
-        model: modelConfig.model,
-        stream: false,
-        messages: [
-          { role: 'system', content: buildProactivePrompt({ candidate, reason, recentMessages, now }) },
-          { role: 'user', content: '现在给用户发一句主动关心的话。' },
-        ],
-      }),
     });
 
     if (!response.ok) return '';
     const payload = await response.json().catch(() => null);
-    return payload?.choices?.[0]?.message?.content || '';
+    return extractProactiveText(request.protocol, payload);
   } finally {
     clearTimeout(timer);
   }
@@ -304,10 +403,30 @@ export function createMysqlProactiveRepository(pool) {
       return rows.reverse();
     },
 
-    async getModelConfig(userId) {
+    async getModelConfig(userId, characterId) {
+      if (characterId) {
+        const [roleRows] = await pool.query(
+          `
+            SELECT c.api_base, c.api_key, c.provider_type, ch.chat_model_id AS model
+            FROM characters ch
+            INNER JOIN credentials c ON c.id = ch.chat_credential_id
+            WHERE ch.id = ?
+              AND ch.user_id = ?
+              AND ch.is_active = 1
+              AND ch.is_deleted = 0
+              AND ch.chat_model_id IS NOT NULL
+              AND ch.chat_model_id <> ''
+              AND c.is_enabled = 1
+            LIMIT 1
+          `,
+          [characterId, userId],
+        );
+        if (roleRows[0]) return roleRows[0];
+      }
+
       const [rows] = await pool.query(
         `
-          SELECT c.api_base, c.api_key, ca.model_id AS model
+          SELECT c.api_base, c.api_key, c.provider_type, ca.model_id AS model
           FROM capability_assignments ca
           INNER JOIN credentials c ON c.id = ca.credential_id
           WHERE ca.user_id = ?
@@ -322,7 +441,7 @@ export function createMysqlProactiveRepository(pool) {
 
       const [legacyRows] = await pool.query(
         `
-          SELECT api_base, api_key, model
+          SELECT api_base, api_key, provider_type, model
           FROM model_configs
           WHERE user_id = ?
             AND purpose = 'chat'
@@ -358,7 +477,7 @@ export function createMysqlProactiveRepository(pool) {
         `
           INSERT INTO messages
             (user_id, character_id, role, content, message_type, media_url, is_active, created_at)
-          VALUES (?, ?, 'assistant', ?, 'text', NULL, 1, NOW())
+          VALUES (?, ?, 'assistant', ?, 'proactive', NULL, 1, NOW())
         `,
         [candidate.userId, candidate.characterId, content],
       );
