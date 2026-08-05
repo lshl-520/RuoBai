@@ -1158,17 +1158,22 @@ test('POST /api/chat keeps Claude raw thinking private and returns a separate Ch
     assert.equal(payload.item.reasoning_summary, undefined);
     assert.equal(payload.item.inner_os_content, '她先把资料是否可靠想清楚，再把重点告诉你。');
     assert.equal(payload.item.inner_os_source, 'character_reflection');
+    assert.equal(payload.raw, undefined);
+    assert.doesNotMatch(JSON.stringify(payload), /先核对资料/);
   });
 
   assert.equal(upstreamCalls[0].url, 'https://middle.example/v1/messages');
   assert.equal(upstreamCalls[0].options.headers['anthropic-version'], '2023-06-01');
   const body = JSON.parse(upstreamCalls[0].options.body);
-  assert.equal(body.thinking.budget_tokens, 4096);
-  assert.equal(body.max_tokens, 5120);
+  assert.equal(body.thinking, undefined);
+  assert.equal(body.max_tokens, 2048);
   assert.match(body.system, /学习老师/);
   assert.equal(body.messages.at(-1).content, '帮我查资料');
   assert.equal(upstreamCalls[1].url, 'https://middle.example/v1/messages');
-  assert.equal(JSON.parse(upstreamCalls[1].options.body).model, 'claude-sonnet-5');
+  const innerOsBody = JSON.parse(upstreamCalls[1].options.body);
+  assert.equal(innerOsBody.model, 'claude-sonnet-5');
+  assert.equal(innerOsBody.thinking.budget_tokens, 4096);
+  assert.equal(innerOsBody.max_tokens, 5120);
 });
 
 test('POST /api/chat hides provider reasoning events and sends a Chinese inner OS SSE event', async () => {
