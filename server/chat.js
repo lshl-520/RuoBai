@@ -1280,7 +1280,7 @@ export function createChatRouter({
 
       const shouldStream = wantsEventStream(req);
 
-      // 前端沿用 thinking_level 字段兼容旧数据，但产品语义已是“内心 OS 深度”。
+      // 前端沿用 thinking_level 字段兼容旧数据，但产品语义已是“心情展示”。
       // 它只控制独立 Reflection，不能再悄悄把主聊天也升级成高推理而形成双重费用。
       const thinkLevel = String(req.body?.thinking_level || character?.chat_thinking_level || 'off').trim();
       const innerOsLevel = normalizeInnerOsLevel(thinkLevel);

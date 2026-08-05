@@ -18,10 +18,10 @@ import { getProactiveEvents, markProactiveEventRead } from "../lib/proactive.js"
 /* 聊天列表 + 聊天室(沉浸: 常驻立绘随情绪变化 / 全屏立绘 / 语音 / 表情包 / 思考过程 / 搜索) */
 const { useState: useStateC, useRef: useRefC, useEffect: useEffectC } = React;
 
-/* ====== 模型 + 推理深度面板 ====== */
+/* ====== 模型 + 心情展示面板 ====== */
 const THINK_LEVELS = [
   { key: "off", label: "关闭" },
-  { key: "low", label: "简洁" },
+  { key: "low", label: "简短" },
   { key: "mid", label: "细腻" },
   { key: "high", label: "深入" },
 ];
@@ -116,7 +116,7 @@ function ModelPanel({ current, onPick, onClose }) {
           </div>
           <div className="mp-divider" />
           <div className="mp-right">
-            <div className="mp-title">内心 OS 深度</div>
+            <div className="mp-title">🌱 心情展示</div>
             {THINK_LEVELS.map((t) => (
               <button disabled={saving} key={t.key} className={"mp-think" + (thinkLevel === t.key ? " on" : "")} onClick={() => pickThink(t.key)}>
                 <span className="mp-radio" />{t.label}
@@ -124,8 +124,8 @@ function ModelPanel({ current, onPick, onClose }) {
             ))}
             <div className="mp-hint">
               {thinkLevel === "off"
-                ? "关闭后只显示她的回复，不请求可展示摘要。"
-                : `当前为${THINK_LEVELS.find((item) => item.key === thinkLevel)?.label || ""}：会请求可展示的回应摘要，不会展示模型原始思考链；不同中转的回传能力可能不同。`}
+                ? "关闭后只显示她的回复，不展示角色心情。"
+                : `当前为${THINK_LEVELS.find((item) => item.key === thinkLevel)?.label || ""}：展示角色当下的心情与小心思，不展示模型原始思考链；不同中转的回传能力可能不同。`}
             </div>
           </div>
         </div>
@@ -285,9 +285,9 @@ function ThinkCard({ text, pending = false, unavailable = false }) {
   return (
     <div className={"think" + (open ? " open" : "") + (pending ? " pending" : "") + (unavailable && !hasSummary ? " unavailable" : "")}>
       <button className="think-toggle" onClick={() => setOpen(!open)} disabled={pending} aria-expanded={open}>
-        <span className="think-label"><Icon name="brain" /> 她在想什么</span>
+        <span className="think-label"><Icon name="brain" /> 🌱 心情展示</span>
         {pending
-          ? <span className="think-pending-dot" aria-label="正在写下她的小心思" />
+          ? <span className="think-pending-dot" aria-label="正在写下她的心情" />
           : unavailable && !hasSummary
             ? <span className="think-empty-mark">暂时没写出</span>
             : <Icon name="chevronD" className="think-chev" />}
@@ -1119,8 +1119,10 @@ function ChatRoom({ agent, onBack }) {
   }, []);
 
   const send = async (retryPayload = null) => {
-    const t = retryPayload ? retryPayload.text : draft.trim();
-    const images = retryPayload ? retryPayload.images : [...atts];
+    const t = retryPayload ? String(retryPayload.text || "").trim() : draft.trim();
+    const images = retryPayload
+      ? (Array.isArray(retryPayload.images) ? retryPayload.images : [])
+      : (Array.isArray(atts) ? [...atts] : []);
     if ((!t && images.length === 0) || typing || uploading) return;
     const tm = now();
     const clientId = retryPayload?.clientId || `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;

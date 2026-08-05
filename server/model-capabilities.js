@@ -26,7 +26,8 @@ export function guessModelCapabilities(modelId) {
     name.includes('claude-4') ||
     name.includes('claude-opus') ||
     name.includes('claude-sonnet') ||
-    name.includes('claude-haiku')
+    name.includes('claude-haiku') ||
+    /^grok-4\.5(?:$|[-.])/i.test(name)
   ) {
     result.add('vision');
   }
