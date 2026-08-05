@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { runProactiveScan } from './proactive.js';
+import {
+  buildProactiveRequest,
+  createMysqlProactiveRepository,
+  extractProactiveText,
+  generateProactiveMessage,
+  runProactiveScan,
+} from './proactive.js';
 
 function createRepo({ candidateOverrides = {}, existingEvents = [] } = {}) {
   const events = [...existingEvents];
@@ -160,4 +166,81 @@ test('runProactiveScan keeps saved message when push delivery fails', async () =
   assert.equal(repo.messages.length, 1);
   assert.equal(repo.events[0].status, 'notification_failed');
   assert.equal(repo.events[0].errorMessage, 'FCM unavailable');
+});
+
+test('generateProactiveMessage follows the selected role model and provider protocol', async () => {
+  let selectedModelArgs;
+  let request;
+  const result = await generateProactiveMessage({
+    repository: {
+      async getModelConfig(...args) {
+        selectedModelArgs = args;
+        return {
+          api_base: 'https://models.example/v1',
+          api_key: 'test-key',
+          provider_type: 'anthropic',
+          model: 'claude-sonnet-5',
+        };
+      },
+    },
+    candidate: { userId: 7, characterId: 12, characterName: '小白', persona: '' },
+    reason: 'idle',
+    recentMessages: [],
+    now: new Date('2026-06-21T12:30:00.000Z'),
+    fetchImpl: async (url, options) => {
+      request = { url, options };
+      return {
+        ok: true,
+        async json() {
+          return { content: [{ type: 'text', text: '我在这儿，忙完记得回来。' }] };
+        },
+      };
+    },
+  });
+
+  assert.deepEqual(selectedModelArgs, [7, 12]);
+  assert.equal(result, '我在这儿，忙完记得回来。');
+  assert.equal(request.url, 'https://models.example/v1/messages');
+  const body = JSON.parse(request.options.body);
+  assert.equal(body.model, 'claude-sonnet-5');
+  assert.equal(body.max_tokens, 256);
+  assert.equal(body.thinking, undefined);
+});
+
+test('proactive provider helpers keep Responses output and model routing separate', () => {
+  const request = buildProactiveRequest({
+    modelConfig: {
+      api_base: 'https://models.example/v1',
+      api_key: 'test-key',
+      model: 'gpt-5.6-luna',
+    },
+    systemPrompt: '系统提示',
+    userPrompt: '主动说一句话',
+  });
+
+  assert.equal(request.protocol, 'responses');
+  assert.equal(request.url, 'https://models.example/v1/responses');
+  const body = JSON.parse(request.options.body);
+  assert.equal(body.messages, undefined);
+  assert.equal(body.input.at(-1).content, '主动说一句话');
+  assert.equal(extractProactiveText('responses', { output_text: '回来了。' }), '回来了。');
+});
+
+test('stored proactive messages carry a dedicated message type', async () => {
+  let insert;
+  const repository = createMysqlProactiveRepository({
+    async query(sql, params) {
+      insert = { sql, params };
+      return [{ insertId: 42 }];
+    },
+  });
+
+  const saved = await repository.saveAssistantMessage({
+    candidate: { userId: 7, characterId: 12 },
+    content: '我在这儿。',
+  });
+
+  assert.equal(saved.id, 42);
+  assert.match(insert.sql, /'proactive'/);
+  assert.deepEqual(insert.params, [7, 12, '我在这儿。']);
 });
