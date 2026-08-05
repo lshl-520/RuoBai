@@ -477,7 +477,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     if (chatThinkingProvided) {
       const requestedLevel = String(req.body?.chat_thinking_level ?? '').trim().toLowerCase();
       if (!CHAT_THINKING_LEVELS.has(requestedLevel)) {
-        throw new Error('推理深度设置无效');
+        throw new Error('心情展示设置无效');
       }
       nextChatThinkingLevel = requestedLevel;
     }

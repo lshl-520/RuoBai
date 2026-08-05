@@ -214,7 +214,7 @@
 .proactive-tag svg { width: 13px; height: 13px; }
 .her-bubble.proactive { border: 1px solid var(--lav-tint); box-shadow: 0 6px 18px rgba(124,112,171,0.12); }
 
-/* 她在想什么：作为同一条角色消息的轻量延伸，收起态由内容决定宽度。 */
+/* 心情展示：作为同一条角色消息的轻量延伸，收起态由内容决定宽度。 */
 .think { display: inline-block; margin-top: 2px; width: fit-content; max-width: 100%; }
 .think.open { width: min(100%, 286px); }
 .think.pending { width: fit-content; }
@@ -319,7 +319,7 @@
 .mp-item svg { width: 16px; height: 16px; }
 .mp-foot { font-size: 10.5px; color: var(--ink-ghost); padding: 8px 10px 4px; line-height: 1.5; }
 
-/* ====== 模型+推理深度面板(新版左右分栏) ====== */
+/* ====== 模型+心情展示面板(新版左右分栏) ====== */
 .model-panel-mask { position: fixed; inset: 0; z-index: 200; background: rgba(40,28,32,0.35); animation: fadeIn 0.18s ease; display: flex; align-items: flex-end; justify-content: center; }
 .model-panel { width: 100%; max-width: 480px; max-height: 72vh; background: var(--card); border-radius: 20px 20px 0 0; padding: 6px 0 20px; animation: slideUp 0.28s cubic-bezier(0.22, 1, 0.36, 1); overflow-y: auto; }
 @keyframes slideUp { from { transform: translateY(100%); opacity: 0.5; } to { transform: translateY(0); opacity: 1; } }
