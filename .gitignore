@@ -125,8 +125,6 @@ docs/体检/*-019*.md
 
 # === 构建产物（可随时重新生成，不进 git）===
 frontend-react/dist/
-public-vue/
-public-vue/*
 
 # 向量记忆本地实验数据与模型缓存
 qdrant_storage/

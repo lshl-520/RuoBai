@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import sharp from 'sharp';
 import { saveOptimizedImage } from './image-assets.js';
 
 const LEGACY_IMAGE_KEY = process.env.AGNES_AI_KEY || '';
@@ -13,6 +14,7 @@ const TASK_IMAGE_DEFAULT_MODEL = 'task-image-default';
 const TASK_IMAGE_DEFAULT_WIDTH = 768;
 const TASK_IMAGE_DEFAULT_HEIGHT = 1280;
 const TASK_IMAGE_POLL_INTERVAL_MS = 1000;
+const IMAGE_DOWNLOAD_TIMEOUT_MS = 120000;
 
 const DRAW_INTENT_PATTERNS = [
   /(?:帮我|给我|替我|为我|请)画/i,
@@ -71,24 +73,214 @@ export function buildImageGenerationsUrl(apiBase) {
   return `${base}/v1/images/generations`;
 }
 
-async function saveBase64Image(rawValue, baseName, fileStorage, optimizeImage) {
+const IMAGE_RESOLUTIONS = new Set(['channel', '1k', '2k', '4k']);
+const DEFAULT_RESOLUTION_SIZES = {
+  '1k': '1024x1024',
+  '2k': '1536x1024',
+  '4k': '2048x2048'
+};
+
+function normalizeImageResolution(value) {
+  const resolution = String(value || 'channel').trim().toLowerCase();
+  return IMAGE_RESOLUTIONS.has(resolution) ? resolution : 'channel';
+}
+
+function parseResolutionSizeMap(value) {
+  if (!value) return {};
+  if (typeof value === 'object' && !Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function resolveImageSize({ resolution, model, extras }) {
+  const selected = normalizeImageResolution(resolution);
+  if (selected === 'channel') return String(extras.size || '1024x1024');
+
+  const configured = parseResolutionSizeMap(extras.resolution_size_map || extras.resolutionSizeMap);
+  if (configured[selected]) return String(configured[selected]);
+
+  // 中转站通常要求 WIDTHxHEIGHT；只有明确声明 label 时才发送 1k/2k/4k 原始标签。
+  if (extras.resolution_format === 'label') {
+    return selected;
+  }
+
+  return DEFAULT_RESOLUTION_SIZES[selected];
+}
+
+function luminance(red, green, blue) {
+  return (red * 0.2126) + (green * 0.7152) + (blue * 0.0722);
+}
+
+function findNearWhiteSeam(raw, info, axis, expectedRatio) {
+  const width = info.width;
+  const height = info.height;
+  const expected = Math.round((axis === 'x' ? width : height) * expectedRatio);
+  const radius = Math.max(3, Math.round((axis === 'x' ? width : height) * 0.045));
+  let bestScore = 0;
+  let bestPoint = expected;
+
+  for (let point = Math.max(0, expected - radius); point <= Math.min((axis === 'x' ? width : height) - 1, expected + radius); point += 1) {
+    let nearWhite = 0;
+    const span = axis === 'x' ? height : width;
+    for (let offset = 0; offset < span; offset += 1) {
+      const x = axis === 'x' ? point : offset;
+      const y = axis === 'x' ? offset : point;
+      const index = ((y * width) + x) * info.channels;
+      const red = raw[index] || 0;
+      const green = raw[index + 1] || 0;
+      const blue = raw[index + 2] || 0;
+      if (luminance(red, green, blue) >= 230 && Math.max(red, green, blue) - Math.min(red, green, blue) <= 30) nearWhite += 1;
+    }
+    const score = nearWhite / span;
+    if (score > bestScore) {
+      bestScore = score;
+      bestPoint = point;
+    }
+  }
+
+  return { score: bestScore, point: bestPoint };
+}
+
+function findStrongEdgeSeam(raw, info, axis, expectedRatio) {
+  const width = info.width;
+  const height = info.height;
+  const expected = Math.round((axis === 'x' ? width : height) * expectedRatio);
+  const radius = Math.max(3, Math.round((axis === 'x' ? width : height) * 0.045));
+  let bestScore = 0;
+  let bestPoint = expected;
+
+  for (let point = Math.max(1, expected - radius); point <= Math.min((axis === 'x' ? width : height) - 1, expected + radius); point += 1) {
+    let difference = 0;
+    const span = axis === 'x' ? height : width;
+    for (let offset = 0; offset < span; offset += 1) {
+      const beforeX = axis === 'x' ? point - 1 : offset;
+      const beforeY = axis === 'x' ? offset : point - 1;
+      const afterX = axis === 'x' ? point : offset;
+      const afterY = axis === 'x' ? offset : point;
+      const before = ((beforeY * width) + beforeX) * info.channels;
+      const after = ((afterY * width) + afterX) * info.channels;
+      difference += Math.abs((raw[before] || 0) - (raw[after] || 0));
+      difference += Math.abs((raw[before + 1] || 0) - (raw[after + 1] || 0));
+      difference += Math.abs((raw[before + 2] || 0) - (raw[after + 2] || 0));
+    }
+    const score = difference / span;
+    if (score > bestScore) {
+      bestScore = score;
+      bestPoint = point;
+    }
+  }
+
+  return { score: bestScore, point: bestPoint };
+}
+
+async function analyzeThreeByThreeContactSheet(buffer, sharpImpl = sharp) {
+  try {
+    const { data, info } = await sharpImpl(buffer)
+      .ensureAlpha()
+      .resize({ width: 300, height: 300, fit: 'fill', withoutEnlargement: false })
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    if (!info?.width || !info?.height || !data?.length) return null;
+
+    let nonWhitePixels = 0;
+    const pixelCount = info.width * info.height;
+    for (let index = 0; index < data.length; index += info.channels) {
+      if (luminance(data[index], data[index + 1], data[index + 2]) < 225) nonWhitePixels += 1;
+    }
+    if (nonWhitePixels / pixelCount < 0.08) return null;
+
+    const positions = [
+      ['x', 1 / 3], ['x', 2 / 3], ['y', 1 / 3], ['y', 2 / 3]
+    ];
+    const seams = positions.map(([axis, ratio]) => {
+      const light = findNearWhiteSeam(data, info, axis, ratio);
+      const edge = findStrongEdgeSeam(data, info, axis, ratio);
+      return light.score >= 0.82 ? light : (edge.score >= 100 ? edge : null);
+    });
+    if (seams.some(seam => !seam)) return null;
+
+    const metadata = await sharpImpl(buffer).metadata();
+    if (!metadata?.width || !metadata?.height) return null;
+    return { seams, width: metadata.width, height: metadata.height };
+  } catch {
+    // 图片无法解码时交给既有保存流程报错，不能把检测器本身变成新的失败来源。
+    return null;
+  }
+}
+
+// 某些免费渠道会在一张图里返回 3×3 候选表。普通动态只需要一张，默认取中间候选。
+export async function isThreeByThreeContactSheet(buffer, sharpImpl = sharp) {
+  return Boolean(await analyzeThreeByThreeContactSheet(buffer, sharpImpl));
+}
+
+export async function extractContactSheetCenter(buffer, sharpImpl = sharp) {
+  const analysis = await analyzeThreeByThreeContactSheet(buffer, sharpImpl);
+  if (!analysis) return null;
+
+  const [left, right, top, bottom] = analysis.seams;
+  const scaleX = analysis.width / 300;
+  const scaleY = analysis.height / 300;
+  const gutterX = Math.max(1, Math.round(scaleX * 2));
+  const gutterY = Math.max(1, Math.round(scaleY * 2));
+  const cropLeft = Math.round(left.point * scaleX) + gutterX;
+  const cropTop = Math.round(top.point * scaleY) + gutterY;
+  const cropRight = Math.round(right.point * scaleX) - gutterX;
+  const cropBottom = Math.round(bottom.point * scaleY) - gutterY;
+  const width = cropRight - cropLeft;
+  const height = cropBottom - cropTop;
+  if (width < 96 || height < 96) return null;
+
+  return sharpImpl(buffer)
+    .extract({ left: cropLeft, top: cropTop, width, height })
+    .webp({ quality: 88, effort: 4 })
+    .toBuffer();
+}
+
+async function prepareSingleImage(buffer, options) {
+  if (!options?.expectedSingleImage) return { buffer, outputHandling: 'single' };
+  const inspectImage = options.inspectImageImpl || isThreeByThreeContactSheet;
+  if (!(await inspectImage(buffer))) return { buffer, outputHandling: 'single' };
+
+  if (options.contactSheetStrategy === 'extract-center') {
+    const extract = options.extractContactSheetImpl || extractContactSheetCenter;
+    const extracted = await extract(buffer);
+    if (extracted?.length) return { buffer: extracted, outputHandling: 'contact_sheet_center' };
+  }
+  throw new Error('图片渠道返回的是九宫格候选图，不能作为一条动态配图。请在“动态发图”里换一个单图模型后再试。');
+}
+
+function withImageResult(url, outputHandling, options) {
+  return options?.returnResult ? { url, outputHandling } : url;
+}
+
+async function saveBase64Image(rawValue, baseName, fileStorage, optimizeImage, imageOptions) {
   const value = String(rawValue || '').trim();
   const base64 = value.includes(',') && /^data:image\//i.test(value)
     ? value.slice(value.indexOf(',') + 1)
     : value;
   const buffer = Buffer.from(base64, 'base64');
   if (!buffer.length) throw new Error('图片接口返回了空图片');
-  return optimizeImage(buffer, baseName, { fileStorage });
+  const prepared = await prepareSingleImage(buffer, imageOptions);
+  const url = await optimizeImage(prepared.buffer, baseName, { fileStorage });
+  return withImageResult(url, prepared.outputHandling, imageOptions);
 }
 
-async function downloadAndSaveImage(imageUrl, baseName, fetchImpl, fileStorage, optimizeImage) {
+async function downloadAndSaveImage(imageUrl, baseName, fetchImpl, fileStorage, optimizeImage, imageOptions) {
   let lastError = null;
+  const downloadTimeoutMs = Math.max(
+    60000,
+    Number(imageOptions?.imageDownloadTimeoutMs) || IMAGE_DOWNLOAD_TIMEOUT_MS
+  );
 
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
       const response = await fetchImpl(imageUrl, {
         headers: { Accept: 'image/*' },
-        signal: AbortSignal.timeout(60000)
+        signal: AbortSignal.timeout(downloadTimeoutMs)
       });
       if (!response.ok) {
         throw new Error(`图片下载失败: ${response.status}`);
@@ -96,7 +288,9 @@ async function downloadAndSaveImage(imageUrl, baseName, fetchImpl, fileStorage, 
 
       const buffer = Buffer.from(await response.arrayBuffer());
       if (!buffer.length) throw new Error('下载到的图片是空的');
-      return optimizeImage(buffer, baseName, { fileStorage });
+      const prepared = await prepareSingleImage(buffer, imageOptions);
+      const savedUrl = await optimizeImage(prepared.buffer, baseName, { fileStorage });
+      return withImageResult(savedUrl, prepared.outputHandling, imageOptions);
     } catch (error) {
       lastError = error;
       if (attempt < 3) {
@@ -130,6 +324,9 @@ function presentGenerationError(status, message, attempts) {
     || /service\s*(?:busy|unavailable)|temporarily unavailable|服务繁忙|上游.*不可用/i.test(message)) {
     return `图片渠道上游暂时繁忙，已自动重试 ${attempts} 次，请稍后再试（中转站返回 ${status}）`;
   }
+  if (status === 400 && /安全|policy|不适合.*图像|cannot be used to generate/i.test(message)) {
+    return '图片渠道的安全规则拒绝了本次图片；请确认角色是成年、场景是日常安全内容后再试';
+  }
   return message;
 }
 
@@ -139,11 +336,13 @@ async function requestImageGeneration({
   requestBody,
   fetchImpl,
   sleepImpl,
-  timeoutMs
+  timeoutMs,
+  maxAttempts = GENERATION_MAX_ATTEMPTS
 }) {
   let lastNetworkError = null;
 
-  for (let attempt = 1; attempt <= GENERATION_MAX_ATTEMPTS; attempt += 1) {
+  const attemptsLimit = Math.max(1, Math.min(5, Number(maxAttempts) || GENERATION_MAX_ATTEMPTS));
+  for (let attempt = 1; attempt <= attemptsLimit; attempt += 1) {
     let response;
     try {
       response = await fetchImpl(url, {
@@ -160,21 +359,21 @@ async function requestImageGeneration({
       if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
         throw new Error(`图片生成等待超过 ${Math.round(timeoutMs / 60000)} 分钟，中转站一直没有返回结果，请稍后再试`);
       }
-      if (attempt < GENERATION_MAX_ATTEMPTS) {
-        await sleepImpl(attempt === 1 ? 5000 : 15000);
+      if (attempt < attemptsLimit) {
+        await sleepImpl(attempt === 1 ? 5000 : attempt === 2 ? 15000 : 30000);
         continue;
       }
 
       const detail = error?.cause?.message || error?.message || '未知网络错误';
-      throw new Error(`图片渠道连接中断，已自动重试 ${GENERATION_MAX_ATTEMPTS} 次：${detail}`);
+      throw new Error(`图片渠道连接中断，已自动重试 ${attemptsLimit} 次：${detail}`);
     }
 
     const detail = await response.text().catch(() => '');
     if (response.ok) return detail;
 
     const message = parseProviderError(detail, response.status);
-    if (RETRYABLE_GENERATION_STATUSES.has(response.status) && attempt < GENERATION_MAX_ATTEMPTS) {
-      await sleepImpl(attempt === 1 ? 5000 : 15000);
+    if (RETRYABLE_GENERATION_STATUSES.has(response.status) && attempt < attemptsLimit) {
+      await sleepImpl(attempt === 1 ? 5000 : attempt === 2 ? 15000 : 30000);
       continue;
     }
 
@@ -231,6 +430,7 @@ async function generateTaskImage({
   apiBase,
   taskApiBase,
   extras,
+  imageOptions,
   fetchImpl,
   fileStorage,
   optimizeImage,
@@ -239,6 +439,10 @@ async function generateTaskImage({
 }) {
   const { submitBase, taskBase } = buildTaskImageBases(apiBase, taskApiBase, extras);
   if (!submitBase || !taskBase) throw new Error('任务式图片渠道需要填写“提交地址”和“任务查询地址”');
+
+  if (normalizeImageResolution(imageOptions?.resolution) !== 'channel') {
+    throw new Error('任务式图片渠道暂不支持 1K/2K/4K 覆盖，请改为“跟随渠道”');
+  }
 
   const width = Number(extras.width) || TASK_IMAGE_DEFAULT_WIDTH;
   const height = Number(extras.height) || TASK_IMAGE_DEFAULT_HEIGHT;
@@ -295,7 +499,7 @@ async function generateTaskImage({
         });
         const imageUrl = `${taskBase}/view?${query.toString()}&t=${Date.now()}`;
         const baseName = `draw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        return downloadAndSaveImage(imageUrl, baseName, fetchImpl, fileStorage, optimizeImage);
+        return downloadAndSaveImage(imageUrl, baseName, fetchImpl, fileStorage, optimizeImage, imageOptions);
       }
       if (entry?.status?.completed) {
         const error = readTaskImageExecutionError(entry);
@@ -321,6 +525,7 @@ export async function generateImage(subject, options = {}) {
   const fileStorage = normalizedOptions.fileStorage || fs;
   const sleepImpl = normalizedOptions.sleepImpl || (ms => new Promise(resolve => setTimeout(resolve, ms)));
   const generationTimeoutMs = Number(normalizedOptions.generationTimeoutMs) || GENERATION_TIMEOUT_MS;
+  const generationMaxAttempts = Number(normalizedOptions.generationMaxAttempts) || GENERATION_MAX_ATTEMPTS;
   const extras = normalizeExtras(normalizedOptions.extras);
   const optimizeImage = normalizedOptions.optimizeImage || saveOptimizedImage;
 
@@ -341,6 +546,7 @@ export async function generateImage(subject, options = {}) {
       fetchImpl,
       fileStorage,
       optimizeImage,
+      imageOptions: normalizedOptions,
       sleepImpl,
       timeoutMs: generationTimeoutMs
     });
@@ -350,7 +556,7 @@ export async function generateImage(subject, options = {}) {
     model,
     prompt,
     n: 1,
-    size: String(extras.size || '1024x1024')
+    size: resolveImageSize({ resolution: normalizedOptions.resolution, model, extras })
   };
   if (extras.response_format) {
     requestBody.response_format = String(extras.response_format);
@@ -362,7 +568,8 @@ export async function generateImage(subject, options = {}) {
     requestBody,
     fetchImpl,
     sleepImpl,
-    timeoutMs: generationTimeoutMs
+    timeoutMs: generationTimeoutMs,
+    maxAttempts: generationMaxAttempts
   });
 
   let payload;
@@ -377,7 +584,7 @@ export async function generateImage(subject, options = {}) {
 
   const baseName = `draw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   if (result.url) {
-    return downloadAndSaveImage(result.url, baseName, fetchImpl, fileStorage, optimizeImage);
+    return downloadAndSaveImage(result.url, baseName, fetchImpl, fileStorage, optimizeImage, normalizedOptions);
   }
-  return saveBase64Image(result.base64, baseName, fileStorage, optimizeImage);
+  return saveBase64Image(result.base64, baseName, fileStorage, optimizeImage, normalizedOptions);
 }

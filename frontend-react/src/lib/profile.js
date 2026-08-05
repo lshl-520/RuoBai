@@ -1,8 +1,8 @@
 async function parseJson(response) {
   const data = await response.json().catch(() => null);
 
-  if (!response.ok && (!data || typeof data !== "object")) {
-    throw new Error(`Request failed with status ${response.status}`);
+  if (!response.ok) {
+    throw new Error(data?.error || data?.message || `Request failed with status ${response.status}`);
   }
 
   return data;
@@ -25,6 +25,10 @@ export function getSessionProfile() {
   return request("/api/auth/session", {
     method: "GET",
   });
+}
+
+export function getFullChatExport() {
+  return request('/api/chat/export', { method: 'GET' });
 }
 
 export function getUserSettings() {

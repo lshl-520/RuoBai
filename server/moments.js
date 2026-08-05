@@ -9,19 +9,95 @@ import {
   requireCharacterForUser
 } from './helpers.js';
 import { buildChatCompletionsUrl } from './chat.js';
+import { recordLifeEventSource } from './life-events.js';
+
+const ROLE_MOMENT_AUTH_TTL_MS = 2 * 60 * 1000;
 
 function normalizeOffset(value) {
   const parsed = parseInteger(value, 0);
   return parsed && parsed > 0 ? parsed : 0;
 }
 
-function serializeMoment(row, comments = [], liked = false) {
+function hasCharacterSelector(req) {
+  const body = req.body || {};
+  const query = req.query || {};
+  const headers = req.headers || {};
+
+  return Object.prototype.hasOwnProperty.call(body, 'character_id')
+    || Object.prototype.hasOwnProperty.call(query, 'character_id')
+    || Object.prototype.hasOwnProperty.call(headers, 'x-character-id');
+}
+
+function normalizeRoleMomentMedia(value) {
+  const mediaUrl = String(value || '').trim();
+  return /^\/user_assets\/chat\//.test(mediaUrl) ? mediaUrl : '';
+}
+
+function issueRoleMomentAuthorization(req, characterId, mediaUrl) {
+  if (!req.session || typeof req.session !== 'object') return;
+  const normalizedMediaUrl = normalizeRoleMomentMedia(mediaUrl);
+  if (!normalizedMediaUrl) return;
+
+  req.session.ruobaiRoleMomentAuthorization = {
+    characterId: Number(characterId),
+    mediaUrl: normalizedMediaUrl,
+    issuedAt: Date.now()
+  };
+}
+
+function consumeRoleMomentAuthorization(req, characterId, images) {
+  const pending = req.session?.ruobaiRoleMomentAuthorization;
+  if (!pending) return false;
+
+  const issuedAt = Number(pending.issuedAt);
+  const pendingCharacterId = Number(pending.characterId);
+  if (!Number.isFinite(issuedAt) || Date.now() - issuedAt > ROLE_MOMENT_AUTH_TTL_MS) {
+    delete req.session.ruobaiRoleMomentAuthorization;
+    return false;
+  }
+
+  if (pendingCharacterId !== Number(characterId)) return false;
+
+  const postedImages = normalizeImages(images);
+  if (!pending.mediaUrl || !postedImages.includes(pending.mediaUrl)) return false;
+
+  delete req.session.ruobaiRoleMomentAuthorization;
+  return true;
+}
+
+function normalizeVisibilityMode(value, characterId = null) {
+  const mode = String(value || '').trim().toLowerCase();
+  if (mode === 'shared') return 'shared';
+  if (mode === 'publisher') return 'publisher';
+  return characterId ? 'publisher' : 'private';
+}
+
+function normalizeImageGenerationMetadata(value) {
+  if (!value) return null;
+  if (typeof value === 'object') return value;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function serializeMoment(row, comments = [], liked = false, audienceCharacterIds = []) {
   return {
     id: row.id,
     user_id: row.user_id,
     character_id: row.character_id,
+    visibility_mode: normalizeVisibilityMode(row.visibility_mode, row.character_id),
+    audience_character_ids: Array.isArray(audienceCharacterIds)
+      ? audienceCharacterIds.map(Number)
+      : [],
     content: row.content,
     images: normalizeImages(row.images),
+    image_generation_status: String(row.image_generation_status || 'manual'),
+    image_generation_error: String(row.image_generation_error || ''),
+    image_mode: String(row.image_mode || 'single'),
+    image_generation_metadata: normalizeImageGenerationMetadata(row.image_generation_metadata),
     mood: row.mood || null,
     likes_count: Number(row.likes_count || 0),
     comments_count: comments.length,
@@ -90,6 +166,34 @@ export function createMomentsRouter({
   fetchImpl = fetch
 } = {}) {
   const router = express.Router();
+
+  async function loadAudienceMap(userId, momentIds) {
+    const map = new Map();
+    if (!momentIds.length) return map;
+
+    try {
+      const placeholders = buildInClause(momentIds);
+      const [rows] = await db.query(
+        `
+          SELECT moment_id, character_id
+          FROM moment_audiences
+          WHERE user_id = ? AND moment_id IN (${placeholders})
+          ORDER BY character_id ASC
+        `,
+        [userId, ...momentIds]
+      );
+      for (const row of rows || []) {
+        const values = map.get(row.moment_id) || [];
+        values.push(Number(row.character_id));
+        map.set(row.moment_id, values);
+      }
+    } catch (error) {
+      // Runtime schema creates this table. Keep old read-only deployments and
+      // unit doubles usable until the schema fixup has run.
+      if (!/moment_audiences/i.test(String(error?.message || error))) throw error;
+    }
+    return map;
+  }
 
   async function getActiveChatModel(userId) {
     const [capabilityRows] = await db.query(
@@ -192,27 +296,46 @@ export function createMomentsRouter({
 
   router.get('/', asyncHandler(async (req, res) => {
     const characterId = parseInteger(req.query?.character_id);
+    const viewerCharacterId = parseInteger(req.query?.viewer_character_id);
+    const scope = String(req.query?.scope || 'all').trim().toLowerCase();
     const limit = normalizeLimit(req.query?.limit, 20, 100);
     const offset = normalizeOffset(req.query?.offset);
 
-    const momentSql = characterId
-      ? `
-          SELECT id, user_id, character_id, content, images, mood, likes_count, created_at, is_deleted
-          FROM moments
-          WHERE user_id = ? AND is_deleted = 0 AND character_id = ?
-          ORDER BY created_at DESC, id DESC
-          LIMIT ? OFFSET ?
-        `
-      : `
-          SELECT id, user_id, character_id, content, images, mood, likes_count, created_at, is_deleted
-          FROM moments
-          WHERE user_id = ? AND is_deleted = 0
-          ORDER BY created_at DESC, id DESC
-          LIMIT ? OFFSET ?
-        `;
-    const momentParams = characterId
-      ? [req.userId, characterId, limit, offset]
-      : [req.userId, limit, offset];
+    const conditions = ['m.user_id = ?', 'm.is_deleted = 0'];
+    const momentParams = [req.userId];
+    if (scope === 'mine') {
+      conditions.push('m.character_id IS NULL');
+    } else if (characterId) {
+      conditions.push('m.character_id = ?');
+      momentParams.push(characterId);
+    }
+
+    if (viewerCharacterId) {
+      await requireCharacter(req.userId, viewerCharacterId);
+      conditions.push(`
+        (
+          m.character_id = ?
+          OR EXISTS (
+            SELECT 1 FROM moment_audiences ma
+            WHERE ma.moment_id = m.id
+              AND ma.user_id = m.user_id
+              AND ma.character_id = ?
+          )
+        )
+      `);
+      momentParams.push(viewerCharacterId, viewerCharacterId);
+    }
+
+    const momentSql = `
+      SELECT
+        m.id, m.user_id, m.character_id, m.visibility_mode,
+        m.content, m.images, m.image_generation_status, m.image_generation_error, m.image_mode, m.image_generation_metadata, m.mood, m.likes_count, m.created_at, m.is_deleted
+      FROM moments m
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY m.created_at DESC, m.id DESC
+      LIMIT ? OFFSET ?
+    `;
+    momentParams.push(limit, offset);
 
     const [momentRows] = await db.query(momentSql, momentParams);
     if (momentRows.length === 0) {
@@ -244,6 +367,8 @@ export function createMomentsRouter({
       [req.userId, ...momentIds]
     );
 
+    const audienceMap = await loadAudienceMap(req.userId, momentIds);
+
     const commentsByMomentId = new Map();
     for (const row of commentRows) {
       const items = commentsByMomentId.get(row.moment_id) || [];
@@ -259,7 +384,8 @@ export function createMomentsRouter({
         serializeMoment(
           row,
           commentsByMomentId.get(row.id) || [],
-          likedMomentIds.has(row.id)
+          likedMomentIds.has(row.id),
+          audienceMap.get(row.id) || []
         )
       )
     });
@@ -273,7 +399,7 @@ export function createMomentsRouter({
 
     const [momentRows] = await db.query(
       `
-        SELECT id, user_id, character_id, content, images, mood, likes_count, created_at, is_deleted
+        SELECT id, user_id, character_id, visibility_mode, content, images, image_generation_status, image_generation_error, image_mode, image_generation_metadata, mood, likes_count, created_at, is_deleted
         FROM moments
         WHERE id = ? AND user_id = ? AND is_deleted = 0
         LIMIT 1
@@ -305,9 +431,16 @@ export function createMomentsRouter({
       [req.userId, momentId]
     );
 
+    const audienceMap = await loadAudienceMap(req.userId, [momentId]);
+
     return res.json({
       success: true,
-      item: serializeMoment(momentRows[0], commentRows, likeRows.length > 0)
+      item: serializeMoment(
+        momentRows[0],
+        commentRows,
+        likeRows.length > 0,
+        audienceMap.get(momentId) || []
+      )
     });
   }));
 
@@ -319,6 +452,10 @@ export function createMomentsRouter({
       }
 
       const character = await requireCharacter(req.userId, characterId);
+      const mediaUrl = normalizeRoleMomentMedia(req.body?.media_url);
+      // 角色自拍流程会紧接着调用 POST /api/moments。用短时会话授权区分它，
+      // 避免普通用户直接借 character_id 冒充角色发动态。
+      issueRoleMomentAuthorization(req, characterId, mediaUrl);
       const modelConfig = await getActiveChatModel(req.userId);
       if (!modelConfig) {
         return res.status(400).json({ success: false, error: '请先在“我的”页面配置聊天模型' });
@@ -369,7 +506,13 @@ export function createMomentsRouter({
   router.post('/', asyncHandler(async (req, res) => {
     try {
       const characterId = getRequestCharacterId(req);
-      if (characterId) {
+      if (hasCharacterSelector(req)) {
+        if (!characterId || !consumeRoleMomentAuthorization(req, characterId, req.body?.images)) {
+          return res.status(403).json({
+            success: false,
+            error: '普通动态只能由你发布；角色动态请从角色自拍流程发布'
+          });
+        }
         await requireCharacter(req.userId, characterId);
       }
 
@@ -380,19 +523,20 @@ export function createMomentsRouter({
 
       const images = JSON.stringify(normalizeImages(req.body?.images));
       const mood = String(req.body?.mood || '').trim() || null;
+      const visibilityMode = normalizeVisibilityMode(null, characterId);
 
       const [result] = await db.query(
         `
           INSERT INTO moments
-            (user_id, character_id, content, images, mood, likes_count, created_at, is_deleted)
-          VALUES (?, ?, ?, ?, ?, 0, NOW(), 0)
+            (user_id, character_id, visibility_mode, content, images, image_generation_status, image_generation_error, mood, likes_count, created_at, is_deleted)
+          VALUES (?, ?, ?, ?, ?, 'manual', NULL, ?, 0, NOW(), 0)
         `,
-        [req.userId, characterId, content, images, mood]
+        [req.userId, characterId, visibilityMode, content, images, mood]
       );
 
       const [rows] = await db.query(
         `
-          SELECT id, user_id, character_id, content, images, mood, likes_count, created_at, is_deleted
+          SELECT id, user_id, character_id, visibility_mode, content, images, image_generation_status, image_generation_error, image_mode, image_generation_metadata, mood, likes_count, created_at, is_deleted
           FROM moments
           WHERE id = ? AND user_id = ?
           LIMIT 1
@@ -400,10 +544,128 @@ export function createMomentsRouter({
         [result.insertId, req.userId]
       );
 
+      void recordLifeEventSource(db, {
+        userId: req.userId,
+        characterId,
+        sourceType: 'moment',
+        sourceId: result.insertId,
+        title: content,
+        eventType: 'life'
+      });
+
       return res.status(201).json({
         success: true,
-        item: serializeMoment(rows[0], [], false)
+        item: serializeMoment(rows[0], [], false, [])
       });
+    } catch (error) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+  }));
+
+  router.post('/:id/share', asyncHandler(async (req, res) => {
+    const momentId = parseInteger(req.params.id);
+    if (!momentId) {
+      return res.status(400).json({ success: false, error: '动态 ID 非法' });
+    }
+
+    const requestedIds = Array.isArray(req.body?.character_ids)
+      ? [...new Set(req.body.character_ids.map(value => parseInteger(value)).filter(Boolean))]
+      : [];
+
+    try {
+      await transaction(async connection => {
+        const [momentRows] = await connection.query(
+          'SELECT id, character_id FROM moments WHERE id = ? AND user_id = ? AND is_deleted = 0 LIMIT 1',
+          [momentId, req.userId]
+        );
+        if (momentRows.length === 0) throw new Error('动态不存在');
+        if (momentRows[0].character_id != null) throw new Error('角色动态不能由用户重新分享');
+
+        await connection.query(
+          'DELETE FROM moment_audiences WHERE moment_id = ? AND user_id = ?',
+          [momentId, req.userId]
+        );
+        for (const characterId of requestedIds) {
+          await requireCharacter(req.userId, characterId);
+          await connection.query(
+            `
+              INSERT IGNORE INTO moment_audiences (moment_id, user_id, character_id, created_at)
+              VALUES (?, ?, ?, NOW())
+            `,
+            [momentId, req.userId, characterId]
+          );
+        }
+
+        await connection.query(
+          'UPDATE moments SET visibility_mode = ? WHERE id = ? AND user_id = ?',
+          [requestedIds.length ? 'shared' : normalizeVisibilityMode(null, momentRows[0].character_id), momentId, req.userId]
+        );
+      });
+
+      // 用户动态只有在明确分享给角色后，才进入该角色的生活事件索引。
+      // 原始动态和分享关系仍保留；取消分享不删除历史来源。
+      if (requestedIds.length > 0) {
+        void (async () => {
+          try {
+            const [rows] = await db.query(
+              'SELECT content FROM moments WHERE id = ? AND user_id = ? AND is_deleted = 0 LIMIT 1',
+              [momentId, req.userId]
+            );
+            await recordLifeEventSource(db, {
+              userId: req.userId,
+              characterId: requestedIds[0],
+              sourceType: 'moment',
+              sourceId: momentId,
+              title: rows[0]?.content || '',
+              eventType: 'life'
+            });
+          } catch {
+            // 事件索引是辅助能力，不能影响分享结果。
+          }
+        })();
+      }
+
+      return res.json({
+        success: true,
+        moment_id: momentId,
+        character_ids: requestedIds
+      });
+    } catch (error) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+  }));
+
+  router.delete('/:id/share/:characterId', asyncHandler(async (req, res) => {
+    const momentId = parseInteger(req.params.id);
+    const characterId = parseInteger(req.params.characterId);
+    if (!momentId || !characterId) {
+      return res.status(400).json({ success: false, error: '动态或角色 ID 非法' });
+    }
+
+    try {
+      await transaction(async connection => {
+        const [momentRows] = await connection.query(
+          'SELECT id, character_id FROM moments WHERE id = ? AND user_id = ? AND is_deleted = 0 LIMIT 1',
+          [momentId, req.userId]
+        );
+        if (momentRows.length === 0) throw new Error('动态不存在');
+        if (momentRows[0].character_id != null) throw new Error('角色动态不能由用户重新分享');
+
+        await connection.query(
+          'DELETE FROM moment_audiences WHERE moment_id = ? AND user_id = ? AND character_id = ?',
+          [momentId, req.userId, characterId]
+        );
+        const [audienceRows] = await connection.query(
+          'SELECT id FROM moment_audiences WHERE moment_id = ? AND user_id = ? LIMIT 1',
+          [momentId, req.userId]
+        );
+        await connection.query(
+          'UPDATE moments SET visibility_mode = ? WHERE id = ? AND user_id = ?',
+          [audienceRows.length ? 'shared' : normalizeVisibilityMode(null, momentRows[0].character_id), momentId, req.userId]
+        );
+      });
+
+      return res.json({ success: true, moment_id: momentId, character_id: characterId });
     } catch (error) {
       return res.status(400).json({ success: false, error: error.message });
     }
@@ -484,6 +746,13 @@ export function createMomentsRouter({
       return res.status(400).json({ success: false, error: '评论内容不能为空' });
     }
 
+    if (hasCharacterSelector(req)) {
+      return res.status(403).json({
+        success: false,
+        error: '评论只能由你发布，不能借角色身份评论'
+      });
+    }
+
     try {
       const item = await transaction(async connection => {
         const [momentRows] = await connection.query(
@@ -494,18 +763,13 @@ export function createMomentsRouter({
           throw new Error('动态不存在');
         }
 
-        const characterId = getRequestCharacterId(req);
-        if (characterId) {
-          await requireCharacter(req.userId, characterId, connection);
-        }
-
         const [result] = await connection.query(
           `
             INSERT INTO moment_comments
               (moment_id, user_id, character_id, content, created_at)
             VALUES (?, ?, ?, ?, NOW())
           `,
-          [momentId, req.userId, characterId, content]
+          [momentId, req.userId, null, content]
         );
 
         const [rows] = await connection.query(
@@ -520,6 +784,28 @@ export function createMomentsRouter({
 
         return rows[0];
       });
+
+      // 评论本身是生活事件的来源，但点赞仍然只保留为弱互动信号。
+      void (async () => {
+        try {
+          const [momentRows] = await db.query(
+            'SELECT character_id, content FROM moments WHERE id = ? AND user_id = ? LIMIT 1',
+            [momentId, req.userId]
+          );
+          const characterId = Number(momentRows[0]?.character_id || 0);
+          if (!characterId) return;
+          await recordLifeEventSource(db, {
+            userId: req.userId,
+            characterId,
+            sourceType: 'comment',
+            sourceId: item.id,
+            title: `${momentRows[0]?.content || ''} ${content}`,
+            eventType: 'life'
+          });
+        } catch {
+          // 事件索引是辅助能力，不能影响评论发送结果。
+        }
+      })();
 
       return res.status(201).json({
         success: true,

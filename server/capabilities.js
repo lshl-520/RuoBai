@@ -5,8 +5,13 @@ import { buildChatCompletionsUrl } from './chat.js';
 import { guessModelCapabilities } from './model-capabilities.js';
 import { testVolcRealtimeCredential } from './realtime-call.js';
 
-const CAPABILITIES = ['chat', 'vision', 'image', 'tts', 'realtime'];
+const CAPABILITIES = ['chat', 'vision', 'image', 'dynamic', 'tts', 'realtime'];
 const VOLC_REALTIME_PROVIDER = 'volc-realtime';
+
+// Agnes 的免费模型会稳定返回九宫格候选图，适合聊天里试画，不能作为一条生活动态的配图。
+export function supportsDynamicSingleImage(modelId) {
+  return !/^agnes-image-/i.test(String(modelId || '').trim());
+}
 
 function normalizeExtras(value) {
   if (!value) {
@@ -56,6 +61,9 @@ function supportedCapabilities(row) {
   if (capabilities.has('realtime') && row.provider_type !== VOLC_REALTIME_PROVIDER) {
     capabilities.delete('realtime');
   }
+
+  // 动态发图和聊天里的画图可以使用同一个图片模型，但必须分别配置和授权。
+  if (capabilities.has('image')) capabilities.add('dynamic');
 
   return capabilities;
 }
@@ -190,6 +198,7 @@ function buildCapabilityItems(assignments, optionsRows) {
   for (const row of optionsRows) {
     const capabilities = supportedCapabilities(row);
     for (const capability of capabilities) {
+      if (capability === 'dynamic' && !supportsDynamicSingleImage(row.model_id)) continue;
       const item = byCapability.get(capability);
       if (!item) continue;
       item.options.push({
@@ -203,6 +212,10 @@ function buildCapabilityItems(assignments, optionsRows) {
   for (const row of assignments) {
     const item = byCapability.get(row.capability);
     if (!item) continue;
+    if (row.capability === 'dynamic' && !supportsDynamicSingleImage(row.model_id)) {
+      // 兼容旧数据：不改用户原有“画图发图”选择，但不把不合格模型当成可用的动态渠道。
+      continue;
+    }
     item.enabled = Boolean(row.enabled);
     item.current = {
       credential_id: row.credential_id,
@@ -258,6 +271,9 @@ export function createCapabilitiesRouter({
       const supports = supportedCapabilities(match);
       if (!supports.has(capability)) {
         return res.status(400).json({ success: false, error: '这个模型不支持该能力' });
+      }
+      if (capability === 'dynamic' && !supportsDynamicSingleImage(modelId)) {
+        return res.status(400).json({ success: false, error: '免费 Agnes 模型会返回九宫格候选图，只能用于“画图发图”，不能用于“动态发图”。请为动态选择 img 生图或猫图片等稳定单图渠道。' });
       }
     }
 

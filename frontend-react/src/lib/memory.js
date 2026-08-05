@@ -1,8 +1,8 @@
 async function parseJson(response) {
   const data = await response.json().catch(() => null);
 
-  if (!response.ok && (!data || typeof data !== "object")) {
-    throw new Error(`Request failed with status ${response.status}`);
+  if (!response.ok || data?.success === false) {
+    throw new Error(data?.error || `请求失败（${response.status}）`);
   }
 
   return data;

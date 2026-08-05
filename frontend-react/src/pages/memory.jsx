@@ -2,6 +2,7 @@ import React from "react";
 import { Icon, Bars } from "../store.jsx";
 import { getRoles, getRoleAvatarRound } from "../lib/roles.js";
 import { getMemories, createMemory, updateMemory as apiUpdateMemory, deleteMemory as apiDeleteMemory } from "../lib/memory.js";
+import { getLifeEvents, getLifeEventSource, updateLifeEvent, deleteLifeEvent, getLifeEventStatusLabel, getLifeEventStatusHint, LIFE_EVENT_STATUS_OPTIONS } from "../lib/life-events.js";
 import { ChatHistoryView } from "./history.jsx";
 import { DEFAULT_ROLE_AVATAR, fallbackToDefaultRoleAvatar } from "../lib/default-assets.js";
 /* 记忆页 — 多角色记忆管理 + 完整聊天记录 */
@@ -17,8 +18,36 @@ function fromApiMemory(m) {
     id: m.id, content: m.content || "", tag: m.tag || "", category: m.category || "",
     memoryType: m.memory_type || "life", memoryTypeLabel: m.memory_type_label || "普通生活",
     weight: Number(m.weight ?? 50), appointmentAt: m.appointment_at || "", appointmentStatus: m.appointment_status || "pending",
-    isImportant: !!m.is_important, dateText: m.created_at ? new Date(m.created_at).toLocaleDateString("zh-CN") : "",
+    isImportant: !!m.is_important, reviewStatus: m.review_status || "active", detectedReason: m.detected_reason || "",
+    sourceType: m.source_type || "manual", sourceId: m.source_id || "",
+    dateText: m.created_at ? new Date(m.created_at).toLocaleDateString("zh-CN") : "",
   };
+}
+
+function fromApiLifeEvent(event) {
+  return {
+    id: event.id,
+    title: event.title || "未命名生活事件",
+    eventType: event.event_type || "life",
+    status: event.status || "active",
+    occurredAt: event.occurred_at || event.created_at || "",
+    createdAt: event.created_at || "",
+    sources: Array.isArray(event.sources) ? event.sources : [],
+  };
+}
+
+function formatEventDate(value) {
+  if (!value) return "时间未记录";
+  const date = new Date(String(value).replace(" ", "T"));
+  return Number.isNaN(date.getTime()) ? String(value).slice(0, 16) : date.toLocaleString("zh-CN", {
+    month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function formatEventSource(source) {
+  const [type, id] = String(source || "").split(":");
+  const label = { chat: "聊天", moment: "动态", comment: "评论", memory: "记忆" }[type] || type || "来源";
+  return id ? `${label} #${id}` : label;
 }
 
 /* 记忆编辑/新建 */
@@ -81,18 +110,102 @@ function MemoryEditor({ agent, memory, onClose, onSave }) {
 
 function MemoryCard({ m, onPin, onEdit, onDelete }) {
   return (
-    <div className={"mem-card" + (m.isImportant ? " pinned" : "")}>
+    <div className={"mem-card" + (m.isImportant ? " pinned" : "") + (m.reviewStatus === "candidate" ? " candidate" : "")}>
       <div className="mem-top">
         <span className="mem-tag serif">{m.tag || m.memoryTypeLabel}</span>
         {m.isImportant && <span className="mem-pin"><Icon name="flame" /></span>}
+        {m.reviewStatus === "candidate" && <span className="mem-candidate">💡 新候选</span>}
       </div>
       <div className="mem-content">{m.content}</div>
+      {m.reviewStatus === "candidate" && (
+        <div className="mem-source">来源：{m.sourceType === "chat_candidate" ? "聊天" : m.sourceType} · {m.detectedReason || "系统暂存为低优先级参考"}</div>
+      )}
       <div className="mem-foot">
         <span className="mem-meta">{m.memoryTypeLabel}{m.appointmentAt ? " · " + String(m.appointmentAt).slice(0, 10) : ""}{m.category ? " · " + m.category : ""}</span>
         <div className="mem-actions">
           <button onClick={() => onPin(m)}>{m.isImportant ? "取消置顶" : "置顶"}</button>
           <button onClick={() => onEdit(m)}>编辑</button>
           <button className="del" onClick={() => onDelete(m)}>删除</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LifeEventCard({ event, onStatusChange, onOpenSource, onDelete }) {
+  return (
+    <div className="life-event-card">
+      <div className="life-event-main">
+        <div className="life-event-title">{event.title}</div>
+        <div className="life-event-meta">
+          {formatEventDate(event.occurredAt)} · {event.sources.length ? `${event.sources.length} 条可追溯来源` : "来源待补"}
+        </div>
+        {event.sources.length > 0 && (
+          <div className="life-event-sources">
+            {event.sources.map((source) => (
+              <button key={source} type="button" className="life-event-source" title={`查看${formatEventSource(source)}原文`} onClick={() => onOpenSource(event, source)}>
+                {formatEventSource(source)}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="life-event-status">
+        <div className="life-event-status-row">
+          <label>
+            <span className="sr-only">这件事现在的状态</span>
+            <select aria-label={`这件事现在的状态：${getLifeEventStatusLabel(event.status)}`} value={event.status} onChange={(e) => onStatusChange(event, e.target.value)}>
+              {LIFE_EVENT_STATUS_OPTIONS.map(([value]) => <option key={value} value={value}>{getLifeEventStatusLabel(value)}</option>)}
+            </select>
+          </label>
+          <button type="button" className="life-event-delete" title="只删除这条回顾，不删除聊天、动态或评论原文" onClick={() => onDelete(event)}>删除</button>
+        </div>
+        <div className="life-event-status-hint">{getLifeEventStatusHint(event.status)}</div>
+      </div>
+    </div>
+  );
+}
+
+function SourceSheet({ event, source, loading, error, onClose }) {
+  const typeLabel = { chat: "聊天", moment: "动态", comment: "评论", memory: "记忆" }[source?.type] || "来源";
+  const images = source?.type === "moment" ? source.images : source?.type === "comment" ? source.moment_images : [];
+  return (
+    <div className="sheet-mask" onClick={onClose}>
+      <div className="sheet source-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-grip" />
+        <div className="sheet-head">
+          <div>
+            <h2 className="serif">查看原始来源</h2>
+            <div className="source-sheet-sub">{typeLabel} · {event.title}</div>
+          </div>
+          <button className="icon-btn" onClick={onClose} style={{ width: 34, height: 34 }} title="关闭">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+        <div className="sheet-body source-sheet-body">
+          {loading && <div className="date-hint">正在读取这条来源…</div>}
+          {!loading && error && <div className="life-event-empty">{error}</div>}
+          {!loading && !error && source && (
+            <>
+              <div className="source-sheet-meta">{formatEventDate(source.created_at || source.occurred_at)} · 编号 #{source.id}</div>
+              {source.type === "comment" && source.moment_content && (
+                <div className="source-parent-context">所在动态：{source.moment_content}</div>
+              )}
+              {source.type === "memory" && source.tag && <div className="source-parent-context">记忆标签：{source.tag}</div>}
+              {source.type === "chat" && <div className="source-speaker">{source.role === "user" ? "我" : "她"}</div>}
+              <div className="source-content">{source.content || "这条来源没有文字内容。"}</div>
+              {source.mood && <div className="source-parent-context">心情：{source.mood}</div>}
+              {Array.isArray(images) && images.length > 0 && (
+                <div className="source-images">
+                  {images.map((url, index) => <img key={`${url}-${index}`} src={url} alt={`${typeLabel}图片 ${index + 1}`} />)}
+                </div>
+              )}
+              {source.media_url && source.type === "chat" && (
+                <div className="source-media"><a href={source.media_url} target="_blank" rel="noreferrer">打开附件</a></div>
+              )}
+              {source.deleted && <div className="source-deleted">这条来源已经标记为删除，仍保留在事件索引中，但不会再被角色使用。</div>}
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -107,9 +220,16 @@ function MemoryScreen() {
 
   const [activeId, setActiveId] = useStateMem(null);
   const [list, setList] = useStateMem([]);
+  const [events, setEvents] = useStateMem([]);
+  const [eventsLoading, setEventsLoading] = useStateMem(false);
   const [loading, setLoading] = useStateMem(true);
   const [editor, setEditor] = useStateMem(undefined);
   const [history, setHistory] = useStateMem(false);
+  const [sourceSheet, setSourceSheet] = useStateMem(null);
+  const [sourceData, setSourceData] = useStateMem(null);
+  const [sourceLoading, setSourceLoading] = useStateMem(false);
+  const [sourceError, setSourceError] = useStateMem("");
+  const [actionError, setActionError] = useStateMem("");
 
   /* 拉真实角色列表 */
   useEffectMem(() => {
@@ -164,6 +284,23 @@ function MemoryScreen() {
     return () => { cancelled = true; };
   }, [activeId]);
 
+  useEffectMem(() => {
+    if (!activeId) {
+      setEvents([]);
+      setEventsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setEventsLoading(true);
+    getLifeEvents(activeId)
+      .then((res) => {
+        if (!cancelled && res?.success && Array.isArray(res.items)) setEvents(res.items.map(fromApiLifeEvent));
+      })
+      .catch(() => { if (!cancelled) setEvents([]); })
+      .finally(() => { if (!cancelled) setEventsLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeId]);
+
   const agent = agents.find((a) => a.id === activeId) || agents[0] || null;
   const sorted = [...list].sort((a, b) => (b.isImportant ? 1 : 0) - (a.isImportant ? 1 : 0));
 
@@ -177,6 +314,64 @@ function MemoryScreen() {
       }
     } catch (e) { /* 静默 */ }
   };
+
+  const refreshEvents = async () => {
+    if (!activeId) return;
+    try {
+      const res = await getLifeEvents(activeId);
+      if (res?.success && Array.isArray(res.items)) setEvents(res.items.map(fromApiLifeEvent));
+    } catch (e) { /* 事件索引失败不影响原始记忆 */ }
+  };
+
+  const handleEventStatus = async (event, status) => {
+    setActionError("");
+    try {
+      await updateLifeEvent(event.id, { status });
+      setEvents((current) => current.map((item) => item.id === event.id ? { ...item, status } : item));
+    } catch (e) {
+      setActionError(e?.message || "这件事的状态暂时没改成功，请再试一次。");
+      refreshEvents();
+    }
+  };
+
+  const handleEventDelete = async (event) => {
+    if (!window.confirm("只删除这条生活回顾，不会删除聊天、动态或评论原文。确定删除吗？")) return;
+    setActionError("");
+    try {
+      await deleteLifeEvent(event.id);
+      setEvents((current) => current.filter((item) => item.id !== event.id));
+    } catch (e) {
+      setActionError(e?.message || "这条生活回顾暂时没删掉，请再试一次。");
+    }
+  };
+
+  const openEventSource = (event, sourceRef) => {
+    setSourceSheet({ event, sourceRef });
+  };
+
+  useEffectMem(() => {
+    if (!sourceSheet) {
+      setSourceData(null);
+      setSourceError("");
+      setSourceLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setSourceData(null);
+    setSourceError("");
+    setSourceLoading(true);
+    getLifeEventSource(sourceSheet.event.id, sourceSheet.sourceRef)
+      .then((res) => {
+        if (!cancelled) setSourceData(res?.source || null);
+      })
+      .catch((error) => {
+        if (!cancelled) setSourceError(error?.message || "来源暂时无法读取");
+      })
+      .finally(() => {
+        if (!cancelled) setSourceLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [sourceSheet]);
 
   const handleSave = async (data) => {
     if (!activeId) return;
@@ -192,8 +387,14 @@ function MemoryScreen() {
   };
 
   const handleDelete = async (m) => {
-    try { await apiDeleteMemory(m.id); } catch (e) { /* 静默 */ }
-    refreshList();
+    if (!window.confirm("只删除这张记忆卡，不会删除聊天、动态或评论原文。确定删除吗？")) return;
+    setActionError("");
+    try {
+      await apiDeleteMemory(m.id);
+      await refreshList();
+    } catch (e) {
+      setActionError(e?.message || "这张记忆暂时没删掉，请再试一次。");
+    }
   };
 
   const handlePin = async (m) => {
@@ -241,6 +442,7 @@ function MemoryScreen() {
             </div>
           </div>
         ) : (<>
+          {actionError && <div className="memory-action-error" role="alert">{actionError}</div>}
           <button className="history-entry" onClick={() => setHistory(true)}>
             <span className="he-ic"><Icon name="chat" /></span>
             <span className="he-main">
@@ -250,8 +452,23 @@ function MemoryScreen() {
             <Icon name="chevron" className="row-chev" />
           </button>
 
+          <div className="section-label life-event-section-label" style={{ margin: "20px 0 12px" }}>
+            <span>生活事件 · {eventsLoading ? "加载中" : events.length}</span>
+            {events.length > 0 && <span className="memory-lightbulb" title="这些是从聊天、动态和评论建立的可追溯索引">💡</span>}
+            <span className="sl-line" />
+          </div>
+          {events.length > 0 ? (
+            <div className="life-event-list">
+              {events.map((event) => <LifeEventCard key={event.id} event={event} onStatusChange={handleEventStatus} onOpenSource={openEventSource} onDelete={handleEventDelete} />)}
+            </div>
+          ) : (
+            <div className="life-event-empty">还没有可回顾的生活事件。原始聊天、动态和评论会继续保留。</div>
+          )}
+
           <div className="section-label" style={{ margin: "20px 0 12px" }}>
-            <span>{agent.name}记得的事 · {list.length}</span><span className="sl-line" />
+            <span>{agent.name}记得的事 · {list.length}</span>
+            {list.some((item) => item.reviewStatus === "candidate") && <span className="memory-lightbulb" title="这里有系统新发现的低优先级记忆">💡</span>}
+            <span className="sl-line" />
           </div>
 
           {sorted.length === 0 ? (
@@ -284,6 +501,9 @@ function MemoryScreen() {
         <MemoryEditor agent={agent} memory={editor}
           onClose={() => setEditor(undefined)}
           onSave={handleSave} />
+      )}
+      {sourceSheet && (
+        <SourceSheet event={sourceSheet.event} source={sourceData} loading={sourceLoading} error={sourceError} onClose={() => setSourceSheet(null)} />
       )}
     </div>
   );

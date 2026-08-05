@@ -4,13 +4,14 @@ import { asyncHandler, maskSecret, parseInteger } from './helpers.js';
 import { buildChatCompletionsUrl } from './chat.js';
 import { guessModelCapabilities } from './model-capabilities.js';
 import { testVolcRealtimeCredential } from './realtime-call.js';
+import { supportsDynamicSingleImage } from './capabilities.js';
 
 const TASK_IMAGE_PROVIDER = 'image-task-no-key';
 const TASK_IMAGE_MODEL = 'task-image-default';
 const VOLC_REALTIME_PROVIDER = 'volc-realtime';
 const VOLC_REALTIME_MODEL = '2.2.0.0';
 const VOLC_TTS_MODEL = 'seed-tts-2.0';
-const CAPABILITIES = ['chat', 'vision', 'image', 'tts', 'realtime'];
+const CAPABILITIES = ['chat', 'vision', 'image', 'dynamic', 'tts', 'realtime'];
 
 function buildModelsUrl(apiBase) {
   const base = String(apiBase || '').trim().replace(/\/+$/, '');
@@ -34,7 +35,7 @@ function isTaskImageProvider(providerType) {
 }
 
 function fixedTaskImageModels() {
-  return [{ model_id: TASK_IMAGE_MODEL, capabilities: ['image'] }];
+  return [{ model_id: TASK_IMAGE_MODEL, capabilities: ['image', 'dynamic'] }];
 }
 
 function isVolcRealtimeProvider(providerType) {
@@ -83,6 +84,7 @@ function summarizeCapabilities(items = []) {
     chat: [],
     vision: [],
     image: [],
+    dynamic: [],
     tts: [],
     realtime: []
   };
@@ -96,6 +98,38 @@ function summarizeCapabilities(items = []) {
   }
 
   return summary;
+}
+
+function deriveModelCapabilities(modelId, declaredCapabilities = []) {
+  const capabilities = new Set([
+    ...parseModelCapabilities(declaredCapabilities),
+    ...guessModelCapabilities(modelId)
+  ]);
+  if (capabilities.has('image') && supportsDynamicSingleImage(modelId)) {
+    capabilities.add('dynamic');
+  }
+  return [...capabilities];
+}
+
+function parseModelCapabilities(value) {
+  if (Array.isArray(value)) return value.map(item => String(item || '').trim()).filter(Boolean);
+  try {
+    const parsed = JSON.parse(value || '[]');
+    return Array.isArray(parsed) ? parsed.map(item => String(item || '').trim()).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function supportsCapability(modelId, declaredCapabilities, capability) {
+  const capabilities = new Set([
+    ...parseModelCapabilities(declaredCapabilities),
+    ...guessModelCapabilities(modelId)
+  ]);
+  if (capability === 'dynamic') {
+    return capabilities.has('image') && supportsDynamicSingleImage(modelId);
+  }
+  return capabilities.has(capability);
 }
 
 async function loadCredentialRow(queryable, credentialId, userId) {
@@ -429,6 +463,15 @@ export function createCredentialsRouter({
           [credentialId, modelId]
         );
         const currentCapabilities = modelRows[0]?.capabilities;
+        if (!supportsCapability(modelId, currentCapabilities, capability)) {
+          const purposeError = new Error(
+            capability === 'dynamic' && !supportsDynamicSingleImage(modelId)
+              ? '免费 Agnes 模型会返回九宫格候选图，只能用于“画图发图”，不能用于“动态发图”。请为动态选择稳定单图模型'
+              : `“${capability}”所选模型不支持这项用途`
+          );
+          purposeError.statusCode = 400;
+          throw purposeError;
+        }
         let list = [];
         try { list = Array.isArray(currentCapabilities) ? currentCapabilities : JSON.parse(currentCapabilities || '[]'); } catch { list = []; }
         const merged = [...new Set([...list, capability])];
@@ -520,7 +563,7 @@ export function createCredentialsRouter({
 
       items = models.map(modelId => ({
         model_id: modelId,
-        capabilities: guessModelCapabilities(modelId)
+        capabilities: deriveModelCapabilities(modelId)
       }));
     }
 

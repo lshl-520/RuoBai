@@ -1,7 +1,8 @@
 import React from "react";
 import { Icon, Bars } from "../store.jsx";
 import { getRoles, getRolePortraitSrc, getRoleAvatarRound } from "../lib/roles.js";
-import { getMoments, createMoment, likeMoment as apiLike, deleteMoment as apiDelete, commentMoment } from "../lib/moments.js";
+import { getMoments, createMoment, uploadMomentImage, likeMoment as apiLike, deleteMoment as apiDelete, commentMoment, shareMoment } from "../lib/moments.js";
+import { recordDiagnostic } from "../lib/diagnostics.js";
 import { getSessionProfile } from "../lib/profile.js";
 import {
   DEFAULT_ROLE_AVATAR,
@@ -36,6 +37,9 @@ function mapMoment(m, agentsMap, user) {
       name: c.character_id ? (agentsMap.get(c.character_id)?.name || "她") : (user?.name || "我"),
       text: c.content || "",
     })),
+    visibilityMode: m.visibility_mode || (isUser ? "private" : "publisher"),
+    audienceCharacterIds: Array.isArray(m.audience_character_ids) ? m.audience_character_ids : [],
+    auto: Boolean(m.auto_generated || m.origin === "auto"),
   };
 }
 
@@ -45,12 +49,16 @@ function getMomentImageSource(src, variant) {
   return `/api/media/${variant}?path=${encodeURIComponent(value)}`;
 }
 
-function MomentCard({ m, onLike, onDelete, onOpenImage, onComment, currentUserId }) {
+function MomentCard({ m, onLike, onDelete, onOpenImage, onComment, onShare, agents = [], currentUserId }) {
   const [isLiking, setIsLiking] = React.useState(false);
   const [commentsOpen, setCommentsOpen] = React.useState(false);
   const [commentDraft, setCommentDraft] = React.useState("");
   const [commentSending, setCommentSending] = React.useState(false);
   const [commentError, setCommentError] = React.useState("");
+  const [shareOpen, setShareOpen] = React.useState(false);
+  const [shareTargets, setShareTargets] = React.useState(() => new Set(m.audienceCharacterIds || []));
+  const [shareSending, setShareSending] = React.useState(false);
+  const [shareError, setShareError] = React.useState("");
   const moodTags = m.mood ? m.mood.trim().split(/\s+/).filter(Boolean) : [];
 
   const handleLike = async () => {
@@ -73,6 +81,20 @@ function MomentCard({ m, onLike, onDelete, onOpenImage, onComment, currentUserId
       setCommentError(error?.message || "评论没有发送成功，请重试。");
     } finally {
       setCommentSending(false);
+    }
+  };
+
+  const saveShare = async () => {
+    if (!onShare || shareSending) return;
+    setShareSending(true);
+    setShareError("");
+    try {
+      await onShare(m.id, Array.from(shareTargets));
+      setShareOpen(false);
+    } catch (error) {
+      setShareError(error?.message || "分享范围没有保存成功，请重试。");
+    } finally {
+      setShareSending(false);
     }
   };
 
@@ -172,8 +194,45 @@ function MomentCard({ m, onLike, onDelete, onOpenImage, onComment, currentUserId
             <button className="m-act" onClick={() => setCommentsOpen((open) => !open)} aria-expanded={commentsOpen}>
               <Icon name="comment" /> {m.comments.length}
             </button>
+            {m.isUser && (
+              <button className={"m-act" + (m.visibilityMode === "shared" ? " shared" : "")} onClick={() => setShareOpen((open) => !open)} aria-expanded={shareOpen}>
+                <Icon name="share" /> {m.visibilityMode === "shared" ? "已分享" : "分享"}
+              </button>
+            )}
           </div>
         </div>
+        {shareOpen && m.isUser && (
+          <div className="m-share-panel">
+            <div className="m-share-title">这条动态分享给谁？</div>
+            <div className="m-share-hint">默认只有你能看到。选中的角色才能在自己的空间里读到它。</div>
+            <div className="m-share-options">
+              {agents.length === 0 && <span className="m-share-empty">还没有可分享的角色。</span>}
+              {agents.map((agent) => {
+                const checked = shareTargets.has(agent.id);
+                return (
+                  <label className="m-share-option" key={agent.id}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => setShareTargets((current) => {
+                        const next = new Set(current);
+                        if (next.has(agent.id)) next.delete(agent.id); else next.add(agent.id);
+                        return next;
+                      })}
+                    />
+                    <img src={agent.avatar || DEFAULT_ROLE_AVATAR} alt="" onError={fallbackToDefaultRoleAvatar} />
+                    <span>{agent.name}</span>
+                  </label>
+                );
+              })}
+            </div>
+            {shareError && <div className="m-share-error" role="alert">{shareError}</div>}
+            <div className="m-share-actions">
+              <button type="button" className="m-share-cancel" onClick={() => setShareOpen(false)}>取消</button>
+              <button type="button" className="m-share-save" onClick={saveShare} disabled={shareSending}>{shareSending ? "保存中" : "保存范围"}</button>
+            </div>
+          </div>
+        )}
         {commentsOpen && (
           <div className="m-comments">
             {m.comments.map((c, i) => (
@@ -243,6 +302,9 @@ function Composer({ user, onClose, onPost }) {
   const [text, setText] = useStateM("");
   const [moodInput, setMoodInput] = useStateM("");
   const [images, setImages] = useStateM([]);
+  const [uploading, setUploading] = useStateM(0);
+  const [uploadError, setUploadError] = useStateM("");
+  const [publishing, setPublishing] = useStateM(false);
   const [isClosing, setIsClosing] = useStateM(false);
   const fileInputRef = React.useRef(null);
 
@@ -253,36 +315,74 @@ function Composer({ user, onClose, onPost }) {
     }, 200);
   };
 
-  const handleImageSelect = (e) => {
-    const files = Array.from(e.target.files || []);
+  const addImageFiles = async (files) => {
     if (files.length === 0) return;
 
     const remainingSlots = 9 - images.length;
     const filesToAdd = files.slice(0, remainingSlots);
 
-    filesToAdd.forEach(file => {
-      if (!file.type.startsWith('image/')) return;
+    for (const file of filesToAdd) {
+      if (!file.type.startsWith("image/")) continue;
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const preview = URL.createObjectURL(file);
+      setImages((prev) => [...prev, { id, preview, mediaUrl: "", file }]);
+      setUploading((count) => count + 1);
+      setUploadError("");
+      try {
+        const mediaUrl = await uploadMomentImage(file);
+        setImages((prev) => prev.map((item) => item.id === id ? { ...item, mediaUrl } : item));
+      } catch (error) {
+        setImages((prev) => prev.filter((item) => item.id !== id));
+        URL.revokeObjectURL(preview);
+        setUploadError(error?.message || "图片上传失败，可稍后重试。");
+        recordDiagnostic({ area: "image", action: "upload-image", error });
+      } finally {
+        setUploading((count) => Math.max(0, count - 1));
+      }
+    }
+  };
 
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setImages(prev => [...prev, {
-          dataUrl: event.target.result,
-          file
-        }]);
-      };
-      reader.readAsDataURL(file);
-    });
+  const handleImageSelect = (e) => {
+    void addImageFiles(Array.from(e.target.files || []));
 
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
 
+  const handlePaste = (event) => {
+    const files = Array.from(event.clipboardData?.items || [])
+      .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter(Boolean);
+    if (files.length) {
+      event.preventDefault();
+      void addImageFiles(files);
+    }
+  };
+
   const removeImage = (index) => {
-    setImages(prev => prev.filter((_, i) => i !== index));
+    setImages(prev => {
+      const removed = prev[index];
+      if (removed?.preview?.startsWith("blob:")) URL.revokeObjectURL(removed.preview);
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
   const parsedTags = moodInput.trim().split(/\s+/).filter(Boolean);
+
+  const publish = async () => {
+    if (!text.trim() || uploading > 0 || publishing || images.some((img) => !img.mediaUrl)) return;
+    setPublishing(true);
+    setUploadError("");
+    try {
+      await onPost({ content: text.trim(), mood: moodInput.trim(), images: images.map(img => img.mediaUrl).filter(Boolean) });
+    } catch (error) {
+      setUploadError(error?.message || "动态没有发布成功，刚才写的内容还在，可以重试。");
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   return (
     <>
@@ -335,6 +435,7 @@ function Composer({ user, onClose, onPost }) {
           </div>
           <textarea className="fld area" style={{ minHeight: 130 }} autoFocus value={text}
             onChange={(e) => setText(e.target.value)}
+            onPaste={handlePaste}
             placeholder="发泄一下也好,记录一下也好。这里没有别人,只有听你说话的她们。" />
 
           {images.length > 0 && (
@@ -347,7 +448,7 @@ function Composer({ user, onClose, onPost }) {
               {images.map((img, idx) => (
                 <div key={idx} style={{ position: 'relative', paddingTop: '100%' }}>
                   <img
-                    src={img.dataUrl}
+                    src={img.preview}
                     alt=""
                     style={{
                       position: 'absolute',
@@ -402,6 +503,8 @@ function Composer({ user, onClose, onPost }) {
               <Icon name="image" /> 配图 {images.length > 0 && `(${images.length}/9)`}
             </button>
           </div>
+          {uploadError && <div className="chat-error" role="alert" style={{ marginTop: 8 }}>{uploadError}</div>}
+          {uploading > 0 && <div className="compose-note">正在把图片安全上传，完成后才能发布。</div>}
           <label className="field-label">心情标签</label>
           <input
             type="text"
@@ -433,9 +536,9 @@ function Composer({ user, onClose, onPost }) {
           <div className="compose-note">发出后,在意你的角色可能会来评论。</div>
         </div>
         <div className="sheet-foot">
-          <button className="pill pill-primary grow" disabled={!text.trim()} style={!text.trim() ? { opacity: 0.5 } : null}
-            onClick={() => text.trim() && onPost({ content: text.trim(), mood: moodInput.trim(), images: images.map(img => img.dataUrl) })}>
-            发布
+          <button className="pill pill-primary grow" disabled={!text.trim() || uploading > 0 || publishing || images.some((img) => !img.mediaUrl)} style={!text.trim() || uploading > 0 || publishing || images.some((img) => !img.mediaUrl) ? { opacity: 0.5 } : null}
+            onClick={publish}>
+            {publishing ? "发布中…" : "发布"}
           </button>
         </div>
       </div>
@@ -446,8 +549,14 @@ function Composer({ user, onClose, onPost }) {
 
 function MomentsScreen() {
   const [composing, setComposing] = useStateM(false);
-  const [filter, setFilter] = useStateM(null);
+  const [filter, setFilter] = useStateM("all");
   const [previewImage, setPreviewImage] = useStateM("");
+  const [offset, setOffset] = useStateM(0);
+  const [hasMore, setHasMore] = useStateM(false);
+  const [loadingMore, setLoadingMore] = useStateM(false);
+  const [scrolled, setScrolled] = useStateM(false);
+  const touchStartRef = React.useRef(null);
+  const screenRef = React.useRef(null);
 
   /* 从后端拉真实数据 */
   const [realAgents, setRealAgents] = useStateM(null);
@@ -464,13 +573,27 @@ function MomentsScreen() {
     return m;
   }, [agents]);
 
-  const fetchMoments = async (charId) => {
+  const fetchMoments = async (nextFilter = filter, { append = false } = {}) => {
+    const request = nextFilter === "mine"
+      ? { scope: "mine" }
+      : nextFilter === "all"
+        ? { scope: "all" }
+        : { characterId: Number(nextFilter), scope: "character" };
+    const nextOffset = append ? offset : 0;
+    if (append) setLoadingMore(true);
     try {
-      const res = await getMoments(charId ? { characterId: charId } : {});
+      const res = await getMoments({ ...request, limit: 20, offset: nextOffset });
       if (res?.success && Array.isArray(res.items)) {
-        setRealMoments(res.items.map((m) => mapMoment(m, agentsMap, user)));
+        const mapped = res.items.map((m) => mapMoment(m, agentsMap, user));
+        setRealMoments((prev) => append ? [...(prev || []), ...mapped] : mapped);
+        setOffset(nextOffset + mapped.length);
+        setHasMore(mapped.length >= 20);
       }
-    } catch (e) { /* 静默 */ }
+    } catch (error) {
+      recordDiagnostic({ area: "app", action: "request", error });
+    } finally {
+      setLoadingMore(false);
+    }
   };
 
   useEffectM(() => {
@@ -500,21 +623,23 @@ function MomentsScreen() {
   /* agents 和 user 加载好后再拉动态（需要 agentsMap 做字段映射） */
   useEffectM(() => {
     if (loading) return;
-    fetchMoments(filter);
+    setOffset(0);
+    setHasMore(false);
+    fetchMoments(filter, { append: false });
   }, [loading, filter, agents.length]);
 
   const moments = realMoments ?? [];
-  const list = filter ? moments.filter((m) => m.agentId === filter) : moments;
+  const list = moments;
 
   const handleLike = async (id) => {
     try { await apiLike(id); } catch (e) { /* 静默 */ }
-    fetchMoments(filter);
+    fetchMoments(filter, { append: false });
   };
 
   const handleDelete = async (id) => {
     try {
       await apiDelete(id);
-      fetchMoments(filter);
+      fetchMoments(filter, { append: false });
     } catch (e) {
       alert('删除失败：' + (e.message || '未知错误'));
     }
@@ -523,39 +648,84 @@ function MomentsScreen() {
   const handleComment = async (id, content) => {
     const result = await commentMoment(id, { content });
     if (!result?.success) throw new Error(result?.error || "评论没有发送成功，请重试。");
-    await fetchMoments(filter);
+    await fetchMoments(filter, { append: false });
+  };
+
+  const handleShare = async (id, characterIds) => {
+    const result = await shareMoment(id, characterIds);
+    if (!result?.success) throw new Error(result?.error || "分享范围没有保存成功，请重试。");
+    await fetchMoments(filter, { append: false });
   };
 
   const handlePost = async (data) => {
     try {
-      await createMoment({
+      const result = await createMoment({
         content: data.content,
         mood: data.mood,
         images: data.images || []
       });
-    } catch (e) { /* 静默 */ }
+      if (!result?.success) throw new Error(result?.error || "动态没有发布成功，请稍后重试。");
+    } catch (error) {
+      recordDiagnostic({ area: "app", action: "request", error });
+      throw error;
+    }
     setComposing(false);
-    fetchMoments(filter);
+    fetchMoments(filter, { append: false });
   };
+
+  React.useEffect(() => {
+    const screen = screenRef.current;
+    const onScroll = () => setScrolled(Boolean(screen && screen.scrollTop > 180));
+    onScroll();
+    screen?.addEventListener("scroll", onScroll, { passive: true });
+    return () => screen?.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const switchRoleBySwipe = (direction) => {
+    if (!agents.length) return;
+    const currentIndex = filter === "mine" || filter === null ? -1 : agents.findIndex((agent) => String(agent.id) === String(filter));
+    const start = currentIndex < 0 ? 0 : currentIndex;
+    const nextIndex = (start + direction + agents.length) % agents.length;
+    setFilter(String(agents[nextIndex].id));
+  };
+
+  const handleTouchStart = (event) => {
+    if (event.target.closest(".m-img-button")) return;
+    const touch = event.changedTouches?.[0];
+    if (touch) touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleTouchEnd = (event) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!start || event.target.closest(".m-img-button")) return;
+    const touch = event.changedTouches?.[0];
+    if (!touch) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.25) return;
+    switchRoleBySwipe(dx < 0 ? 1 : -1);
+  };
+
+  const scrollToTop = () => screenRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   return (
-    <div className="screen anim-screen">
+    <div ref={screenRef} className="screen moments-screen" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
 
       <div className="moments-cover">
         <img src="assets/scene-sunset.png" alt="" className="mc-bg" />
         <div className="mc-scrim" />
         <div className="mc-title serif">动态</div>
         <div className="mc-sub">她们在过自己的日子,你也可以在这儿说说话</div>
-        <div className="mc-user"><img src={user.avatar} alt="" onError={fallbackToDefaultUserAvatar} /></div>
+        <button className="mc-user" onClick={() => setFilter("mine")} aria-label="只看我的动态" title="只看我的动态"><img src={user.avatar} alt="" onError={fallbackToDefaultUserAvatar} /></button>
       </div>
 
       {/* 头像筛选栏 */}
-      <div className="mem-roles" style={{ marginTop: 2 }}>
-        <button className={"mem-role" + (filter === null ? " on" : "")} onClick={() => setFilter(null)}>
-          <span className="mem-role-av"><img src={user?.avatar || DEFAULT_USER_AVATAR} alt={user?.username || "我"} onError={fallbackToDefaultUserAvatar} /></span>
-          <span className="mem-role-name">{user?.username || "我"}</span>
+      <div className={"moment-role-strip mem-roles" + (scrolled ? " scrolled" : "")} style={{ marginTop: 2 }}>
+        <button className={"mem-role" + (filter === "all" ? " on" : "")} onClick={() => setFilter("all")} aria-label="查看全部动态" title="查看全部动态">
+          <span className="mem-role-av moment-all-avatar"><Icon name="sparkSm" /></span>
         </button>
         {agents.map((a) => (
-          <button key={a.id} className={"mem-role" + (filter === a.id ? " on" : "")} onClick={() => setFilter(a.id)}>
+          <button key={a.id} className={"mem-role" + (String(filter) === String(a.id) ? " on" : "")} onClick={() => setFilter(String(a.id))}>
             <span className="mem-role-av"><img src={a.avatar} alt={a.name} onError={fallbackToDefaultRoleAvatar} /></span>
             <span className="mem-role-name">{a.name}</span>
           </button>
@@ -576,12 +746,18 @@ function MomentsScreen() {
         </div>
       ) : (
         <div className="moments-list pad">
-          {list.map((m) => <MomentCard key={m.id} m={m} onLike={handleLike} onComment={handleComment} onDelete={handleDelete} onOpenImage={setPreviewImage} currentUserId={user?.id} />)}
+          {list.map((m) => <MomentCard key={m.id} m={m} agents={agents} onLike={handleLike} onComment={handleComment} onShare={handleShare} onDelete={handleDelete} onOpenImage={setPreviewImage} currentUserId={user?.id} />)}
+          {hasMore && (
+            <button className="pill pill-ghost moment-load-more" disabled={loadingMore} onClick={() => fetchMoments(filter, { append: true })}>
+              {loadingMore ? "正在继续加载…" : "继续看更早的动态"}
+            </button>
+          )}
           <div style={{ height: 20 }} />
         </div>
       )}
 
-      <button className="fab" onClick={() => setComposing(true)}><Icon name="edit" /></button>
+      <button className="fab moment-fab" onClick={() => setComposing(true)} aria-label="发动态"><Icon name="edit" /></button>
+      {scrolled && <button className="moment-top-button" onClick={scrollToTop} aria-label="回到首屏"><Icon name="chevronD" style={{ transform: "rotate(180deg)" }} /></button>}
 
       {composing && (
         <Composer user={user} onClose={() => setComposing(false)}

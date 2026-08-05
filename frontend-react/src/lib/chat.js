@@ -139,10 +139,14 @@ export function detectDrawKeywords(text) {
   return /(?:帮我|给我|替我|为我|请)画|画(?:一|1)?(?:个|张|幅)(?:图|画|图片|照片|自拍|画像)?|画(?:图|画|图片|照片|自拍|画像|一下)|(?:请|帮我|给我|替我|为我)?生成(?:一|1)?[个张幅]?[\s\S]{0,120}?(?:图片|图像|照片|自拍|画像)|(?:做|制作|创作)(?:一|1)?[个张幅]?[\s\S]{0,80}?(?:图片|图像|照片|自拍|画像)|(?:来|拍)(?:一|1)?[个张幅]?(?:自拍|照片)/i.test(text);
 }
 
-export async function drawImage(roleId, content) {
+export async function drawImage(roleId, content, displayContent = "", options = {}) {
   const data = await request(`/api/chat/draw?character_id=${encodeURIComponent(roleId)}`, {
     method: "POST",
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({
+      content,
+      ...(displayContent ? { display_content: displayContent } : {}),
+      resolution: options.resolution || "channel",
+    }),
   });
   if (!data?.success) throw new Error(data?.error || "图片生成失败");
   return data;
@@ -232,6 +236,21 @@ export async function streamAssistantReply(roleId, payload, handlers = {}) {
 
         if (parsed?.type === "error") {
           handlers.onError?.(parsed.message || "她暂时没反应，稍后再试好吗");
+          continue;
+        }
+
+        if (parsed?.type === "reasoning" && parsed?.delta) {
+          handlers.onReasoning?.(String(parsed.delta));
+          continue;
+        }
+
+        if (parsed?.type === "inner_os" && parsed?.content) {
+          handlers.onInnerOs?.(String(parsed.content), String(parsed.source || ""));
+          continue;
+        }
+
+        if (parsed?.type === "inner_os_error") {
+          handlers.onInnerOsError?.(String(parsed.message || "这一轮的小心思暂时没有写出来。"));
           continue;
         }
 

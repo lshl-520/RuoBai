@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
-import { createCapabilitiesRouter } from './capabilities.js';
+import { createCapabilitiesRouter, supportsDynamicSingleImage } from './capabilities.js';
 
 function createApp(router) {
   const app = express();
@@ -27,7 +27,7 @@ async function withServer(app, run) {
   }
 }
 
-test('GET /api/capabilities returns 5 capabilities with current assignment and available models', async () => {
+test('GET /api/capabilities returns 6 capabilities with current assignment and available models', async () => {
   const router = createCapabilitiesRouter({
     pool: {
       query: async (sql, params) => {
@@ -88,7 +88,7 @@ test('GET /api/capabilities returns 5 capabilities with current assignment and a
 
     assert.equal(response.status, 200);
     assert.equal(payload.success, true);
-    assert.equal(payload.items.length, 5);
+    assert.equal(payload.items.length, 6);
 
     const chat = payload.items.find(item => item.capability === 'chat');
     const vision = payload.items.find(item => item.capability === 'vision');
@@ -151,6 +151,67 @@ test('GET /api/capabilities 把豆包语音分别列进实时通话和文字转�
     assert.deepEqual(realtime.options.map(item => item.model_id), ['2.2.0.0']);
     assert.deepEqual(tts.options.map(item => item.credential_name), ['豆包语音']);
     assert.deepEqual(tts.options.map(item => item.model_id), ['seed-tts-2.0']);
+  });
+});
+
+test('图片模型同时可选给画图和动态，但两个能力项保持独立', async () => {
+  const router = createCapabilitiesRouter({
+    pool: {
+      query: async sql => {
+        if (sql.includes('FROM capability_assignments ca')) return [[{
+          capability: 'image', enabled: 1, model_id: 'gpt-image-2', credential_id: 3, credential_name: '图片渠道', extras: null
+        }]];
+        if (sql.includes('FROM credentials c') && sql.includes('INNER JOIN credential_models cm')) {
+          return [[{
+            credential_id: 3, credential_name: '图片渠道', provider_type: 'openai-compatible', model_id: 'gpt-image-2', capabilities: '["image"]'
+          }]];
+        }
+        throw new Error(`Unexpected query: ${sql}`);
+      }
+    }
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const payload = await (await fetch(`${baseUrl}/api/capabilities`)).json();
+    const image = payload.items.find(item => item.capability === 'image');
+    const dynamic = payload.items.find(item => item.capability === 'dynamic');
+    assert.equal(image.current.model_id, 'gpt-image-2');
+    assert.equal(dynamic.current, null);
+    assert.deepEqual(dynamic.options.map(item => item.model_id), ['gpt-image-2']);
+  });
+});
+
+test('免费 Agnes 图片模型保留给聊天画图，但不能配置为动态发图', async () => {
+  assert.equal(supportsDynamicSingleImage('agnes-image-2.1-flash'), false);
+  assert.equal(supportsDynamicSingleImage('gpt-image-2'), true);
+
+  const router = createCapabilitiesRouter({
+    pool: {
+      query: async (sql, params) => {
+        if (sql.includes('FROM credential_models cm') && sql.includes('INNER JOIN credentials c')) {
+          assert.deepEqual(params, [16, 7, 'agnes-image-2.1-flash']);
+          return [[{
+            credential_id: 16,
+            credential_name: '免费',
+            provider_type: 'openai-compatible',
+            model_id: 'agnes-image-2.1-flash',
+            capabilities: '["image"]'
+          }]];
+        }
+        throw new Error(`Unexpected query: ${sql}`);
+      }
+    }
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/capabilities/dynamic`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential_id: 16, model_id: 'agnes-image-2.1-flash', enabled: true })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 400);
+    assert.match(payload.error, /九宫格/);
   });
 });
 
