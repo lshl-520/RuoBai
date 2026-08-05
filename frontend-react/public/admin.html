@@ -598,7 +598,8 @@
       <div class="card">
         <div class="card-header"><span class="card-title">资源使用</span></div>
         <div class="info-grid">
-          <span class="info-key">内存使用</span><span class="info-val" id="sysMemory">--</span>
+          <span class="info-key">Node 堆内存</span><span class="info-val" id="sysMemory">--</span>
+          <span class="info-key">服务器内存</span><span class="info-val" id="sysSystemMemory">--</span>
         </div>
       </div>
 
@@ -859,6 +860,10 @@
     }
 
     document.getElementById('sysMemory').textContent = `${s.memory.used_mb}MB / ${s.memory.total_mb}MB`;
+    const systemMemory = s.memory.system_total_mb > 0
+      ? `${s.memory.system_used_mb}MB / ${s.memory.system_total_mb}MB（可用 ${s.memory.system_free_mb}MB）`
+      : '--';
+    document.getElementById('sysSystemMemory').textContent = systemMemory;
 
     document.getElementById('sysNodeVersion').textContent = s.environment.node_version;
     document.getElementById('sysDbVersion').textContent = s.database.version;
@@ -888,9 +893,9 @@
       badge.className = 'badge badge-gray';
       badge.textContent = '未检测';
       applyBtn.disabled = true;
-    } else if (info.disabled && info.deploy_mode === 'docker') {
+    } else if (info.disabled && ['docker', 'release'].includes(info.deploy_mode)) {
       badge.className = 'badge badge-gray';
-      badge.textContent = 'Docker部署';
+      badge.textContent = info.deploy_mode === 'docker' ? 'Docker部署' : '成品发布';
       applyBtn.disabled = true;
     } else {
       badge.className = `badge ${info.is_behind ? 'badge-yellow' : 'badge-green'}`;

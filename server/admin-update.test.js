@@ -37,6 +37,7 @@ test('update check compares local HEAD with origin/main and lists changed files'
   const service = createUpdateService({
     projectRoot: '/app',
     now: () => new Date('2026-05-27T01:00:00.000Z'),
+    fileSystem: { access: async () => {} },
     runCommand: async (command, args) => {
       calls.push([command, ...args].join(' '));
       const key = [command, ...args].join(' ');
@@ -82,6 +83,29 @@ test('docker deploy mode disables git based update flow with a clear message', a
   );
 });
 
+test('release directory disables git based update flow with a clear message', async () => {
+  const service = createUpdateService({
+    projectRoot: '/release',
+    fileSystem: {
+      access: async () => { throw new Error('missing .git'); }
+    },
+    runCommand: async () => {
+      throw new Error('git commands should not run in release mode');
+    }
+  });
+
+  const checkResult = await service.checkForUpdates();
+  assert.equal(checkResult.disabled, true);
+  assert.equal(checkResult.deploy_mode, 'release');
+  assert.equal(checkResult.is_behind, false);
+  assert.match(checkResult.message, /成品发布目录/);
+
+  await assert.rejects(
+    () => service.applyUpdate(),
+    /成品发布目录/
+  );
+});
+
 test('update apply backs up database before pulling code and reloads pm2 after health check', async () => {
   const calls = [];
   const service = createUpdateService({
@@ -101,6 +125,7 @@ test('update apply backs up database before pulling code and reloads pm2 after h
       readdir: async () => [],
       stat: async () => ({ mtimeMs: Date.now() }),
       unlink: async () => {},
+      access: async () => {},
       readFile: async () => '[]',
       writeFile: async () => {}
     },
