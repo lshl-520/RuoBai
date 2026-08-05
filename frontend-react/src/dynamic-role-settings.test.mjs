@@ -17,7 +17,8 @@ test('角色编辑页保存固定形象和生活模板，而不是要求用户�
 test('能力页明确分开聊天手动画图和自动动态发图', () => {
   assert.match(modelsSource, /dynamic:\s*\{\s*icon: "image", name: "动态发图"/);
   assert.match(modelsSource, /\{ key: "dynamic", icon: "image", label: "动态" \}/);
-  assert.match(modelsSource, /“画图发图”是你在聊天里让她画.*“动态发图”只用于她自动发动态/);
+  assert.match(modelsSource, /动态只显示能稳定返回单张图片的渠道/);
+  assert.doesNotMatch(modelsSource, /两项开关、费用和失败状态各自独立/);
 });
 
 test('动态模型选择失败不会被静默吞掉', () => {

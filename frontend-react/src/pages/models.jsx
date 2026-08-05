@@ -814,7 +814,6 @@ function ModelsSection() {
             );
           })}
         </div>
-        {!capLoading && <div className="route-note">“画图发图”是你在聊天里让她画，免费 Agnes 适合先体验；“动态发图”只用于她自动发动态，已排除会返回九宫格的免费模型，建议选 img 生图或猫图片等稳定单图渠道。两项开关、费用和失败状态各自独立。</div>}
         {capError && !capPicker && <div className="route-note" style={{ color: "#c4566b" }}>{capError}</div>}
       </div>
 
