@@ -246,16 +246,20 @@
   background: rgba(250,246,242,0.92); backdrop-filter: blur(12px);
   position: relative; z-index: 6;
 }
-.input-row { display: flex; align-items: flex-end; gap: 9px; }
+.input-row { display: flex; align-items: flex-end; gap: 9px; min-width: 0; }
 .ib-tool { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--ink-soft); flex-shrink: 0; }
 .ib-tool svg { width: 22px; height: 22px; }
-.ib-field { flex: 1; background: var(--card); border-radius: 22px; padding: 9px 14px; box-shadow: var(--shadow-sm); }
-.ib-field textarea { width: 100%; border: none; outline: none; background: none; resize: none; font-size: 14.5px; line-height: 1.4; max-height: 90px; color: var(--ink); }
+.ib-field { flex: 1 1 auto; min-width: 0; background: var(--card); border-radius: 22px; padding: 9px 14px; box-shadow: var(--shadow-sm); }
+.ib-field textarea { display: block; width: 100%; min-width: 0; min-height: 22px; border: none; outline: none; background: none; resize: none; font-size: 14.5px; line-height: 1.4; max-height: 90px; overflow-y: auto; overflow-wrap: anywhere; color: var(--ink); }
 .ib-field textarea::placeholder { color: var(--ink-ghost); }
 .ib-send { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; background: var(--rose); color: #fff; box-shadow: var(--shadow-rose); transition: transform 0.15s; }
 .ib-send:active { transform: scale(0.9); }
 .ib-send svg { width: 20px; height: 20px; }
 .ib-send.busy { opacity: 0.5; }
+.ib-mobile-action, .mobile-input-actions { display: none; }
+.mobile-input-action { min-width: 0; min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border-radius: 14px; background: var(--card); color: var(--ink-soft); font-size: 11px; }
+.mobile-input-action svg { width: 22px; height: 22px; }
+.mobile-input-action:disabled { opacity: .45; }
 /* 语音模式切换：激活状态 */
 .ib-tool.on { color: var(--rose); background: var(--rose-tint); }
 /* 聊天室更多菜单 */
@@ -636,6 +640,20 @@
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 5px;
+}
+
+/* 手机上优先保证文字和发送；次要聊天操作放入一个可展开的面板。 */
+@media (max-width: 600px) {
+  .input-bar { padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)); }
+  .input-row { gap: 8px; }
+  .input-row > .ib-desktop-tool { display: none; }
+  .ib-field { padding: 8px 12px; }
+  .ib-field textarea { font-size: 16px; line-height: 1.35; }
+  .ib-mobile-action { display: grid; flex: 0 0 40px; }
+  .ib-mobile-action svg { width: 21px; height: 21px; }
+  .ib-mobile-more.on { color: var(--rose); background: var(--rose-tint); }
+  .mobile-input-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0 0 8px; padding: 8px 4px 2px; border-top: 1px solid var(--line); }
+  .ib-voice-sticker { display: grid; flex: 0 0 40px; }
 }
 
 /* ============================================================
