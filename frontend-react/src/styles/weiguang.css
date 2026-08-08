@@ -79,9 +79,8 @@ html, body {
 .rb-app {
   display: flex;
   flex-direction: column;
-  height: 100dvh;
-  height: 100vh; /* fallback for old browsers */
-  height: 100dvh;
+  height: var(--app-viewport-height, 100dvh);
+  min-height: 0;
   max-width: 480px;
   margin: 0 auto;
   position: relative;
