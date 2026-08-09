@@ -7,17 +7,22 @@ import { pool as defaultPool, withTransaction as defaultWithTransaction } from '
 import { asyncHandler, clamp, getActiveCharacter, parseInteger, toBoolean } from './helpers.js';
 import { guessModelCapabilities } from './model-capabilities.js';
 import { buildIdentityPack } from './identity-pack.js';
+import { installLive2DArchive, readMultipartUpload } from './live2d-assets.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
 const defaultPortraitDir = path.join(projectRoot, 'user_assets', 'portraits');
+const defaultLive2DAssetDir = path.join(projectRoot, 'user_assets', 'live2d');
+const defaultLive2DTempDir = path.join(projectRoot, 'user_assets', '.live2d-tmp');
 
 export function createRolesRouter({
   pool = defaultPool,
   withTransaction = defaultWithTransaction,
   fileStorage = fs,
   portraitDir = defaultPortraitDir,
+  live2dAssetDir = defaultLive2DAssetDir,
+  live2dTempDir = defaultLive2DTempDir,
   now = Date.now
 } = {}) {
   const router = express.Router();
@@ -77,6 +82,19 @@ async function ensureUniqueCharacterKey(connection, userId, preferredKey, exclud
 }
 
 const CHAT_THINKING_LEVELS = new Set(['off', 'low', 'mid', 'high', 'ultra']);
+const VISUAL_MODES = new Set(['builtin', 'image', 'live2d']);
+const VISUAL_FRAME_MODES = new Set(['knee', 'half', 'full']);
+const FULLSCREEN_FRAME_MODES = new Set(['half', 'full']);
+const DEFAULT_VISUAL_FRAME_CONFIG = {
+  chatFrame: 'knee',
+  fullscreenFrame: 'full',
+  chatZoom: 1,
+  chatOffsetX: 0,
+  chatOffsetY: 0,
+  fullscreenZoom: 1,
+  fullscreenOffsetX: 0,
+  fullscreenOffsetY: 0
+};
 
 function normalizeChatThinkingLevel(value, fallback = 'off') {
   const level = String(value ?? fallback).trim().toLowerCase();
@@ -91,6 +109,37 @@ function modelSupportsChat(capabilities, modelId) {
     values = [];
   }
   return new Set([...values, ...guessModelCapabilities(modelId)]).has('chat');
+}
+
+function normalizeVisualMode(value, fallback = 'builtin') {
+  const mode = String(value ?? fallback).trim().toLowerCase();
+  return VISUAL_MODES.has(mode) ? mode : fallback;
+}
+
+function normalizeVisualFrameNumber(value, fallback, min, max) {
+  const number = Number(value);
+  return Number.isFinite(number) ? clamp(number, min, max) : fallback;
+}
+
+function sanitizeVisualFrameConfig(value) {
+  const source = parseStructuredValue(value) || {};
+  const chatFrame = VISUAL_FRAME_MODES.has(String(source.chatFrame || ''))
+    ? String(source.chatFrame)
+    : DEFAULT_VISUAL_FRAME_CONFIG.chatFrame;
+  const fullscreenFrame = FULLSCREEN_FRAME_MODES.has(String(source.fullscreenFrame || ''))
+    ? String(source.fullscreenFrame)
+    : DEFAULT_VISUAL_FRAME_CONFIG.fullscreenFrame;
+
+  return JSON.stringify({
+    chatFrame,
+    fullscreenFrame,
+    chatZoom: normalizeVisualFrameNumber(source.chatZoom, DEFAULT_VISUAL_FRAME_CONFIG.chatZoom, 0.7, 2.4),
+    chatOffsetX: normalizeVisualFrameNumber(source.chatOffsetX, DEFAULT_VISUAL_FRAME_CONFIG.chatOffsetX, -0.35, 0.35),
+    chatOffsetY: normalizeVisualFrameNumber(source.chatOffsetY, DEFAULT_VISUAL_FRAME_CONFIG.chatOffsetY, -0.35, 0.35),
+    fullscreenZoom: normalizeVisualFrameNumber(source.fullscreenZoom, DEFAULT_VISUAL_FRAME_CONFIG.fullscreenZoom, 0.7, 2.4),
+    fullscreenOffsetX: normalizeVisualFrameNumber(source.fullscreenOffsetX, DEFAULT_VISUAL_FRAME_CONFIG.fullscreenOffsetX, -0.35, 0.35),
+    fullscreenOffsetY: normalizeVisualFrameNumber(source.fullscreenOffsetY, DEFAULT_VISUAL_FRAME_CONFIG.fullscreenOffsetY, -0.35, 0.35)
+  });
 }
 
 const AUTO_MOMENT_PROFILE_FIELDS = ['temperament', 'face', 'eyes', 'hair', 'skin', 'expression', 'other'];
@@ -156,7 +205,9 @@ function serializeRole(row) {
     ...row,
     auto_moments_image_resolution: normalizeAutoMomentImageResolution(row.auto_moments_image_resolution),
     auto_moments_image_profile: parseStructuredValue(row.auto_moments_image_profile),
-    auto_moments_templates: parseStructuredValue(row.auto_moments_templates)
+    auto_moments_templates: parseStructuredValue(row.auto_moments_templates),
+    live2d_manifest: parseStructuredValue(row.live2d_manifest),
+    visual_frame_config: parseStructuredValue(row.visual_frame_config)
   };
 }
 
@@ -182,6 +233,9 @@ function sanitizeCharacterPayload(body = {}) {
     ? null
     : ([999, ...Array.from({ length: 18 }, (_item, index) => index)].includes(rawPortraitId) ? rawPortraitId : null);
   const portraitCustomUrl = String(body.portrait_custom_url || body.portraitCustomUrl || '').trim() || null;
+  const visualMode = normalizeVisualMode(body.visual_mode ?? body.visualMode);
+  const visualPreviewUrl = String(body.visual_preview_url || body.visualPreviewUrl || '').trim() || null;
+  const visualFrameConfig = sanitizeVisualFrameConfig(body.visual_frame_config ?? body.visualFrame);
 
   return {
     char_key: buildCharacterKeyCandidate(body),
@@ -191,6 +245,9 @@ function sanitizeCharacterPayload(body = {}) {
     avatar: String(body.avatar || '').trim(),
     portrait_id: portraitId,
     portrait_custom_url: portraitId === 999 ? portraitCustomUrl : null,
+    visual_mode: visualMode,
+    visual_preview_url: visualPreviewUrl,
+    visual_frame_config: visualFrameConfig,
     mood: Math.min(100, Math.max(0, parseInteger(body.mood, 80))),
     intimacy: Math.min(100, Math.max(0, parseInteger(body.intimacy, 50))),
     speech_style: ['natural', 'compact', 'roleplay'].includes(body.speech_style) ? body.speech_style : 'natural',
@@ -315,7 +372,7 @@ async function loadRoles(userId, { includeDeleted = false } = {}, connection = p
 
   const [rows] = await connection.query(
     `
-      SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
+      SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, visual_mode, visual_preview_url, live2d_asset_id, live2d_model_url, live2d_manifest, visual_frame_config, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
              auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution, auto_moments_daily_min, auto_moments_daily_max,
              auto_moments_image_profile, auto_moments_templates,
              auto_moments_min_interval_hours, auto_moments_last_posted_at,
@@ -364,14 +421,14 @@ router.post('/', asyncHandler(async (req, res) => {
       `
         INSERT INTO characters
           (
-            user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy,
+            user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, visual_mode, visual_preview_url, visual_frame_config, mood, intimacy,
             speech_style,
             auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution, auto_moments_daily_min, auto_moments_daily_max,
             auto_moments_image_profile, auto_moments_templates,
             auto_moments_min_interval_hours,
             is_active, is_deleted, delete_after, created_at
           )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NOW())
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NOW())
       `,
       [
         req.userId,
@@ -382,6 +439,9 @@ router.post('/', asyncHandler(async (req, res) => {
         payload.avatar,
         payload.portrait_id,
         payload.portrait_custom_url,
+        payload.visual_mode,
+        payload.visual_preview_url,
+        payload.visual_frame_config,
         payload.mood,
         payload.intimacy,
         payload.speech_style,
@@ -399,7 +459,7 @@ router.post('/', asyncHandler(async (req, res) => {
 
     const [rows] = await connection.query(
       `
-        SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
+        SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, visual_mode, visual_preview_url, live2d_asset_id, live2d_model_url, live2d_manifest, visual_frame_config, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
                auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution, auto_moments_daily_min, auto_moments_daily_max,
                auto_moments_image_profile, auto_moments_templates,
                auto_moments_min_interval_hours, auto_moments_last_posted_at,
@@ -528,6 +588,9 @@ router.patch('/:id', asyncHandler(async (req, res) => {
           avatar = COALESCE(?, avatar),
           portrait_id = CASE WHEN ? = 1 THEN ? ELSE portrait_id END,
           portrait_custom_url = CASE WHEN ? = 1 THEN ? ELSE portrait_custom_url END,
+          visual_mode = CASE WHEN ? = 1 THEN ? ELSE visual_mode END,
+          visual_preview_url = CASE WHEN ? = 1 THEN ? ELSE visual_preview_url END,
+          visual_frame_config = CASE WHEN ? = 1 THEN ? ELSE visual_frame_config END,
           mood = COALESCE(?, mood),
           intimacy = COALESCE(?, intimacy),
           speech_style = COALESCE(?, speech_style),
@@ -555,6 +618,12 @@ router.patch('/:id', asyncHandler(async (req, res) => {
         payload.portrait_id,
         (req.body?.portrait_custom_url !== undefined || req.body?.portraitCustomUrl !== undefined || req.body?.portrait_id !== undefined || req.body?.portraitId !== undefined) ? 1 : 0,
         payload.portrait_custom_url,
+        (req.body?.visual_mode !== undefined || req.body?.visualMode !== undefined) ? 1 : 0,
+        payload.visual_mode,
+        (req.body?.visual_preview_url !== undefined || req.body?.visualPreviewUrl !== undefined) ? 1 : 0,
+        payload.visual_preview_url,
+        (req.body?.visual_frame_config !== undefined || req.body?.visualFrame !== undefined) ? 1 : 0,
+        payload.visual_frame_config,
         req.body?.mood !== undefined ? payload.mood : null,
         req.body?.intimacy !== undefined ? payload.intimacy : null,
         req.body?.speech_style !== undefined ? payload.speech_style : null,
@@ -585,7 +654,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
 
     const [updatedRows] = await connection.query(
       `
-        SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
+        SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, visual_mode, visual_preview_url, live2d_asset_id, live2d_model_url, live2d_manifest, visual_frame_config, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
                auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution, auto_moments_daily_min, auto_moments_daily_max,
                auto_moments_image_profile, auto_moments_templates,
                auto_moments_min_interval_hours, auto_moments_last_posted_at,
@@ -609,7 +678,7 @@ router.get('/:id/identity-pack', asyncHandler(async (req, res) => {
 
   const [characterRows] = await pool.query(
     `
-      SELECT id, user_id, name, tag, persona, avatar, speech_style, portrait_id, portrait_custom_url,
+      SELECT id, user_id, name, tag, persona, avatar, speech_style, portrait_id, portrait_custom_url, visual_mode, visual_preview_url, live2d_model_url, live2d_manifest, visual_frame_config,
              mood, intimacy, auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution,
              auto_moments_image_profile, auto_moments_templates,
              auto_moments_daily_min, auto_moments_daily_max, auto_moments_min_interval_hours
@@ -680,6 +749,112 @@ router.post('/:id/portrait', asyncHandler(async (req, res) => {
     success: true,
     portrait_url: `/user_assets/portraits/${req.userId}/${filename}`
   });
+}));
+
+router.post('/:id/live2d-asset', asyncHandler(async (req, res) => {
+  const characterId = parseInteger(req.params.id);
+  if (!characterId) {
+    return res.status(400).json({ success: false, error: '角色 ID 无效' });
+  }
+
+  const [rows] = await pool.query(
+    'SELECT id, live2d_asset_id FROM characters WHERE id = ? AND user_id = ? AND is_deleted = 0 LIMIT 1',
+    [characterId, req.userId]
+  );
+  if (!rows.length) {
+    return res.status(404).json({ success: false, error: '角色不存在' });
+  }
+
+  let upload;
+  try {
+    upload = await readMultipartUpload(req, { tempDir: live2dTempDir });
+  } catch (error) {
+    return res.status(400).json({ success: false, error: error.message || 'Live2D 压缩包上传失败' });
+  }
+
+  const assetId = randomUUID();
+  const assetDir = path.join(live2dAssetDir, String(req.userId), String(characterId), assetId);
+  const publicBaseUrl = `/user_assets/live2d/${req.userId}/${characterId}/${assetId}`;
+
+  try {
+    const manifest = await installLive2DArchive({
+      archivePath: upload.path,
+      targetDir: assetDir,
+      publicBaseUrl,
+      sourceName: upload.filename,
+      fileStorage,
+      now
+    });
+
+    await pool.query(
+      `
+        UPDATE characters
+        SET visual_mode = 'live2d',
+            visual_preview_url = ?,
+            live2d_asset_id = ?,
+            live2d_model_url = ?,
+            live2d_manifest = ?
+        WHERE id = ? AND user_id = ? AND is_deleted = 0
+      `,
+      [manifest.previewUrl, assetId, manifest.modelUrl, JSON.stringify(manifest), characterId, req.userId]
+    );
+
+    const previousAssetId = String(rows[0].live2d_asset_id || '');
+    if (previousAssetId && previousAssetId !== assetId && /^[0-9a-f-]{20,80}$/i.test(previousAssetId)) {
+      await fileStorage.rm?.(path.join(live2dAssetDir, String(req.userId), String(characterId), previousAssetId), { recursive: true, force: true });
+    }
+
+    return res.json({
+      success: true,
+      asset: {
+        asset_id: assetId,
+        visual_mode: 'live2d',
+        model_url: manifest.modelUrl,
+        preview_url: manifest.previewUrl,
+        manifest
+      }
+    });
+  } catch (error) {
+    await fileStorage.rm?.(assetDir, { recursive: true, force: true });
+    return res.status(400).json({ success: false, error: error.message || 'Live2D 压缩包无效' });
+  } finally {
+    await fs.rm(upload.path, { force: true }).catch(() => {});
+  }
+}));
+
+router.delete('/:id/live2d-asset', asyncHandler(async (req, res) => {
+  const characterId = parseInteger(req.params.id);
+  if (!characterId) {
+    return res.status(400).json({ success: false, error: '角色 ID 无效' });
+  }
+
+  const [rows] = await pool.query(
+    'SELECT id, live2d_asset_id FROM characters WHERE id = ? AND user_id = ? AND is_deleted = 0 LIMIT 1',
+    [characterId, req.userId]
+  );
+  if (!rows.length) {
+    return res.status(404).json({ success: false, error: '角色不存在' });
+  }
+
+  await pool.query(
+    `
+      UPDATE characters
+      SET visual_mode = 'builtin',
+          visual_preview_url = NULL,
+          live2d_asset_id = NULL,
+          live2d_model_url = NULL,
+          live2d_manifest = NULL
+      WHERE id = ? AND user_id = ? AND is_deleted = 0
+    `,
+    [characterId, req.userId]
+  );
+
+  const assetId = String(rows[0].live2d_asset_id || '');
+  if (assetId && /^[0-9a-f-]{20,80}$/i.test(assetId)) {
+    await fileStorage.rm?.(path.join(live2dAssetDir, String(req.userId), String(characterId), assetId), { recursive: true, force: true });
+  }
+
+  return res.json({ success: true });
 }));
 
 router.post('/:id/switch', asyncHandler(async (req, res) => {
@@ -796,7 +971,7 @@ router.post('/:id/restore', asyncHandler(async (req, res) => {
 
     const [updatedRows] = await connection.query(
       `
-        SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
+        SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, visual_mode, visual_preview_url, live2d_asset_id, live2d_model_url, live2d_manifest, visual_frame_config, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
                auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution, auto_moments_daily_min, auto_moments_daily_max,
                auto_moments_min_interval_hours, auto_moments_last_posted_at,
                is_active, is_deleted, delete_after, created_at

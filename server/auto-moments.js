@@ -2,6 +2,12 @@ import { pool } from './db.js';
 import { supportsDynamicSingleImage } from './capabilities.js';
 import { generateImage } from './image-gen.js';
 import { buildChatCompletionsUrl } from './chat.js';
+import {
+  buildCharacterContextPrompt,
+  buildCharacterContextSnapshot,
+  loadRecentLifeEvents,
+} from './character-context.js';
+import { loadPersonaRuntime } from './persona-runtime.js';
 import { recordLifeEventSource } from './life-events.js';
 
 const DEFAULT_DAILY_MAX = 4;
@@ -190,6 +196,9 @@ function buildMomentMessages(character, context) {
     .map(item => `- ${String(item.content || '').trim()}`)
     .filter(line => line.length > 4)
     .join('\n');
+  const characterContext = context.contextSnapshot
+    ? buildCharacterContextPrompt(context.contextSnapshot, { consumer: 'chat' })
+    : '';
 
   return [
     {
@@ -201,7 +210,8 @@ function buildMomentMessages(character, context) {
         '只输出 JSON：{"should_post":true,"content":"正文","image_mode":"none|selfie|third_person","image_brief":"给图片的简短生活场景"}。不发时输出 {"should_post":false}。',
         persona ? `人设参考：${persona.slice(0, 1000)}` : '',
         profile ? `固定形象：${profile}` : '',
-        templates ? `可选生活模板：${templates}` : ''
+        templates ? `可选生活模板：${templates}` : '',
+        characterContext
       ].filter(Boolean).join('\n')
     },
     {
@@ -305,7 +315,7 @@ export function createAutoMomentsService({
     return capability === 'dynamic' && item && !supportsDynamicSingleImage(item.model) ? null : item;
   }
 
-  async function loadContext(userId, characterId) {
+  async function loadContext(userId, characterId, character = {}) {
     const [[messages], [memories], [recentMoments]] = await Promise.all([
       db.query(
         `
@@ -338,7 +348,19 @@ export function createAutoMomentsService({
         [userId, characterId, 4]
       )
     ]);
-    return { messages: messages.reverse(), memories, recentMoments };
+    const [personaRuntime, recentLifeEvents] = await Promise.all([
+      loadPersonaRuntime(db, { userId, characterId }),
+      loadRecentLifeEvents(db, { userId, characterId, limit: 8 })
+    ]);
+    const orderedMessages = messages.reverse();
+    const contextSnapshot = buildCharacterContextSnapshot({
+      character,
+      personaRuntime,
+      recentMessages: orderedMessages,
+      memories,
+      recentLifeEvents,
+    });
+    return { messages: orderedMessages, memories, recentMoments, contextSnapshot };
   }
 
   async function countTodayMoments(userId, characterId) {
@@ -408,7 +430,7 @@ export function createAutoMomentsService({
         logger.warn?.(`[auto-moments] ${character.name} 未启用聊天能力，跳过本次动态`);
         return { characterId, status: 'skipped_no_chat_capability' };
       }
-      const context = await loadContext(userId, characterId);
+      const context = await loadContext(userId, characterId, character);
       plan = await generateMomentPlan(character, chatConfig, context);
     }
     if (!plan.shouldPost) {

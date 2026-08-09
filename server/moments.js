@@ -800,7 +800,9 @@ export function createMomentsRouter({
             sourceType: 'comment',
             sourceId: item.id,
             title: `${momentRows[0]?.content || ''} ${content}`,
-            eventType: 'life'
+            eventType: 'life',
+            relatedSourceType: 'moment',
+            relatedSourceId: momentId
           });
         } catch {
           // 事件索引是辅助能力，不能影响评论发送结果。

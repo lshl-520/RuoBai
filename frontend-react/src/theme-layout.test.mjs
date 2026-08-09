@@ -77,9 +77,10 @@ test("聊天室立绘不用持续呼吸或光晕伪造状态", () => {
 
 test("原版动态装饰头像有等价筛选入口，聊天室常驻立绘不能被主题隐藏", () => {
   assert.match(moments, /filter === null/);
-  assert.match(moments, /user\?\.username \|\| "我"/);
+  assert.match(moments, /user\?\.name \|\| "我"/);
   assert.match(chat, /className="ct-avatar"[\s\S]{0,260}onClick=\{\(\) => setBig\(true\)\}/);
-  assert.match(chat, /className="chat-fig-img"[\s\S]{0,180}setBig\(true\)/);
+  assert.match(chat, /className="chat-figure-stage"[\s\S]{0,600}onOpen\(\)/);
+  assert.match(chat, /<ChatFigure[\s\S]{0,300}onOpen=\{\(\) => setBig\(true\)\}/);
   assert.match(classic, /\.chat-figure\s*\{\s*display:\s*block/);
   assert.doesNotMatch(classic, /\.chat-figure\s*\{\s*display:\s*none/);
 });

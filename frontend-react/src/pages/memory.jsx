@@ -30,7 +30,10 @@ function fromApiLifeEvent(event) {
     title: event.title || "未命名生活事件",
     eventType: event.event_type || "life",
     status: event.status || "active",
+    statusNote: event.status_note || "",
     occurredAt: event.occurred_at || event.created_at || "",
+    expiresAt: event.expires_at || "",
+    correctedAt: event.corrected_at || "",
     createdAt: event.created_at || "",
     sources: Array.isArray(event.sources) ? event.sources : [],
   };
@@ -132,7 +135,7 @@ function MemoryCard({ m, onPin, onEdit, onDelete }) {
   );
 }
 
-function LifeEventCard({ event, onStatusChange, onOpenSource, onDelete }) {
+function LifeEventCard({ event, onStatusChange, onCorrect, onOpenSource, onDelete }) {
   return (
     <div className="life-event-card">
       <div className="life-event-main">
@@ -158,9 +161,10 @@ function LifeEventCard({ event, onStatusChange, onOpenSource, onDelete }) {
               {LIFE_EVENT_STATUS_OPTIONS.map(([value]) => <option key={value} value={value}>{getLifeEventStatusLabel(value)}</option>)}
             </select>
           </label>
+          <button type="button" className="life-event-delete" title="纠正这条事件的标题，不删除原始来源" onClick={() => onCorrect(event)}>纠正</button>
           <button type="button" className="life-event-delete" title="只删除这条回顾，不删除聊天、动态或评论原文" onClick={() => onDelete(event)}>删除</button>
         </div>
-        <div className="life-event-status-hint">{getLifeEventStatusHint(event.status)}</div>
+        <div className="life-event-status-hint">{getLifeEventStatusHint(event.status)}{event.statusNote ? ` ${event.statusNote}` : ""}</div>
       </div>
     </div>
   );
@@ -334,6 +338,21 @@ function MemoryScreen() {
     }
   };
 
+  const handleEventCorrection = async (event) => {
+    const title = window.prompt("把这件生活事件纠正成什么？", event.title);
+    if (title === null || !title.trim() || title.trim() === event.title) return;
+    setActionError("");
+    try {
+      await updateLifeEvent(event.id, { title: title.trim(), status_note: "已按你的纠正更新" });
+      setEvents((current) => current.map((item) => item.id === event.id
+        ? { ...item, title: title.trim(), statusNote: "已按你的纠正更新" }
+        : item));
+    } catch (e) {
+      setActionError(e?.message || "这件事暂时没纠正成功，请再试一次。");
+      refreshEvents();
+    }
+  };
+
   const handleEventDelete = async (event) => {
     if (!window.confirm("只删除这条生活回顾，不会删除聊天、动态或评论原文。确定删除吗？")) return;
     setActionError("");
@@ -459,7 +478,7 @@ function MemoryScreen() {
           </div>
           {events.length > 0 ? (
             <div className="life-event-list">
-              {events.map((event) => <LifeEventCard key={event.id} event={event} onStatusChange={handleEventStatus} onOpenSource={openEventSource} onDelete={handleEventDelete} />)}
+              {events.map((event) => <LifeEventCard key={event.id} event={event} onStatusChange={handleEventStatus} onCorrect={handleEventCorrection} onOpenSource={openEventSource} onDelete={handleEventDelete} />)}
             </div>
           ) : (
             <div className="life-event-empty">还没有可回顾的生活事件。原始聊天、动态和评论会继续保留。</div>

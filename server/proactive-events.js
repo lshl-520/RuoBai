@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
     params.push(limit);
     const [rows] = await pool.query(
       `
-        SELECT id, character_id, message_id, event_type, content, status, error_message,
+        SELECT id, character_id, message_id, event_type, source_type, source_id, content, status, error_message,
                created_at, sent_at, viewed_at
         FROM proactive_events
         WHERE user_id = ? ${filter}

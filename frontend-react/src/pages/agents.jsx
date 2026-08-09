@@ -1,8 +1,8 @@
 import React from "react";
 import { Icon } from "../store.jsx";
-import { getRoles, getRolePortraitSrc, createRole, updateRole, switchRole, buildRolePayload, restoreRole, getIdentityPack, testAutoMoment } from "../lib/roles.js";
-import { Live2DStage } from "../components/Live2DStage.jsx";
+import { getRoles, getRolePortraitSrc, createRole, updateRole, switchRole, buildRolePayload, restoreRole, getIdentityPack, testAutoMoment, uploadRolePortrait, uploadRoleLive2D, removeRoleLive2D } from "../lib/roles.js";
 import { getProactiveEvents } from "../lib/proactive.js";
+import { getRoleVisualFrame, VISUAL_FRAME_OPTIONS } from "../lib/visual-frames.js";
 /* 角色 — 列表(Hero + 网格) + 详情 + 创建/编辑 */
 const { useState: useStateA, useEffect: useEffectA, useRef: useRefA } = React;
 const MOMENT_FREQ_PRESETS = [2, 4, 6];
@@ -20,6 +20,10 @@ function normalizeMomentFrequency(value) {
 
 /* 后端角色 → 2.0 agent 格式 */
 function getFullPortrait(role) {
+  const visualMode = String(role?.visual_mode ?? role?.visualMode ?? "").trim().toLowerCase();
+  const visualPreview = String(role?.visual_preview_url ?? role?.visualPreviewUrl ?? "").trim();
+  if (visualMode === "live2d" && visualPreview) return visualPreview;
+
   const portraitId = Number(role?.portrait_id ?? role?.portraitId);
   const customUrl = String(role?.portrait_custom_url ?? role?.portraitCustomUrl ?? "").trim();
   if (portraitId === 999 && customUrl) return customUrl;
@@ -28,6 +32,7 @@ function getFullPortrait(role) {
 }
 
 function toAgent(role) {
+  const visualMode = String(role.visual_mode || role.visualMode || "builtin");
   return {
     id: role.id,
     name: role.name || "未命名",
@@ -41,7 +46,11 @@ function toAgent(role) {
     isDefault: Boolean(role.is_active),
     autoMoments: Boolean(role.auto_moments_enabled),
     autoMomentsImages: Boolean(role.auto_moments_images_enabled),
-    live2dModelUrl: String(role.live2d_model_url || role.live2dModelUrl || ""),
+    visualMode,
+    visualPreviewUrl: String(role.visual_preview_url || role.visualPreviewUrl || ""),
+    live2dModelUrl: visualMode === "live2d" ? String(role.live2d_model_url || role.live2dModelUrl || "") : "",
+    live2dManifest: role.live2d_manifest || role.live2dManifest || null,
+    visualFrame: getRoleVisualFrame(role),
     momentFreq: normalizeMomentFrequency(role.auto_moments_daily_max),
     handle: role.tag || "角色",
     _raw: role,
@@ -53,7 +62,7 @@ function AgentHero({ agent, onChat, onDetail }) {
   return (
     <div className="hero">
       <div className="hero-live2d-click" onClick={() => onDetail(agent)}>
-        <Live2DStage className="hero-bg" modelUrl={agent.live2dModelUrl} staticSrc={agent.cover} fallbackSrc={agent.cover} alt={agent.name} />
+        <img className="hero-bg" src={agent.cover} alt={agent.name} />
       </div>
       <div className="hero-scrim" />
       <div className="hero-top">
@@ -82,7 +91,7 @@ function AgentCard({ agent, onDetail }) {
   return (
     <div className="agent-card" onClick={() => onDetail(agent)}>
       <div className="ac-photo">
-        <Live2DStage className="detail-live2d" modelUrl={agent.live2dModelUrl} staticSrc={agent.cover} fallbackSrc={agent.cover} alt={agent.name} />
+        <img className="detail-live2d" src={agent.cover} alt={agent.name} />
         <div className="ac-scrim" />
         {agent.online && <span className="ac-online" />}
           <div className="ac-overlay">
@@ -268,7 +277,7 @@ function CharacterDetail({ agent, onClose, onChat, onEdit, onDelete, onSetMain, 
   return (
     <div className="detail-screen anim-screen">
       <div className="detail-photo">
-        <img src={agent.cover} alt={agent.name} />
+        <img className="detail-live2d" src={agent.cover} alt={agent.name} />
         <div className="detail-scrim" />
         <button className="detail-back" onClick={onClose}><Icon name="back" /></button>
         {agent.isDefault && <span className="detail-badge"><Icon name="heartFill" style={{ width: 11, height: 11 }} /> 主陪伴</span>}
@@ -449,6 +458,11 @@ function AgentEditor({ agent, onClose, onSave }) {
   const [tagline, setTagline] = useStateA(agent?.tagline || "");
   const [portrait, setPortrait] = useStateA(agent?.avatar || PORTRAIT_OPTIONS[0]);
   const [uploads, setUploads] = useStateA([]); // 用户上传的自定义头像(dataURL)
+  const [visualMode, setVisualMode] = useStateA(agent?._raw?.visual_mode || (agent?.live2dModelUrl ? "live2d" : (agent?._raw?.portrait_custom_url ? "image" : "builtin")));
+  const [live2dAsset, setLive2dAsset] = useStateA(agent?._raw?.live2d_manifest || null);
+  const [visualFrame, setVisualFrame] = useStateA(() => getRoleVisualFrame(agent?._raw || agent));
+  const [portraitUploading, setPortraitUploading] = useStateA(false);
+  const [live2dUploading, setLive2dUploading] = useStateA(false);
   const [tagsStr, setTagsStr] = useStateA((agent?.tags || []).join(" "));
   const [auto, setAuto] = useStateA(agent?.autoMoments ?? false);
   const [autoImages, setAutoImages] = useStateA(agent?.autoMomentsImages ?? false);
@@ -469,12 +483,100 @@ function AgentEditor({ agent, onClose, onSave }) {
   const onUpload = (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => { const url = reader.result; setUploads((p) => [url, ...p]); setPortrait(url); };
-    reader.readAsDataURL(file);
     e.target.value = "";
+    if (!editing || !agent?._raw?.id) {
+      setError("先保存角色，再上传自定义形象");
+      return;
+    }
+    setPortraitUploading(true);
+    setError("");
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const result = await uploadRolePortrait(agent._raw.id, reader.result);
+        const url = result?.portrait_url;
+        if (!url) throw new Error("图片上传后没有返回地址");
+        await updateRole(agent._raw.id, {
+          avatar: url,
+          portrait_id: 999,
+          portrait_custom_url: url,
+          visual_mode: "image",
+        });
+        setUploads((p) => [url, ...p]);
+        setPortrait(url);
+        setVisualMode("image");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "图片上传失败");
+      } finally {
+        setPortraitUploading(false);
+      }
+    };
+    reader.onerror = () => {
+      setPortraitUploading(false);
+      setError("读取图片失败");
+    };
+    reader.readAsDataURL(file);
   };
-  const isCustom = portrait.startsWith("data:");
+
+  const onLive2DUpload = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!editing || !agent?._raw?.id) {
+      setError("先保存角色，再上传 Live2D 模型包");
+      return;
+    }
+    if (file.size > 80 * 1024 * 1024) {
+      setError("Live2D ZIP 不能超过 80 MiB，请换用较小的模型包");
+      return;
+    }
+    setLive2dUploading(true);
+    setError("");
+    try {
+      const result = await uploadRoleLive2D(agent._raw.id, file);
+      const asset = result?.asset;
+      if (!asset?.model_url) throw new Error("模型包上传后没有返回模型入口");
+      setLive2dAsset(asset.manifest || null);
+      setVisualMode("live2d");
+      if (asset.preview_url) {
+        setPortrait(asset.preview_url);
+        setUploads((p) => [asset.preview_url, ...p.filter((url) => url !== asset.preview_url)]);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Live2D 模型包上传失败";
+      setError(/status 413/i.test(message)
+        ? "上传被服务器体积限制拒绝（413），不是模型格式问题；等待服务器上传限制更新后再试"
+        : message);
+    } finally {
+      setLive2dUploading(false);
+    }
+  };
+
+  const onRemoveLive2D = async () => {
+    if (!editing || !agent?._raw?.id || !live2dAsset) return;
+    setLive2dUploading(true);
+    setError("");
+    try {
+      await removeRoleLive2D(agent._raw.id);
+      setLive2dAsset(null);
+      setVisualMode("builtin");
+      setPortrait(agent?.avatar || PORTRAIT_OPTIONS[0]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "移除 Live2D 失败");
+    } finally {
+      setLive2dUploading(false);
+    }
+  };
+
+  const selectBuiltinPortrait = (value) => {
+    setPortrait(value);
+    setVisualMode("builtin");
+  };
+
+  const selectCustomPortrait = (value) => {
+    setPortrait(value);
+    setVisualMode("image");
+  };
 
   return (
     <div className="sheet-mask" onClick={onClose}>
@@ -492,23 +594,83 @@ function AgentEditor({ agent, onClose, onSave }) {
           <div className="portrait-row">
             <div className="portrait-left">
               <div className="portrait-preview"><img src={portrait} alt="" /></div>
-              <label className="pp pp-upload" style={{ marginTop: 8, width: "100%" }}>
-                <input type="file" accept="image/*" onChange={onUpload} hidden />
-                <Icon name="image" /><span>上传自定义</span>
+              <label className="pp pp-upload" style={{ marginTop: 8, width: "100%", opacity: editing ? 1 : 0.55 }}>
+                <input type="file" accept="image/*" onChange={onUpload} disabled={portraitUploading || !editing} hidden />
+                <Icon name="image" /><span>{portraitUploading ? "上传中…" : "上传自定义"}</span>
               </label>
               {uploads.map((u) => (
-                <button key={u} className={"pp" + (u === portrait ? " on" : "")} onClick={() => setPortrait(u)} style={{ marginTop: 4 }}>
+                <button key={u} className={"pp" + (u === portrait ? " on" : "")} onClick={() => selectCustomPortrait(u)} style={{ marginTop: 4 }}>
                   <img src={u} alt="" />
                 </button>
               ))}
             </div>
             <div className="portrait-pick">
               {PORTRAIT_OPTIONS.map((p) => (
-                <button key={p} className={"pp" + (p === portrait ? " on" : "")} onClick={() => setPortrait(p)}>
+                <button key={p} className={"pp" + (p === portrait ? " on" : "")} onClick={() => selectBuiltinPortrait(p)}>
                   <img src={p} alt="" loading="lazy" />
                 </button>
               ))}
             </div>
+          </div>
+
+          <div style={{ marginTop: 14 }}>
+            <div className="field-label" style={{ marginBottom: 8 }}>形象模式</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {[
+                ["builtin", "内置立绘"],
+                ["image", "自定义图片"],
+                ["live2d", "Live2D 模型"],
+              ].map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={"freq-chip" + (visualMode === mode ? " on" : "")}
+                  onClick={() => {
+                    if (mode === "live2d" && !live2dAsset && !agent?.live2dModelUrl) {
+                      setError("这个角色还没有 Live2D，请先点击下方“上传 ZIP”选择模型包");
+                      return;
+                    }
+                    setError("");
+                    setVisualMode(mode);
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="route-note">每个角色单独保存自己的形象。模型包只保存在当前部署的服务器，不会跟着项目代码上传。</div>
+          </div>
+
+          <div className="onboard-card" style={{ marginTop: 12, alignItems: "flex-start" }}>
+            <span className="ob-main">
+              <span className="ob-t serif">给这个角色上传 Live2D</span>
+              <span className="ob-s">上传包含 .model3.json 和 .moc3 的 ZIP。安全校验通过后会保存预览，并自动切到这个角色的 Live2D 模型。</span>
+              {live2dAsset && <span className="ob-s" style={{ color: "var(--rose-deep)" }}>已识别 {live2dAsset.fileCount || 0} 个文件 · {live2dAsset.expressionPaths?.length || 0} 个表情 · {live2dAsset.motionPaths?.length || 0} 个动作</span>}
+            </span>
+            <label className="pp pp-upload" style={{ flex: "0 0 auto", opacity: editing ? 1 : 0.55 }}>
+              <input type="file" accept=".zip,application/zip" onChange={onLive2DUpload} disabled={live2dUploading || !editing} hidden />
+              <Icon name="image" /><span>{live2dUploading ? "检查中…" : "上传 ZIP"}</span>
+            </label>
+            {live2dAsset && <button type="button" className="freq-chip" onClick={onRemoveLive2D} disabled={live2dUploading}>移除模型</button>}
+          </div>
+
+          <div className="visual-frame-settings">
+            <div className="field-label">聊天室里的立绘范围</div>
+            <div className="visual-frame-grid">
+              <label className="visual-frame-field">
+                <span>聊天时</span>
+                <select className="fld" value={visualFrame.chatFrame} onChange={(event) => setVisualFrame((current) => ({ ...current, chatFrame: event.target.value }))}>
+                  {VISUAL_FRAME_OPTIONS.chat.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+              <label className="visual-frame-field">
+                <span>点开头像后</span>
+                <select className="fld" value={visualFrame.fullscreenFrame} onChange={(event) => setVisualFrame((current) => ({ ...current, fullscreenFrame: event.target.value }))}>
+                  {VISUAL_FRAME_OPTIONS.fullscreen.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+            </div>
+            <div className="route-note">默认是聊天显示到膝盖以上，点开头像显示全身。半身模型可以在这里改成半身；每个角色单独保存。</div>
           </div>
 
           <label className="field-label">名字</label>
@@ -600,15 +762,25 @@ function AgentEditor({ agent, onClose, onSave }) {
             try {
               // 从立绘路径提取 portrait_id，让后端知道选的是哪个预设立绘
               const presetMatch = portrait.match(/\/assets\/portraits\/(?:square|round|full)\/(\d+)\.png/);
-              const portraitId = presetMatch ? parseInt(presetMatch[1], 10) : (portrait.startsWith("data:") ? 999 : null);
-              const portraitCustomUrl = portraitId === 999 ? portrait : null;
+              const isLive2D = visualMode === "live2d";
+              const live2dPreviewUrl = String(live2dAsset?.previewUrl || live2dAsset?.preview_url || agent?._raw?.visual_preview_url || "").trim();
+              const existingPortraitValue = agent?._raw?.portrait_id;
+              const existingPortraitId = existingPortraitValue === null || existingPortraitValue === undefined || existingPortraitValue === "" ? null : Number(existingPortraitValue);
+              const existingCustomUrl = String(agent?._raw?.portrait_custom_url || "").trim() || null;
+              const portraitId = isLive2D
+                ? (Number.isInteger(existingPortraitId) && existingPortraitId >= 0 ? existingPortraitId : null)
+                : (presetMatch ? parseInt(presetMatch[1], 10) : (visualMode === "image" || portrait.startsWith("data:") ? 999 : null));
+              const portraitCustomUrl = isLive2D ? (portraitId === 999 ? existingCustomUrl : null) : (portraitId === 999 ? portrait : null);
               const payload = {
                 name: name.trim(),
                 persona: persona.trim(),
                 tag: tagsStr.split(/\s+/).filter(Boolean)[0] || "",
-                avatar: portrait,
+                avatar: isLive2D ? (String(agent?._raw?.avatar || "").trim() || portrait) : portrait,
                 portrait_id: portraitId,
                 portrait_custom_url: portraitCustomUrl,
+                visual_mode: visualMode,
+                visual_preview_url: isLive2D ? (live2dPreviewUrl || null) : null,
+                visual_frame_config: visualFrame,
                 auto_moments_enabled: auto,
                 auto_moments_images_enabled: auto && autoImages,
                 auto_moments_image_resolution: auto && autoImages ? imageResolution : "channel",
@@ -624,7 +796,7 @@ function AgentEditor({ agent, onClose, onSave }) {
               } else {
                 await createRole(payload);
               }
-              onSave({ id: agent?.id, name, persona, tagline, avatar: portrait, tags: tagsStr.split(/\s+/).filter(Boolean), autoMoments: auto, autoMomentsImages: auto && autoImages, momentFreq: freq, auto_moments_image_resolution: auto && autoImages ? imageResolution : "channel", auto_moments_image_profile: auto ? imageProfile : null, auto_moments_templates: auto ? momentTemplates : null });
+              onSave({ id: agent?.id, name, persona, tagline, avatar: isLive2D ? (live2dPreviewUrl || portrait) : portrait, tags: tagsStr.split(/\s+/).filter(Boolean), autoMoments: auto, autoMomentsImages: auto && autoImages, visualMode, visualPreviewUrl: live2dPreviewUrl, live2dModelUrl: agent?.live2dModelUrl || "", live2dManifest: live2dAsset, visualFrame, auto_moments_image_resolution: auto && autoImages ? imageResolution : "channel", auto_moments_image_profile: auto ? imageProfile : null, auto_moments_templates: auto ? momentTemplates : null });
             } catch (err) {
               setError(err instanceof Error ? err.message : "保存失败");
             } finally { setBusy(false); }

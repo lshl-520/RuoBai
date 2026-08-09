@@ -1,11 +1,55 @@
 import express from 'express';
+import { createHash } from 'node:crypto';
 import { pool } from './db.js';
 import { getRequestCharacterId } from './middleware.js';
 import { normalizeLimit, requireCharacterForUser as defaultRequireCharacterForUser } from './helpers.js';
 
+export const LIFE_EVENT_STATUSES = Object.freeze(['active', 'completed', 'postponed', 'cancelled', 'expired']);
+
+const EVENT_KEY_STOP_PHRASES = [
+  '你还记得', '想和你分享', '分享一下', '提醒我', '你还', '是不是', '是否',
+  '记得', '约好', '约定', '一起', '我们', '我的', '刚刚', '刚才', '今天', '最近',
+  '关于', '那条', '动态', '发的', '发了', '因为', '心情', '变好了', '变好',
+  '亮起来了', '亮起来', '希望', '想要', '有点', '挺', '又', '一下', '真的',
+  '我', '你', '让你', '让', '吗', '呢', '呀', '啊', '吧', '了', '的', '是'
+].sort((left, right) => right.length - left.length);
+
 function normalizeSourceType(value) {
   const type = String(value || '').trim().toLowerCase();
   return ['chat', 'moment', 'comment', 'memory'].includes(type) ? type : 'chat';
+}
+
+export function normalizeLifeEventStatus(value) {
+  const status = String(value || '').trim().toLowerCase();
+  return LIFE_EVENT_STATUSES.includes(status) ? status : null;
+}
+
+function normalizeTitle(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+}
+
+function normalizeDatePart(value) {
+  return String(value).padStart(2, '0');
+}
+
+export function canonicalizeLifeEventTitle(value) {
+  let text = normalizeTitle(value).toLowerCase();
+  text = text
+    .replace(/(20\d{2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/gu, (_all, year, month, day) => `${year}${normalizeDatePart(month)}${normalizeDatePart(day)}`)
+    .replace(/(20\d{2})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{1,2})/gu, (_all, year, month, day) => `${year}${normalizeDatePart(month)}${normalizeDatePart(day)}`);
+  for (const phrase of EVENT_KEY_STOP_PHRASES) {
+    text = text.replaceAll(phrase, ' ');
+  }
+  return text
+    .replace(/[“”"'‘’、，。！？!?；;：:（）()【】［］[\]《》<>「」,/\\|~～…·]+/gu, ' ')
+    .replace(/\s+/g, '')
+    .slice(0, 160);
+}
+
+export function buildLifeEventKey(value) {
+  const canonical = canonicalizeLifeEventTitle(value);
+  if ([...canonical].length < 4) return null;
+  return createHash('sha256').update(canonical, 'utf8').digest('hex').slice(0, 64);
 }
 
 export function parseLifeEventSourceRef(value) {
@@ -36,32 +80,125 @@ function sourceVisibilitySql(alias = 'm') {
   )`;
 }
 
-function shouldTrackTitle(value) {
-  const text = String(value || '').replace(/\s+/g, ' ').trim();
-  return text.length >= 4 && text.length <= 500 && /(?:我|我的|我们|一起|喜欢|不喜欢|希望|想要|记得|约好|下次|今天|明天)/u.test(text);
+function shouldTrackTitle(value, sourceType = 'chat') {
+  const text = normalizeTitle(value);
+  if (text.length < 4 || text.length > 500) return false;
+  if (sourceType === 'moment') return true;
+  return /(?:我|我的|我们|一起|喜欢|不喜欢|希望|想要|记得|约好|下次|今天|明天)/u.test(text);
+}
+
+function isMergeableEvent(row = {}) {
+  const status = String(row.status || '').toLowerCase();
+  if (!['active', 'postponed'].includes(status)) return false;
+  if (!row.expires_at) return true;
+  const expiresAt = new Date(String(row.expires_at).replace(' ', 'T'));
+  return Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() > Date.now();
+}
+
+async function findEventBySource(db, { userId, sourceType, sourceId } = {}) {
+  if (!userId || !sourceType || !sourceId) return null;
+  const [rows] = await db.query(
+    `
+      SELECT e.id, e.character_id, e.title, e.event_type, e.status, e.expires_at, e.event_key
+      FROM life_event_sources s
+      INNER JOIN life_events e ON e.id = s.event_id AND e.user_id = s.user_id
+      WHERE s.user_id = ? AND s.source_type = ? AND s.source_id = ?
+      LIMIT 1
+    `,
+    [userId, sourceType, sourceId]
+  );
+  return rows[0] || null;
+}
+
+async function findMergeableEvent(db, {
+  userId, characterId, eventKey, eventType, relatedSourceType, relatedSourceId
+} = {}) {
+  if (relatedSourceType && relatedSourceId) {
+    const relatedEvent = await findEventBySource(db, {
+      userId,
+      sourceType: relatedSourceType,
+      sourceId: relatedSourceId
+    });
+    if (relatedEvent && Number(relatedEvent.character_id) === Number(characterId) && isMergeableEvent(relatedEvent)) {
+      return relatedEvent;
+    }
+  }
+
+  if (!eventKey) return null;
+  const [rows] = await db.query(
+    `
+      SELECT id, character_id, title, event_type, status, expires_at, event_key
+      FROM life_events
+      WHERE user_id = ? AND character_id = ?
+        AND status IN ('active', 'postponed')
+        AND (expires_at IS NULL OR expires_at > NOW())
+      ORDER BY COALESCE(occurred_at, created_at) DESC, id DESC
+      LIMIT 100
+    `,
+    [userId, characterId]
+  );
+  return rows.find(row => (
+    isMergeableEvent(row)
+    && (row.event_key === eventKey || (!row.event_key && buildLifeEventKey(row.title) === eventKey))
+    && (!eventType || !row.event_type || row.event_type === eventType || row.event_type === 'life' || eventType === 'life')
+  )) || null;
 }
 
 export async function recordLifeEventSource(db = pool, {
-  userId, characterId, sourceType, sourceId, title, eventType = 'life', occurredAt = null
+  userId,
+  characterId,
+  sourceType,
+  sourceId,
+  title,
+  eventType = 'life',
+  occurredAt = null,
+  expiresAt = null,
+  relatedSourceType = null,
+  relatedSourceId = null
 } = {}) {
-  const normalizedTitle = String(title || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+  const normalizedTitle = normalizeTitle(title);
   const normalizedSourceType = normalizeSourceType(sourceType);
-  if (!userId || !characterId || !sourceId || !shouldTrackTitle(normalizedTitle)) return null;
+  const normalizedRelatedType = relatedSourceType ? normalizeSourceType(relatedSourceType) : null;
+  const eventKey = buildLifeEventKey(normalizedTitle);
+  const trackSignal = shouldTrackTitle(normalizedTitle, normalizedSourceType);
+  if (!userId || !characterId || !sourceId || (!trackSignal && normalizedSourceType !== 'comment')) return null;
 
   try {
-    const [existing] = await db.query(
-      `SELECT event_id FROM life_event_sources WHERE user_id = ? AND source_type = ? AND source_id = ? LIMIT 1`,
-      [userId, normalizedSourceType, sourceId]
-    );
-    if (existing[0]) return { id: existing[0].event_id, reused: true };
+    const existing = await findEventBySource(db, {
+      userId,
+      sourceType: normalizedSourceType,
+      sourceId
+    });
+    if (existing) return { id: existing.id, reused: true, merged: false };
+
+    const mergeable = await findMergeableEvent(db, {
+      userId,
+      characterId,
+      eventKey,
+      eventType: String(eventType || 'life').slice(0, 32),
+      relatedSourceType: normalizedRelatedType,
+      relatedSourceId
+    });
+    if (!trackSignal && !mergeable) return null;
+
+    if (mergeable) {
+      await db.query(
+        `
+          INSERT IGNORE INTO life_event_sources (event_id, user_id, source_type, source_id, created_at)
+          VALUES (?, ?, ?, ?, NOW())
+        `,
+        [mergeable.id, userId, normalizedSourceType, sourceId]
+      );
+      return { id: mergeable.id, reused: false, merged: true };
+    }
 
     const [eventResult] = await db.query(
       `
         INSERT INTO life_events
-          (user_id, character_id, title, event_type, status, occurred_at, created_at)
-        VALUES (?, ?, ?, ?, 'active', ?, NOW())
+          (user_id, character_id, title, event_type, event_key, status, occurred_at, expires_at, created_at)
+        VALUES (?, ?, ?, ?, ?, 'active', ?, ?, NOW())
       `,
-      [userId, characterId, normalizedTitle, String(eventType || 'life').slice(0, 32), occurredAt]
+      [userId, characterId, normalizedTitle, String(eventType || 'life').slice(0, 32), eventKey, occurredAt, expiresAt]
     );
     await db.query(
       `
@@ -70,7 +207,7 @@ export async function recordLifeEventSource(db = pool, {
       `,
       [eventResult.insertId, userId, normalizedSourceType, sourceId]
     );
-    return { id: eventResult.insertId, reused: false };
+    return { id: eventResult.insertId, reused: false, merged: false };
   } catch {
     // 生活事件是辅助索引，旧数据库未迁移或写入失败不能阻断聊天/动态。
     return null;
@@ -89,7 +226,7 @@ export function createLifeEventsRouter({ db = pool, requireCharacter = defaultRe
     const [rows] = await db.query(
       `
         SELECT e.id, e.user_id, e.character_id, e.title, e.event_type, e.status,
-               e.occurred_at, e.created_at, e.updated_at,
+               e.status_note, e.occurred_at, e.expires_at, e.corrected_at, e.created_at, e.updated_at,
                GROUP_CONCAT(CONCAT(s.source_type, ':', s.source_id) ORDER BY s.id SEPARATOR ',') AS source_refs
         FROM life_events e
         LEFT JOIN life_event_sources s ON s.event_id = e.id AND s.user_id = e.user_id
@@ -104,6 +241,9 @@ export function createLifeEventsRouter({ db = pool, requireCharacter = defaultRe
       success: true,
       items: rows.map(row => ({
         ...row,
+        status: row.status === 'active' && row.expires_at && new Date(String(row.expires_at).replace(' ', 'T')).getTime() <= Date.now()
+          ? 'expired'
+          : row.status,
         sources: String(row.source_refs || '').split(',').filter(Boolean)
       }))
     });
@@ -218,20 +358,67 @@ export function createLifeEventsRouter({ db = pool, requireCharacter = defaultRe
   try {
     const eventId = Number.parseInt(req.params.id, 10);
     if (!Number.isFinite(eventId)) return res.status(400).json({ success: false, error: '事件 ID 非法' });
-    const status = ['active', 'completed', 'postponed', 'cancelled'].includes(String(req.body?.status))
-      ? String(req.body.status)
-      : null;
-    const title = req.body?.title === undefined ? null : String(req.body.title || '').trim().slice(0, 500);
+    const [eventRows] = await db.query(
+      `SELECT id, character_id, title FROM life_events WHERE id = ? AND user_id = ? LIMIT 1`,
+      [eventId, req.userId]
+    );
+    const event = eventRows[0];
+    if (!event) return res.status(404).json({ success: false, error: '生活事件不存在' });
+    await requireCharacter(req.userId, event.character_id);
+
+    const body = req.body || {};
+    const hasTitle = Object.prototype.hasOwnProperty.call(body, 'title');
+    const hasStatus = Object.prototype.hasOwnProperty.call(body, 'status');
+    const hasStatusNote = Object.prototype.hasOwnProperty.call(body, 'status_note');
+    const hasExpiresAt = Object.prototype.hasOwnProperty.call(body, 'expires_at');
+    const title = hasTitle ? normalizeTitle(body.title) : null;
+    if (hasTitle && !title) return res.status(400).json({ success: false, error: '纠正内容不能为空' });
+    const status = hasStatus ? normalizeLifeEventStatus(body.status) : null;
+    if (hasStatus && !status) return res.status(400).json({ success: false, error: '事件状态不支持' });
+    const statusNote = hasStatusNote ? normalizeTitle(body.status_note).slice(0, 500) : null;
+    let expiresAt = null;
+    if (hasExpiresAt && body.expires_at) {
+      const parsed = new Date(String(body.expires_at).replace(' ', 'T'));
+      if (Number.isNaN(parsed.getTime())) return res.status(400).json({ success: false, error: '过期时间格式不正确' });
+      expiresAt = String(body.expires_at).replace('T', ' ').slice(0, 19);
+    }
+    if (!hasTitle && !hasStatus && !hasStatusNote && !hasExpiresAt) {
+      return res.status(400).json({ success: false, error: '没有需要修改的内容' });
+    }
+
+    const updates = [];
+    const params = [];
+    if (hasTitle) {
+      updates.push('title = ?', 'event_key = ?', 'corrected_at = NOW()');
+      params.push(title, buildLifeEventKey(title));
+      if (!hasStatusNote) {
+        updates.push('status_note = ?');
+        params.push('已纠正事件内容');
+      }
+    }
+    if (hasStatus) {
+      updates.push('status = ?');
+      params.push(status);
+    }
+    if (hasStatusNote) {
+      updates.push('status_note = ?');
+      params.push(statusNote || null);
+    }
+    if (hasExpiresAt) {
+      updates.push('expires_at = ?');
+      params.push(expiresAt);
+    }
+    params.push(eventId, req.userId);
     const [result] = await db.query(
       `
         UPDATE life_events
-        SET title = COALESCE(?, title), status = COALESCE(?, status)
+        SET ${updates.join(', ')}
         WHERE id = ? AND user_id = ?
       `,
-      [title || null, status, eventId, req.userId]
+      params
     );
     if (!result.affectedRows) return res.status(404).json({ success: false, error: '生活事件不存在' });
-    return res.json({ success: true, id: eventId });
+    return res.json({ success: true, id: eventId, corrected: hasTitle, status: status || undefined });
   } catch (error) {
     return res.status(400).json({ success: false, error: error.message });
   }

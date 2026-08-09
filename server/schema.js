@@ -10,6 +10,36 @@ const CHARACTER_RUNTIME_COLUMNS = [
     after: 'portrait_id'
   },
   {
+    name: 'visual_mode',
+    definition: "VARCHAR(16) DEFAULT 'builtin'",
+    after: 'portrait_custom_url'
+  },
+  {
+    name: 'visual_preview_url',
+    definition: 'VARCHAR(500) DEFAULT NULL',
+    after: 'visual_mode'
+  },
+  {
+    name: 'live2d_asset_id',
+    definition: 'VARCHAR(80) DEFAULT NULL',
+    after: 'visual_preview_url'
+  },
+  {
+    name: 'live2d_model_url',
+    definition: 'VARCHAR(500) DEFAULT NULL',
+    after: 'live2d_asset_id'
+  },
+  {
+    name: 'live2d_manifest',
+    definition: 'JSON DEFAULT NULL',
+    after: 'live2d_model_url'
+  },
+  {
+    name: 'visual_frame_config',
+    definition: 'JSON DEFAULT NULL',
+    after: 'live2d_manifest'
+  },
+  {
     name: 'chat_credential_id',
     definition: 'INT DEFAULT NULL',
     after: 'intimacy'
@@ -144,6 +174,8 @@ const PUSH_RUNTIME_TABLES = [
       message_id BIGINT DEFAULT NULL,
       event_type VARCHAR(30) NOT NULL,
       event_date VARCHAR(10) DEFAULT NULL,
+      source_type VARCHAR(32) DEFAULT NULL,
+      source_id BIGINT DEFAULT NULL,
       content TEXT NOT NULL,
       status VARCHAR(20) DEFAULT 'created',
       error_message VARCHAR(500) DEFAULT '',
@@ -154,6 +186,7 @@ const PUSH_RUNTIME_TABLES = [
       FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
       FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE SET NULL,
       INDEX idx_proactive_user_char_type (user_id, character_id, event_type),
+      UNIQUE KEY unique_proactive_source (user_id, character_id, event_type, source_type, source_id),
       INDEX idx_proactive_date (event_date),
       INDEX idx_proactive_created (created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -202,6 +235,18 @@ const MOMENT_RUNTIME_COLUMNS = [
   { name: 'image_generation_metadata', definition: 'JSON DEFAULT NULL', after: 'image_mode' },
 ];
 
+const LIFE_EVENT_RUNTIME_COLUMNS = [
+  { name: 'event_key', definition: 'VARCHAR(64) DEFAULT NULL', after: 'event_type' },
+  { name: 'status_note', definition: 'VARCHAR(500) DEFAULT NULL', after: 'status' },
+  { name: 'expires_at', definition: 'DATETIME DEFAULT NULL', after: 'occurred_at' },
+  { name: 'corrected_at', definition: 'DATETIME DEFAULT NULL', after: 'updated_at' },
+];
+
+const PROACTIVE_EVENT_RUNTIME_COLUMNS = [
+  { name: 'source_type', definition: 'VARCHAR(32) DEFAULT NULL', after: 'event_date' },
+  { name: 'source_id', definition: 'BIGINT DEFAULT NULL', after: 'source_type' },
+];
+
 const FUNCTIONAL_RUNTIME_TABLES = [
   `
     CREATE TABLE IF NOT EXISTS moment_audiences (
@@ -224,10 +269,14 @@ const FUNCTIONAL_RUNTIME_TABLES = [
       character_id INT NOT NULL,
       title VARCHAR(500) NOT NULL,
       event_type VARCHAR(32) DEFAULT 'life',
+      event_key VARCHAR(64) DEFAULT NULL,
       status VARCHAR(20) DEFAULT 'active',
+      status_note VARCHAR(500) DEFAULT NULL,
       occurred_at DATETIME DEFAULT NULL,
+      expires_at DATETIME DEFAULT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      corrected_at DATETIME DEFAULT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
       INDEX idx_life_event_character (user_id, character_id, created_at)
@@ -315,6 +364,21 @@ async function tableExists(db, tableName) {
   return rows.length > 0;
 }
 
+async function indexExists(db, tableName, indexName) {
+  const [rows] = await db.query(
+    `
+      SELECT INDEX_NAME
+      FROM information_schema.STATISTICS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+        AND INDEX_NAME = ?
+      LIMIT 1
+    `,
+    [tableName, indexName]
+  );
+  return rows.length > 0;
+}
+
 export async function ensureDynamicCapabilityAssignment(db) {
   if (!(await tableExists(db, 'capability_assignments'))) return;
 
@@ -350,13 +414,31 @@ export async function ensureMomentRuntimeColumns(db) {
   }
 }
 
+export async function ensureLifeEventRuntimeColumns(db) {
+  for (const column of LIFE_EVENT_RUNTIME_COLUMNS) {
+    if (await columnExists(db, 'life_events', column.name)) continue;
+    await db.query(`ALTER TABLE life_events ADD COLUMN ${column.name} ${column.definition} AFTER ${column.after}`);
+  }
+}
+
 export async function ensurePushRuntimeTables(db) {
   for (const statement of PUSH_RUNTIME_TABLES) {
     await db.query(statement);
   }
   try {
-    if (!(await columnExists(db, 'proactive_events', 'viewed_at'))) {
-      await db.query(`ALTER TABLE proactive_events ADD COLUMN viewed_at DATETIME DEFAULT NULL AFTER sent_at`);
+    const columns = [
+      { name: 'viewed_at', definition: 'DATETIME DEFAULT NULL', after: 'sent_at' },
+      ...PROACTIVE_EVENT_RUNTIME_COLUMNS,
+    ];
+    for (const column of columns) {
+      if (!(await columnExists(db, 'proactive_events', column.name))) {
+        await db.query(`ALTER TABLE proactive_events ADD COLUMN ${column.name} ${column.definition} AFTER ${column.after}`);
+      }
+    }
+    if (!(await indexExists(db, 'proactive_events', 'unique_proactive_source'))) {
+      await db.query(
+        'ALTER TABLE proactive_events ADD UNIQUE KEY unique_proactive_source (user_id, character_id, event_type, source_type, source_id)'
+      );
     }
   } catch {
     // Older test doubles and read-only deployments may not expose INFORMATION_SCHEMA.
@@ -385,4 +467,5 @@ export async function ensureRuntimeSchema(db) {
   await ensurePushRuntimeTables(db);
   await ensurePersonaRuntimeTables(db);
   await ensureFunctionalRuntimeTables(db);
+  await ensureLifeEventRuntimeColumns(db);
 }

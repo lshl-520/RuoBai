@@ -5,6 +5,9 @@ const IDLE_THRESHOLD_MS = 3 * 60 * 60 * 1000;
 const ONLINE_THRESHOLD_MS = 10 * 60 * 1000;
 const DEFAULT_SCAN_INTERVAL_MS = 10 * 60 * 1000;
 const MODEL_TIMEOUT_MS = 20 * 1000;
+const APPOINTMENT_EVENT_TYPE = 'appointment_follow_up';
+const APPOINTMENT_SOURCE_TYPE = 'memory';
+const APPOINTMENT_SOURCE_COOLDOWN_MINUTES = 30;
 
 function buildProviderUrl(apiBase, endpoint) {
   const base = String(apiBase || '').trim().replace(/\/+$/, '');
@@ -168,7 +171,25 @@ function normalizeGeneratedText(text) {
 
 async function chooseTrigger(repository, candidate, now) {
   const { dateKey } = toShanghaiParts(now);
+  if (candidate.proactiveEnabled !== false && typeof repository.findDueAppointment === 'function') {
+    const appointment = await repository.findDueAppointment({
+      userId: candidate.userId,
+      characterId: candidate.characterId,
+      now,
+    });
+    if (appointment) {
+      const appointmentDate = parseDate(appointment.appointmentAt) || now;
+      return {
+        reason: 'appointment',
+        eventType: APPOINTMENT_EVENT_TYPE,
+        dateKey: toShanghaiParts(appointmentDate).dateKey,
+        appointment,
+      };
+    }
+  }
+
   if (
+    candidate.isActive !== false &&
     candidate.bedtimeEnabled !== false &&
     isBedtimeWindow(now) &&
     isOnline(candidate.lastSeenAt, now) &&
@@ -183,6 +204,7 @@ async function chooseTrigger(repository, candidate, now) {
   }
 
   if (
+    candidate.isActive !== false &&
     candidate.proactiveEnabled !== false &&
     idleEnough(candidate.lastUserMessageAt, now) &&
     !(await repository.hasEventAfter({
@@ -212,21 +234,53 @@ function buildNotificationPayload({ candidate, content, messageId }) {
 }
 
 async function processCandidate({ repository, candidate, trigger, generateMessage, sendPush, now, logger }) {
-  const recentMessages = await repository.loadRecentMessages(candidate);
-  const rawContent = await generateMessage({ candidate, reason: trigger.reason, recentMessages, now });
-  const content = normalizeGeneratedText(rawContent);
-  if (!content) return { skipped: 1, created: 0 };
+  let event = null;
+  if (trigger.appointment && typeof repository.reserveAppointmentEvent === 'function') {
+    event = await repository.reserveAppointmentEvent({
+      candidate,
+      appointment: trigger.appointment,
+      dateKey: trigger.dateKey,
+    });
+    if (!event?.created) return { skipped: 1, created: 0 };
+  }
 
-  const saved = await repository.saveAssistantMessage({ candidate, content });
-  const event = await repository.createEvent({
-    userId: candidate.userId,
-    characterId: candidate.characterId,
-    eventType: trigger.eventType,
-    dateKey: trigger.dateKey,
-    messageId: saved.id,
-    content,
-    createdAt: now.toISOString(),
+  const recentMessages = await repository.loadRecentMessages(candidate);
+  const rawContent = await generateMessage({
+    candidate,
+    reason: trigger.reason,
+    appointment: trigger.appointment || null,
+    recentMessages,
+    now,
   });
+  const content = normalizeGeneratedText(rawContent);
+  if (!content) {
+    if (event?.created) await repository.markEventGenerationFailed?.(event.id, '模型没有返回可用的回访内容');
+    return { skipped: 1, created: 0 };
+  }
+
+  let saved;
+  try {
+    saved = await repository.saveAssistantMessage({ candidate, content });
+    if (event?.created) {
+      await repository.completeReservedEvent?.({ eventId: event.id, messageId: saved.id, content });
+    } else {
+      event = await repository.createEvent({
+        userId: candidate.userId,
+        characterId: candidate.characterId,
+        eventType: trigger.eventType,
+        dateKey: trigger.dateKey,
+        messageId: saved.id,
+        content,
+        createdAt: now.toISOString(),
+      });
+    }
+  } catch (error) {
+    if (event?.created) {
+      await repository.markEventGenerationFailed?.(event.id, `回访保存失败：${String(error?.message || error).slice(0, 180)}`);
+      return { skipped: 1, created: 0 };
+    }
+    throw error;
+  }
 
   const canNotify = typeof sendPush === 'function' && candidate.tokens?.length;
   if (!canNotify) {
@@ -289,25 +343,29 @@ export async function runProactiveScan({
   return summary;
 }
 
-export function buildProactivePrompt({ candidate, reason, recentMessages }) {
+export function buildProactivePrompt({ candidate, reason, appointment = null, recentMessages }) {
   const recent = recentMessages
     .slice(-8)
     .map((item) => `${item.role === 'user' ? '用户' : candidate.characterName}：${item.content}`)
     .join('\n');
-  const reasonLine = reason === 'bedtime'
-    ? '现在是深夜 23:30 左右，用户还在线。请自然提醒她早点睡。'
-    : '用户已经超过 3 小时没有主动聊天。请自然地发一句关心。';
+  const appointmentText = String(appointment?.content || '').replace(/\s+/g, ' ').trim().slice(0, 240);
+  const reasonLine = reason === 'appointment'
+    ? `现在到了你们之前约定的时间。请自然提起这件事，不催促、不指责；用户暂时忙时可以轻松改期。${appointmentText ? `约定内容：${appointmentText}` : ''}`
+    : reason === 'bedtime'
+      ? '现在是深夜 23:30 左右，用户还在线。请自然提醒她早点睡。'
+      : '用户已经超过 3 小时没有主动聊天。请自然地发一句关心。';
 
   return [
     `你是${candidate.characterName || '小白'}，要像真实亲近的人一样说话。`,
     candidate.persona ? `人设：${candidate.persona}` : '',
     reasonLine,
     '只输出一句话，短一点，自然一点，不要解释规则；知道自己是 AI，但不要主动把这句话变成客服式身份声明。',
+    reason === 'appointment' ? '如果最近聊天已经刚回应过同一件事，不要复制原句；回访要像隔了一段时间后的自然续话。' : '',
     recent ? `最近聊天：\n${recent}` : '',
   ].filter(Boolean).join('\n\n');
 }
 
-export async function generateProactiveMessage({ repository, candidate, reason, recentMessages, now, fetchImpl = fetch }) {
+export async function generateProactiveMessage({ repository, candidate, reason, appointment = null, recentMessages, now, fetchImpl = fetch }) {
   const modelConfig = await repository.getModelConfig(candidate.userId, candidate.characterId);
   if (!modelConfig) return '';
 
@@ -317,8 +375,8 @@ export async function generateProactiveMessage({ repository, candidate, reason, 
   try {
     const request = buildProactiveRequest({
       modelConfig,
-      systemPrompt: buildProactivePrompt({ candidate, reason, recentMessages, now }),
-      userPrompt: '现在给用户发一句主动关心的话。',
+      systemPrompt: buildProactivePrompt({ candidate, reason, appointment, recentMessages, now }),
+      userPrompt: reason === 'appointment' ? '现在自然地回应这次约定。' : '现在给用户发一句主动关心的话。',
     });
     const response = await fetchImpl(request.url, {
       ...request.options,
@@ -343,6 +401,7 @@ export function createMysqlProactiveRepository(pool) {
             c.id AS character_id,
             c.name AS character_name,
             c.persona,
+            c.is_active AS character_is_active,
             GROUP_CONCAT(pd.fcm_token SEPARATOR '\n') AS fcm_tokens,
             MAX(pd.last_seen_at) AS last_seen_at,
             COALESCE(pp.proactive_enabled, 1) AS proactive_enabled,
@@ -359,7 +418,6 @@ export function createMysqlProactiveRepository(pool) {
           FROM users u
           INNER JOIN characters c
             ON c.user_id = u.id
-           AND c.is_active = 1
            AND c.is_deleted = 0
           LEFT JOIN push_devices pd
             ON pd.user_id = u.id
@@ -372,6 +430,7 @@ export function createMysqlProactiveRepository(pool) {
             c.id,
             c.name,
             c.persona,
+            c.is_active,
             pp.proactive_enabled,
             pp.bedtime_enabled,
             pp.quiet_night_enabled
@@ -383,6 +442,7 @@ export function createMysqlProactiveRepository(pool) {
         characterId: row.character_id,
         characterName: row.character_name,
         persona: row.persona || '',
+        isActive: Number(row.character_is_active) === 1,
         tokens: String(row.fcm_tokens || '').split('\n').filter(Boolean).slice(0, 500),
         proactiveEnabled: Number(row.proactive_enabled) === 1,
         bedtimeEnabled: Number(row.bedtime_enabled) === 1,
@@ -417,7 +477,6 @@ export function createMysqlProactiveRepository(pool) {
             INNER JOIN credentials c ON c.id = ch.chat_credential_id
             WHERE ch.id = ?
               AND ch.user_id = ?
-              AND ch.is_active = 1
               AND ch.is_deleted = 0
               AND ch.chat_model_id IS NOT NULL
               AND ch.chat_model_id <> ''
@@ -475,6 +534,74 @@ export function createMysqlProactiveRepository(pool) {
         [userId, characterId, eventType, param],
       );
       return rows.length > 0;
+    },
+
+    async findDueAppointment({ userId, characterId }) {
+      const [rows] = await pool.query(
+        `
+          SELECT m.id, m.content, m.appointment_at
+          FROM memories m
+          WHERE m.user_id = ?
+            AND m.character_id = ?
+            AND m.memory_type = 'appointment'
+            AND m.appointment_status = 'pending'
+            AND m.appointment_at IS NOT NULL
+            AND m.appointment_at <= NOW()
+            AND (m.created_at IS NULL OR m.created_at <= DATE_SUB(NOW(), INTERVAL ${APPOINTMENT_SOURCE_COOLDOWN_MINUTES} MINUTE))
+            AND m.is_deleted = 0
+            AND COALESCE(m.review_status, 'active') <> 'candidate'
+            AND NOT EXISTS (
+              SELECT 1
+              FROM proactive_events e
+              WHERE e.user_id = m.user_id
+                AND e.character_id = m.character_id
+                AND e.event_type = ?
+                AND e.source_type = ?
+                AND e.source_id = m.id
+            )
+          ORDER BY m.appointment_at ASC, m.id ASC
+          LIMIT 1
+        `,
+        [userId, characterId, APPOINTMENT_EVENT_TYPE, APPOINTMENT_SOURCE_TYPE],
+      );
+      if (!rows[0]) return null;
+      return {
+        id: rows[0].id,
+        content: rows[0].content,
+        appointmentAt: rows[0].appointment_at,
+      };
+    },
+
+    async reserveAppointmentEvent({ candidate, appointment, dateKey }) {
+      const [result] = await pool.query(
+        `
+          INSERT IGNORE INTO proactive_events
+            (user_id, character_id, message_id, event_type, event_date, source_type, source_id, content, status, created_at)
+          VALUES (?, ?, NULL, ?, ?, ?, ?, '', 'processing', NOW())
+        `,
+        [candidate.userId, candidate.characterId, APPOINTMENT_EVENT_TYPE, dateKey,
+          APPOINTMENT_SOURCE_TYPE, appointment.id],
+      );
+      if (!result.affectedRows) return { created: false };
+      return { id: result.insertId, created: true };
+    },
+
+    async completeReservedEvent({ eventId, messageId, content }) {
+      await pool.query(
+        `
+          UPDATE proactive_events
+          SET message_id = ?, content = ?, status = 'created', error_message = ''
+          WHERE id = ? AND event_type = ?
+        `,
+        [messageId, content, eventId, APPOINTMENT_EVENT_TYPE],
+      );
+    },
+
+    async markEventGenerationFailed(eventId, errorMessage) {
+      await pool.query(
+        "UPDATE proactive_events SET status = 'generation_failed', error_message = ? WHERE id = ?",
+        [String(errorMessage || '').slice(0, 500), eventId],
+      );
     },
 
     async saveAssistantMessage({ candidate, content }) {

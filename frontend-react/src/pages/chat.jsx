@@ -15,6 +15,9 @@ import { speakTextWithSystemVoice, stopSystemTextSpeech } from "../lib/native-tt
 import { recordDiagnostic, withDiagnosticId } from "../lib/diagnostics.js";
 import { GUIDED_IMAGE_OPTIONS, buildGuidedImageSubject } from "../lib/guided-image.js";
 import { getProactiveEvents, markProactiveEventRead } from "../lib/proactive.js";
+import { Live2DStage } from "../components/Live2DStage.jsx";
+import { getChatLive2DState } from "../lib/live2d-state.js";
+import { getRoleVisualFrame, getVisualFrameView } from "../lib/visual-frames.js";
 /* 聊天列表 + 聊天室(沉浸: 常驻立绘随情绪变化 / 全屏立绘 / 语音 / 表情包 / 思考过程 / 搜索) */
 const { useState: useStateC, useRef: useRefC, useEffect: useEffectC } = React;
 
@@ -146,11 +149,15 @@ const EMO_SET = {
 
 /* 后端角色 → 2.0 agent 格式 */
 function toAgent(role) {
+  const visualMode = String(role.visual_mode || role.visualMode || "builtin");
   return {
     id: role.id,
     name: role.name,
     avatar: getRolePortraitSrc(role) || `/assets/portraits/round/0.png`,
     cover: getRoleFullPortrait(role),
+    live2dModelUrl: visualMode === "live2d" ? String(role.live2d_model_url || role.live2dModelUrl || "") : "",
+    live2dManifest: role.live2d_manifest || role.live2dManifest || null,
+    visualFrame: getRoleVisualFrame(role),
     tag: role.tag || "",
     online: Boolean(role.is_active),
     isDefault: Boolean(role.is_active),
@@ -746,18 +753,57 @@ function Typing({ agent }) {
   );
 }
 
-/* ---------------- 全屏立绘 ---------------- */
-function BigView({ agent, figSrc, onClose }) {
+/* ---------------- 聊天陪伴立绘：同一舞台切换半身/全屏 ---------------- */
+function ChatFigure({ agent, figSrc, expanded, live2dState, onOpen, onClose }) {
+  const viewFrame = getVisualFrameView(agent.visualFrame, expanded ? "fullscreen" : "chat");
+  const figureFrameStyle = {
+    "--chat-figure-scale": String(viewFrame.zoom),
+    "--chat-figure-offset-x": `${viewFrame.offsetX * 100}%`,
+    "--chat-figure-offset-y": `${viewFrame.offsetY * 100}%`,
+  };
+
   return (
-    <div className="bigview" onClick={onClose}>
-      <div className="bigview-glow" />
-      <img className="bigview-fig" src={figSrc} alt={agent.name} />
-      <div className="bigview-scrim" />
-      <div className="bigview-text">
-        <div className="bigview-name serif">{agent.name}</div>
-        <div className="bigview-hint">轻触任意处返回</div>
+    <div className={`chat-figure${expanded ? " is-expanded" : ""}`} data-frame={viewFrame.mode} style={figureFrameStyle} onClick={expanded ? onClose : undefined}>
+      <div className="chat-fig-glow" aria-hidden="true" />
+      <div
+        className="chat-figure-stage"
+        role="button"
+        tabIndex={0}
+        aria-label={expanded ? `返回聊天，${agent.name}` : `查看${agent.name}的动态立绘`}
+        onClick={(event) => {
+          if (!expanded) {
+            event.stopPropagation();
+            onOpen();
+          }
+        }}
+        onKeyDown={(event) => {
+          if (!expanded && (event.key === "Enter" || event.key === " ")) {
+            event.preventDefault();
+            onOpen();
+          }
+        }}
+      >
+        <Live2DStage
+          className="chat-live2d-stage"
+          modelUrl={agent.live2dModelUrl}
+          manifest={agent.live2dManifest}
+          framing={viewFrame}
+          state={live2dState}
+          staticSrc={figSrc}
+          fallbackSrc={figSrc}
+          alt={agent.name}
+        />
       </div>
-      <button className="bigview-close" onClick={(e) => { e.stopPropagation(); onClose(); }}><Icon name="back" /></button>
+      {!expanded && <div className="chat-fig-fade" aria-hidden="true" />}
+      {expanded && (
+        <>
+          <div className="chat-figure-caption">
+            <div className="chat-figure-name serif">{agent.name}</div>
+            <div className="chat-figure-hint">轻触任意处返回聊天</div>
+          </div>
+          <button className="chat-figure-close" onClick={(event) => { event.stopPropagation(); onClose(); }} aria-label="返回聊天" title="返回聊天"><Icon name="back" /></button>
+        </>
+      )}
     </div>
   );
 }
@@ -938,6 +984,7 @@ function ChatRoom({ agent, onBack }) {
   const [voiceMode, setVoiceMode] = useStateC(false); // 语音/文字切换
   const [voiceSettings, setVoiceSettings] = useStateC(loadVoiceSettings);
   const [moreOpen, setMoreOpen] = useStateC(false); // 更多菜单
+  const [inputActionsOpen, setInputActionsOpen] = useStateC(false); // 手机输入栏更多操作
   const [modelOpen, setModelOpen] = useStateC(false);
   const [previewImage, setPreviewImage] = useStateC("");
   const [guidedImageOpen, setGuidedImageOpen] = useStateC(false);
@@ -996,6 +1043,17 @@ function ChatRoom({ agent, onBack }) {
   const [uploading, setUploading] = useStateC(false);
   const areaRef = useRefC(null);
   const fileRef = useRefC(null);
+  const draftRef = useRefC(null);
+
+  const resizeDraft = (node) => {
+    if (!node) return;
+    node.style.height = "auto";
+    node.style.height = `${Math.min(Math.max(node.scrollHeight, 22), 90)}px`;
+  };
+
+  useEffectC(() => {
+    resizeDraft(draftRef.current);
+  }, [draft]);
 
   /* 加载用户头像 */
   useEffectC(() => {
@@ -1034,6 +1092,10 @@ function ChatRoom({ agent, onBack }) {
   }, [roleId]);
 
   const figSrc = hasEmo ? (EMO_SET[emo] || agent.cover) : agent.cover;
+  const live2dState = React.useMemo(
+    () => getChatLive2DState(msgs, { isResponding: typing }),
+    [msgs, typing],
+  );
 
   const scroll = () => requestAnimationFrame(() => { const el = areaRef.current; if (el) el.scrollTop = el.scrollHeight; });
   useEffectC(() => { scroll(); }, [msgs, typing]);
@@ -1079,6 +1141,7 @@ function ChatRoom({ agent, onBack }) {
   const openGuidedImage = () => {
     if (typing || uploading || guidedImageBusy) return;
     setStickerOpen(false);
+    setInputActionsOpen(false);
     setGuidedImageOpen(true);
   };
 
@@ -1101,7 +1164,7 @@ function ChatRoom({ agent, onBack }) {
       setUploading(false);
     }
   };
-  const openPicker = () => { if (!uploading) fileRef.current?.click(); };
+  const openPicker = () => { if (!uploading) { setInputActionsOpen(false); fileRef.current?.click(); } };
   const onPickImage = (e) => { handleImageFiles(e.target.files); e.target.value = ""; };
   const removeAtt = (i) => setAtts((p) => p.filter((_, x) => x !== i));
 
@@ -1470,17 +1533,12 @@ function ChatRoom({ agent, onBack }) {
   };
 
   const shown = q.trim() ? msgs.filter((m) => (m.text || "").includes(q.trim())) : msgs;
+  const canSend = Boolean(draft.trim() || atts.length > 0);
 
   return (
     <div className="screen chat-screen anim-screen">
-      {/* 常驻立绘 — 随情绪变化 */}
-      {showFig && (
-        <div className="chat-figure">
-          <div className="chat-fig-glow" />
-          <img className="chat-fig-img" src={figSrc} alt="" onClick={() => setBig(true)} />
-          <div className="chat-fig-fade" />
-        </div>
-      )}
+      {/* 常驻立绘 — 当前角色只保留一个舞台，点击后切换为全屏陪伴视图 */}
+      {(showFig || big) && <ChatFigure agent={agent} figSrc={figSrc} expanded={big} live2dState={live2dState} onOpen={() => setBig(true)} onClose={() => setBig(false)} />}
 
       <header className="chat-top">
         <button className="ct-back" onClick={onBack} aria-label="返回聊天列表" title="返回聊天列表"><Icon name="back" /></button>
@@ -1531,8 +1589,6 @@ function ChatRoom({ agent, onBack }) {
         </button>
       )}
 
-      {big && <BigView agent={agent} figSrc={figSrc} onClose={() => setBig(false)} />}
-
       {previewImage && <ChatImagePreview src={previewImage} onClose={() => setPreviewImage("")} />}
 
       {guidedImageOpen && (
@@ -1562,7 +1618,7 @@ function ChatRoom({ agent, onBack }) {
           {/* 左侧：语音/键盘切换 */}
           <button
             className={"ib-tool" + (voiceMode ? " on" : "")}
-            onClick={() => { setVoiceMode(!voiceMode); setStickerOpen(false); }}
+            onClick={() => { setVoiceMode(!voiceMode); setStickerOpen(false); setInputActionsOpen(false); }}
             title={voiceMode ? "切换到文字" : "切换到语音"}
             aria-label={voiceMode ? "切换到文字" : "切换到语音"}
           >
@@ -1580,28 +1636,38 @@ function ChatRoom({ agent, onBack }) {
                 <Icon name="mic" />
                 <span>{typing ? `${agent.name}正在回复…` : "点击录音"}</span>
               </button>
-              <button className="ib-tool" onClick={() => setStickerOpen(!stickerOpen)} style={stickerOpen ? { color: "var(--rose)" } : null} aria-label="打开表情包" title="打开表情包"><Icon name="star" /></button>
+              <button className="ib-tool ib-voice-sticker" onClick={() => setStickerOpen(!stickerOpen)} style={stickerOpen ? { color: "var(--rose)" } : null} aria-label="打开表情包" title="打开表情包"><Icon name="star" /></button>
             </>
           ) : (
             /* 文字模式：原有布局 */
             <>
-              <button className="ib-tool" onClick={() => setCalling(true)} aria-label="开始实时通话" title="开始实时通话"><Icon name="phone" /></button>
-              <button className="ib-tool" onClick={openPicker} disabled={uploading} style={(atts.length || uploading) ? { color: "var(--rose)" } : null} aria-label="选择图片" title="选择图片"><Icon name="image" /></button>
-              <button className={"ib-tool" + (guidedImageOpen ? " on" : "")} onClick={openGuidedImage} disabled={typing || uploading || guidedImageBusy} aria-label="引导画图" title="不用写提示词，选几个选项让她画"><Icon name="spark" /></button>
+              <button className="ib-tool ib-desktop-tool" onClick={() => setCalling(true)} aria-label="开始实时通话" title="开始实时通话"><Icon name="phone" /></button>
+              <button className="ib-tool ib-desktop-tool" onClick={openPicker} disabled={uploading} style={(atts.length || uploading) ? { color: "var(--rose)" } : null} aria-label="选择图片" title="选择图片"><Icon name="image" /></button>
+              <button className={"ib-tool ib-desktop-tool" + (guidedImageOpen ? " on" : "")} onClick={openGuidedImage} disabled={typing || uploading || guidedImageBusy} aria-label="引导画图" title="不用写提示词，选几个选项让她画"><Icon name="spark" /></button>
               <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={onPickImage} />
-              <button className="ib-tool" onClick={() => setStickerOpen(!stickerOpen)} style={stickerOpen ? { color: "var(--rose)" } : null} aria-label="打开表情包" title="打开表情包"><Icon name="star" /></button>
+              <button className="ib-tool ib-desktop-tool" onClick={() => setStickerOpen(!stickerOpen)} style={stickerOpen ? { color: "var(--rose)" } : null} aria-label="打开表情包" title="打开表情包"><Icon name="star" /></button>
               <div className="ib-field">
-                <textarea value={draft} rows={1} onFocus={() => setStickerOpen(false)}
-                  onChange={(e) => setDraft(e.target.value)}
+                <textarea ref={draftRef} value={draft} rows={1} enterKeyHint="send" onFocus={() => { setStickerOpen(false); setInputActionsOpen(false); }}
+                  onChange={(e) => { setDraft(e.target.value); resizeDraft(e.currentTarget); }}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
                   placeholder={typing ? `${agent.name}正在回复…` : `和${agent.name}说点什么…`} />
               </div>
-              {(draft.trim() || atts.length > 0)
+              <button className={"ib-tool ib-mobile-action" + (stickerOpen ? " on" : "")} onClick={() => { setStickerOpen(!stickerOpen); setInputActionsOpen(false); }} aria-label="打开表情包" title="打开表情包"><Icon name="star" /></button>
+              {!canSend && <button className={"ib-tool ib-mobile-action ib-mobile-more" + (inputActionsOpen ? " on" : "")} onClick={() => { setInputActionsOpen(!inputActionsOpen); setStickerOpen(false); }} aria-label="更多聊天操作" title="更多聊天操作"><Icon name="plus" /></button>}
+              {canSend
                 ? <button className={"ib-send on" + (typing ? " busy" : "")} onClick={() => send()} disabled={typing || uploading} aria-label="发送消息" title="发送消息"><Icon name="send" /></button>
                 : null}
             </>
           )}
         </div>
+        {inputActionsOpen && !voiceMode && (
+          <div className="mobile-input-actions" aria-label="更多聊天操作">
+            <button className="mobile-input-action" onClick={() => { setCalling(true); setInputActionsOpen(false); }} aria-label="开始实时通话"><Icon name="phone" /><span>通话</span></button>
+            <button className="mobile-input-action" onClick={openPicker} disabled={uploading} aria-label="选择图片"><Icon name="image" /><span>图片</span></button>
+            <button className="mobile-input-action" onClick={openGuidedImage} disabled={typing || uploading || guidedImageBusy} aria-label="引导画图"><Icon name="spark" /><span>画图</span></button>
+            <button className="mobile-input-action" onClick={() => { setStickerOpen(true); setInputActionsOpen(false); }} aria-label="打开表情包"><Icon name="star" /><span>表情</span></button>
+          </div>
+        )}
       </footer>
 
       {listening && (

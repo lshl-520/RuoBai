@@ -3,6 +3,7 @@ const STATUS_LABELS = {
   completed: "已经完成",
   postponed: "改到以后",
   cancelled: "不做了",
+  expired: "已经过期",
 };
 
 const STATUS_HINTS = {
@@ -10,6 +11,7 @@ const STATUS_HINTS = {
   completed: "这件事已经做完了。",
   postponed: "这件事还没做，改到以后。",
   cancelled: "这件事决定不再做了。",
+  expired: "这件事超过了有效时间，不会再被当作当前待办。",
 };
 
 async function parseJson(response) {
