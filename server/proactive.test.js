@@ -3,15 +3,17 @@ import assert from 'node:assert/strict';
 
 import {
   buildProactiveRequest,
+  buildProactivePrompt,
   createMysqlProactiveRepository,
   extractProactiveText,
   generateProactiveMessage,
   runProactiveScan,
 } from './proactive.js';
 
-function createRepo({ candidateOverrides = {}, existingEvents = [] } = {}) {
+function createRepo({ candidateOverrides = {}, existingEvents = [], dueAppointment = null } = {}) {
   const events = [...existingEvents];
   const messages = [];
+  const appointmentLookups = [];
   const candidate = {
     userId: 7,
     characterId: 12,
@@ -29,6 +31,7 @@ function createRepo({ candidateOverrides = {}, existingEvents = [] } = {}) {
   return {
     events,
     messages,
+    appointmentLookups,
     async listCandidates() {
       return [candidate];
     },
@@ -44,6 +47,38 @@ function createRepo({ candidateOverrides = {}, existingEvents = [] } = {}) {
         if (dateKey) return event.dateKey === dateKey;
         return new Date(event.createdAt).getTime() >= new Date(since).getTime();
       });
+    },
+    async findDueAppointment(args) {
+      appointmentLookups.push(args);
+      return dueAppointment;
+    },
+    async reserveAppointmentEvent({ candidate: reservationCandidate, appointment, dateKey }) {
+      const exists = events.some((event) => (
+        event.eventType === 'appointment_follow_up'
+          && event.sourceType === 'memory'
+          && Number(event.sourceId) === Number(appointment.id)
+      ));
+      if (exists) return { created: false };
+      const item = {
+        id: events.length + 1,
+        userId: reservationCandidate.userId,
+        characterId: reservationCandidate.characterId,
+        eventType: 'appointment_follow_up',
+        sourceType: 'memory',
+        sourceId: appointment.id,
+        dateKey,
+        status: 'processing',
+      };
+      events.push(item);
+      return { id: item.id, created: true };
+    },
+    async completeReservedEvent({ eventId, messageId, content }) {
+      const event = events.find((item) => item.id === eventId);
+      if (event) Object.assign(event, { messageId, content, status: 'created' });
+    },
+    async markEventGenerationFailed(eventId, errorMessage) {
+      const event = events.find((item) => item.id === eventId);
+      if (event) Object.assign(event, { status: 'generation_failed', errorMessage });
     },
     async saveAssistantMessage({ content }) {
       const message = { id: 91, content };
@@ -168,6 +203,70 @@ test('runProactiveScan keeps saved message when push delivery fails', async () =
   assert.equal(repo.events[0].errorMessage, 'FCM unavailable');
 });
 
+test('a due appointment takes priority and creates one role-scoped follow-up', async () => {
+  const repo = createRepo({
+    candidateOverrides: { isActive: false },
+    dueAppointment: {
+      id: 77,
+      content: '约好今天晚上一起看电影。',
+      appointmentAt: '2026-06-21T11:00:00.000Z',
+    },
+  });
+  let generated = 0;
+
+  const options = {
+    repository: repo,
+    now: new Date('2026-06-21T12:30:00.000Z'),
+    generateMessage: async ({ reason, appointment }) => {
+      generated += 1;
+      assert.equal(reason, 'appointment');
+      assert.equal(appointment.id, 77);
+      return '电影时间到啦，今天还想一起看吗？';
+    },
+    logger: { info() {}, warn() {}, error() {} },
+  };
+
+  const first = await runProactiveScan(options);
+  const second = await runProactiveScan(options);
+
+  assert.equal(first.created, 1);
+  assert.equal(second.created, 0);
+  assert.equal(generated, 1);
+  assert.deepEqual(repo.appointmentLookups[0], { userId: 7, characterId: 12, now: options.now });
+  assert.equal(repo.events[0].eventType, 'appointment_follow_up');
+  assert.equal(repo.events[0].sourceType, 'memory');
+  assert.equal(repo.events[0].sourceId, 77);
+  assert.equal(repo.events[0].status, 'stored');
+});
+
+test('an appointment generation failure is recorded and is not charged again automatically', async () => {
+  const repo = createRepo({
+    dueAppointment: {
+      id: 78,
+      content: '约好今天晚上一起聊天。',
+      appointmentAt: '2026-06-21T11:00:00.000Z',
+    },
+  });
+  let generated = 0;
+  const options = {
+    repository: repo,
+    now: new Date('2026-06-21T12:30:00.000Z'),
+    generateMessage: async () => {
+      generated += 1;
+      return '';
+    },
+    logger: { info() {}, warn() {}, error() {} },
+  };
+
+  const first = await runProactiveScan(options);
+  const second = await runProactiveScan(options);
+
+  assert.equal(first.created, 0);
+  assert.equal(second.created, 0);
+  assert.equal(generated, 1);
+  assert.equal(repo.events[0].status, 'generation_failed');
+});
+
 test('generateProactiveMessage follows the selected role model and provider protocol', async () => {
   let selectedModelArgs;
   let request;
@@ -224,6 +323,18 @@ test('proactive provider helpers keep Responses output and model routing separat
   assert.equal(body.messages, undefined);
   assert.equal(body.input.at(-1).content, '主动说一句话');
   assert.equal(extractProactiveText('responses', { output_text: '回来了。' }), '回来了。');
+});
+
+test('appointment prompt keeps the source appointment specific but non-pressuring', () => {
+  const prompt = buildProactivePrompt({
+    candidate: { characterName: '小白', persona: '' },
+    reason: 'appointment',
+    appointment: { content: '今晚一起看电影。' },
+    recentMessages: [],
+  });
+  assert.match(prompt, /之前约定的时间/);
+  assert.match(prompt, /今晚一起看电影/);
+  assert.match(prompt, /不催促、不指责/);
 });
 
 test('reasoning chat-completions models get room for a final proactive sentence', () => {

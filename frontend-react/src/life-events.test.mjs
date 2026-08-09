@@ -4,10 +4,11 @@ import { getLifeEventSource, getLifeEventStatusLabel, getLifeEventStatusHint, LI
 
 test("life event status labels stay in plain language", () => {
   assert.equal(getLifeEventStatusLabel("completed"), "已经完成");
+  assert.equal(getLifeEventStatusLabel("expired"), "已经过期");
   assert.equal(getLifeEventStatusLabel("unknown"), "还没完成");
   assert.equal(getLifeEventStatusHint("postponed"), "这件事还没做，改到以后。");
   assert.deepEqual(LIFE_EVENT_STATUS_OPTIONS.map(([value]) => value), [
-    "active", "completed", "postponed", "cancelled",
+    "active", "completed", "postponed", "cancelled", "expired",
   ]);
 });
 

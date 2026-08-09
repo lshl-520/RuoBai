@@ -2,7 +2,7 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
     <title>若白 React 主线</title>
     <script>
       // 方案B：检测系统字体放大，自动缩回设计稿比例
@@ -10,6 +10,17 @@
       // 用 CSS zoom 反向缩小，让页面视觉跟设计稿一致
       (function(){
         var d = document.documentElement;
+        var syncAppViewport = function() {
+          var visual = window.visualViewport;
+          var height = visual ? visual.height : window.innerHeight;
+          d.style.setProperty('--app-viewport-height', Math.round(height) + 'px');
+        };
+        syncAppViewport();
+        window.addEventListener('resize', syncAppViewport);
+        if (window.visualViewport) {
+          window.visualViewport.addEventListener('resize', syncAppViewport);
+          window.visualViewport.addEventListener('scroll', syncAppViewport);
+        }
         var t = document.createElement('div');
         t.style.cssText = 'position:absolute;left:-9999px;top:-9999px;font-size:100px;width:100px;height:100px;overflow:hidden';
         d.appendChild(t);

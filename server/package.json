@@ -14,7 +14,9 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
+    "adm-zip": "^0.5.17",
     "bcryptjs": "^2.4.3",
+    "busboy": "^1.6.0",
     "compression": "^1.8.1",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",

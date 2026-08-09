@@ -19,6 +19,10 @@
 .hero-live2d-click { position: absolute; inset: 0; cursor: pointer; }
 .live2d-stage { position: relative; overflow: hidden; }
 .live2d-stage img { width: 100%; height: 100%; object-fit: cover; object-position: top center; }
+.live2d-stage-live { background: transparent; }
+.live2d-stage-canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; z-index: 1; }
+.live2d-stage-loading-preview { position: absolute; inset: 0; z-index: 0; opacity: 0.72; transition: opacity 0.24s ease; }
+.live2d-stage-loading-preview.is-ready { opacity: 0; }
 .hero-scrim { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(40,28,32,0) 40%, rgba(40,28,32,0.25) 60%, rgba(38,26,30,0.88) 100%); pointer-events: none; }
 .hero-top { position: absolute; top: 16px; left: 16px; right: 16px; z-index: 2; display: flex; align-items: center; justify-content: space-between; }
 .agent-proactive-hint { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: rgba(255, 248, 202, .9); color: #a56c12; font-size: 15px; }
@@ -89,6 +93,13 @@
 .image-resolution-row label { display: block; margin-bottom: 6px; }
 .image-resolution-row select { width: 100%; }
 .image-resolution-row .route-note { margin-top: 6px; padding: 0; }
+.visual-frame-settings { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r); background: var(--paper-2); }
+.visual-frame-settings .field-label { margin: 0 0 8px; }
+.visual-frame-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.visual-frame-field { display: block; min-width: 0; }
+.visual-frame-field > span { display: block; margin: 0 0 5px; color: var(--ink-faint); font-size: 11px; }
+.visual-frame-field .fld { padding: 9px 10px; font-size: 12px; }
+.visual-frame-settings .route-note { margin-top: 8px; padding: 0; }
 .toggle { width: 46px; height: 27px; border-radius: 999px; background: var(--line-strong); position: relative; flex-shrink: 0; transition: background 0.25s; }
 .toggle i { position: absolute; top: 3px; left: 3px; width: 21px; height: 21px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: transform 0.25s; }
 .toggle.on { background: var(--rose); }
@@ -246,16 +257,20 @@
   background: rgba(250,246,242,0.92); backdrop-filter: blur(12px);
   position: relative; z-index: 6;
 }
-.input-row { display: flex; align-items: flex-end; gap: 9px; }
+.input-row { display: flex; align-items: flex-end; gap: 9px; min-width: 0; }
 .ib-tool { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--ink-soft); flex-shrink: 0; }
 .ib-tool svg { width: 22px; height: 22px; }
-.ib-field { flex: 1; background: var(--card); border-radius: 22px; padding: 9px 14px; box-shadow: var(--shadow-sm); }
-.ib-field textarea { width: 100%; border: none; outline: none; background: none; resize: none; font-size: 14.5px; line-height: 1.4; max-height: 90px; color: var(--ink); }
+.ib-field { flex: 1 1 auto; min-width: 0; background: var(--card); border-radius: 22px; padding: 9px 14px; box-shadow: var(--shadow-sm); }
+.ib-field textarea { display: block; width: 100%; min-width: 0; min-height: 22px; border: none; outline: none; background: none; resize: none; font-size: 14.5px; line-height: 1.4; max-height: 90px; overflow-y: auto; overflow-wrap: anywhere; color: var(--ink); }
 .ib-field textarea::placeholder { color: var(--ink-ghost); }
 .ib-send { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; background: var(--rose); color: #fff; box-shadow: var(--shadow-rose); transition: transform 0.15s; }
 .ib-send:active { transform: scale(0.9); }
 .ib-send svg { width: 20px; height: 20px; }
 .ib-send.busy { opacity: 0.5; }
+.ib-mobile-action, .mobile-input-actions { display: none; }
+.mobile-input-action { min-width: 0; min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border-radius: 14px; background: var(--card); color: var(--ink-soft); font-size: 11px; }
+.mobile-input-action svg { width: 22px; height: 22px; }
+.mobile-input-action:disabled { opacity: .45; }
 /* 语音模式切换：激活状态 */
 .ib-tool.on { color: var(--rose); background: var(--rose-tint); }
 /* 聊天室更多菜单 */
@@ -638,11 +653,27 @@
   gap: 5px;
 }
 
+/* 手机输入栏不能随页面其他元素沿用狭窄断点；常见大屏手机仍应优先保证文字和发送。 */
+@media (max-width: 600px) {
+  /* 手机输入栏采用“主输入 + 更多动作”的布局，避免固定工具把文字区压成一两个字。 */
+  .input-bar { padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)); }
+  .input-row { gap: 8px; }
+  .input-row > .ib-desktop-tool { display: none; }
+  .ib-field { padding: 8px 12px; }
+  .ib-field textarea { font-size: 16px; line-height: 1.35; }
+  .ib-mobile-action { display: grid; flex: 0 0 40px; }
+  .ib-mobile-action svg { width: 21px; height: 21px; }
+  .ib-mobile-more.on { color: var(--rose); background: var(--rose-tint); }
+  .mobile-input-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0 0 8px; padding: 8px 4px 2px; border-top: 1px solid var(--line); }
+  .ib-voice-sticker { display: grid; flex: 0 0 40px; }
+}
+
 /* ============================================================
    方案C · 真机视觉适配
    ≤430px 手机屏微调
    ============================================================ */
 @media (max-width: 430px) {
+
   /* 手机端不是桌面画板的缩小版：收起时只露出简短入口。 */
   .think { max-width: min(100%, 214px); }
   .think.open { width: min(100%, 276px); }

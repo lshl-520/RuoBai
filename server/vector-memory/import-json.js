@@ -8,6 +8,7 @@ import { createVectorMemoryClient } from './qdrant.js';
 const DEFAULT_QDRANT_URL = 'http://127.0.0.1:6333';
 const DEFAULT_COLLECTION = 'ruobai_memories_local';
 const DEFAULT_BATCH_SIZE = 16;
+const DEFAULT_EMBEDDING_MODEL = 'BAAI/bge-small-zh-v1.5';
 const CHARACTER_ALIASES = new Map([
   ['ISFP人格馆', ['ISFP / 燕云人格馆', 'ISFP']]
 ]);
@@ -26,17 +27,38 @@ function requirePositiveInteger(value, label) {
   return number;
 }
 
+function requireNonEmptyString(value, label) {
+  const text = String(value || '').trim();
+  if (!text) {
+    throw new Error(`${label} 不能为空`);
+  }
+  return text;
+}
+
 export function parseImportArgs(argv = process.argv.slice(2)) {
   const file = String(readFlag(argv, '--file') || '').trim();
   if (!file) {
     throw new Error('导入向量记忆必须传入 --file');
   }
 
+  const characterIdFlag = readFlag(argv, '--character-id');
+  const characterNameFlag = readFlag(argv, '--character-name');
+  if (Boolean(characterIdFlag) !== Boolean(characterNameFlag)) {
+    throw new Error('指定角色时必须同时传入 --character-id 和 --character-name');
+  }
+
   return {
     file,
     userId: requirePositiveInteger(readFlag(argv, '--user-id'), 'userId'),
+    characterId: characterIdFlag
+      ? requirePositiveInteger(characterIdFlag, 'characterId')
+      : null,
+    characterName: characterNameFlag
+      ? requireNonEmptyString(characterNameFlag, 'characterName')
+      : '',
     qdrantUrl: readFlag(argv, '--qdrant-url') || DEFAULT_QDRANT_URL,
     collection: readFlag(argv, '--collection') || DEFAULT_COLLECTION,
+    embeddingUrl: readFlag(argv, '--embedding-url') || '',
     credentialId: readFlag(argv, '--credential-id')
       ? requirePositiveInteger(readFlag(argv, '--credential-id'), 'credentialId')
       : null,
@@ -73,6 +95,15 @@ async function loadCredential({ pool, userId, credentialId }) {
 export async function resolveImportEmbedder({ args, pool }) {
   if (args.hashEmbedding) {
     return createHashEmbedder({ vectorSize: args.vectorSize || 512 });
+  }
+  if (args.embeddingUrl) {
+    return createOpenAICompatibleEmbedder({
+      apiBase: args.embeddingUrl,
+      apiKey: '',
+      model: args.model || DEFAULT_EMBEDDING_MODEL,
+      batchSize: args.batchSize,
+      vectorSize: args.vectorSize || 512
+    });
   }
   if (!args.credentialId) {
     return createLocalEmbedder({ batchSize: args.batchSize });
@@ -167,10 +198,11 @@ export async function runImport({
     collectionName: args.collection,
     vectorSize: activeEmbedder.vectorSize
   });
-  const [exportData, characterMap] = await Promise.all([
-    readExport(args.file),
-    loadCharacterMap({ pool, userId: args.userId })
-  ]);
+  const exportData = await readExport(args.file);
+  // A verified explicit mapping keeps one-off historical imports independent of MySQL.
+  const characterMap = args.characterId
+    ? new Map([[args.characterName, args.characterId]])
+    : await loadCharacterMap({ pool, userId: args.userId });
 
   const { chunks, stats } = chunkMergedChatExport({
     userId: args.userId,

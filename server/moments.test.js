@@ -583,6 +583,7 @@ test('POST /api/moments/:id/like toggles like state', async () => {
 });
 
 test('POST /api/moments/:id/comment creates a comment', async () => {
+  const sourceCalls = [];
   const connection = {
     query: async (sql, params) => {
       if (sql.includes('SELECT id FROM moments')) {
@@ -614,8 +615,33 @@ test('POST /api/moments/:id/comment creates a comment', async () => {
     }
   };
 
+  const pool = {
+    query: async (sql, params) => {
+      sourceCalls.push({ sql, params });
+      if (sql.includes('SELECT character_id, content FROM moments')) {
+        return [[{ character_id: 6, content: '原动态' }]];
+      }
+      if (sql.includes('FROM life_event_sources')) {
+        if (params[1] === 'comment') return [[]];
+        if (params[1] === 'moment') {
+          return [[{
+            id: 41,
+            character_id: 6,
+            title: '原动态',
+            event_type: 'life',
+            status: 'active',
+            expires_at: null,
+            event_key: null
+          }]];
+        }
+      }
+      if (sql.includes('INSERT IGNORE INTO life_event_sources')) return [{ affectedRows: 1 }];
+      throw new Error(`Unexpected source query: ${sql}`);
+    }
+  };
+
   const router = createMomentsRouter({
-    pool: { query: async () => { throw new Error('unused'); } },
+    pool,
     withTransaction: async work => work(connection)
   });
 
@@ -631,6 +657,10 @@ test('POST /api/moments/:id/comment creates a comment', async () => {
     assert.equal(payload.success, true);
     assert.equal(payload.item.id, 11);
     assert.equal(payload.item.content, 'nice');
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const relatedQuery = sourceCalls.find(call => call.sql.includes('FROM life_event_sources') && call.params[1] === 'moment');
+    assert.deepEqual(relatedQuery?.params, [1, 'moment', 8]);
+    assert.ok(sourceCalls.some(call => call.sql.includes('INSERT IGNORE INTO life_event_sources') && call.params[0] === 41));
   });
 });
 

@@ -320,6 +320,64 @@ test('PATCH /api/roles/:id saves structured dynamic image settings and returns t
   });
 });
 
+test('PATCH /api/roles/:id saves per-role visual frame settings', async () => {
+  const frameConfig = {
+    chatFrame: 'half',
+    fullscreenFrame: 'full',
+    chatZoom: 1.15,
+    chatOffsetX: 0.04,
+    chatOffsetY: -0.02
+  };
+  const updatedRole = {
+    id: 7,
+    user_id: 1,
+    char_key: 'xiaobai',
+    name: 'Xiaobai',
+    tag: 'companion',
+    persona: 'warm',
+    avatar: '',
+    visual_frame_config: JSON.stringify(frameConfig),
+    mood: 80,
+    intimacy: 50,
+    auto_moments_enabled: 0,
+    auto_moments_daily_min: 0,
+    auto_moments_daily_max: 0,
+    auto_moments_min_interval_hours: 4,
+    is_active: 1,
+    is_deleted: 0,
+    delete_after: null,
+    created_at: '2026-08-06 10:00:00'
+  };
+  const connection = {
+    query: async (sql, params) => {
+      if (sql.includes('SELECT id') && sql.includes('is_deleted = 0') && !sql.includes('SELECT id, user_id')) return [[{ id: 7 }]];
+      if (sql.includes('UPDATE characters') && sql.includes('visual_frame_config')) {
+        assert.ok(params.includes(JSON.stringify({
+          ...frameConfig,
+          fullscreenZoom: 1,
+          fullscreenOffsetX: 0,
+          fullscreenOffsetY: 0
+        })));
+        return [{ affectedRows: 1 }];
+      }
+      if (sql.includes('SELECT id, user_id, char_key')) return [[updatedRole]];
+      throw new Error(`Unexpected query: ${sql}`);
+    }
+  };
+  const router = createRolesRouter({ withTransaction: async work => work(connection) });
+
+  await withServer(createApp({ router }), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/roles/7`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visual_frame_config: frameConfig })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(payload.item.visual_frame_config, updatedRole.visual_frame_config && JSON.parse(updatedRole.visual_frame_config));
+  });
+});
+
 test('PATCH /api/roles/:id rejects an incomplete fixed image profile', async () => {
   const router = createRolesRouter({
     withTransaction: async () => { throw new Error('should not write incomplete profile'); }

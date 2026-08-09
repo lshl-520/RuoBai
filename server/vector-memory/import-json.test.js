@@ -14,8 +14,11 @@ test('parseImportArgs requires file and explicit user id', () => {
   ]), {
     file: 'chat.json',
     userId: 1,
+    characterId: null,
+    characterName: '',
     qdrantUrl: 'http://127.0.0.1:6333',
     collection: 'ruobai_memories_local',
+    embeddingUrl: '',
     credentialId: null,
     model: '',
     vectorSize: null,
@@ -23,6 +26,19 @@ test('parseImportArgs requires file and explicit user id', () => {
     batchSize: 8,
     dryRun: true
   });
+
+  assert.throws(() => parseImportArgs([
+    '--file', 'chat.json',
+    '--user-id', '1',
+    '--character-id', '7'
+  ]), /同时传入/);
+
+  assert.equal(parseImportArgs([
+    '--file', 'chat.json',
+    '--user-id', '1',
+    '--character-id', '7',
+    '--character-name', '小白'
+  ]).characterId, 7);
 });
 
 test('loadCharacterMap maps owned characters and prefers non-test duplicates', async () => {
@@ -91,4 +107,46 @@ test('runImport supports dry-run without touching Qdrant', async () => {
   assert.equal(result.imported, 0);
   assert.equal(result.chunks.length, 1);
   assert.ok(writes.some(message => message.includes('dry-run')));
+});
+
+test('runImport uses an explicit character mapping without querying MySQL', async () => {
+  const result = await runImport({
+    args: {
+      file: 'unused.json',
+      userId: 1,
+      characterId: 7,
+      characterName: '小白',
+      batchSize: 8,
+      dryRun: true
+    },
+    pool: {
+      query: async () => {
+        throw new Error('显式角色映射不应查询 MySQL');
+      }
+    },
+    embedder: {
+      vectorSize: 384,
+      embedTexts: async () => {
+        throw new Error('dry-run 不应生成向量');
+      }
+    },
+    client: {
+      ensureCollection: async () => {
+        throw new Error('dry-run 不应连接 Qdrant');
+      }
+    },
+    write: () => {},
+    readExport: async () => ({
+      total_messages: 1,
+      characters: [{
+        name: '小白',
+        message_count: 1,
+        messages: [
+          { role: 'user', content: '你好', type: 'text', date: '2026-05-21 17:02:44', source: '早期备份' }
+        ]
+      }]
+    })
+  });
+
+  assert.equal(result.chunks.length, 1);
 });

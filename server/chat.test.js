@@ -249,6 +249,99 @@ test('POST /api/chat save records first chat time only for user messages', async
   });
 });
 
+test('POST /api/chat synchronizes runtime, memory, and life event for a user message', async () => {
+  const sideEffects = [];
+  const router = createChatRouter({
+    pool: {
+      query: async (sql, params) => {
+        if (sql.includes('FROM characters')) {
+          return [[{ id: 7, user_id: 1, is_deleted: 0 }]];
+        }
+
+        if (sql.includes('INFORMATION_SCHEMA.COLUMNS')) {
+          return [[{ column_name: 'is_deleted' }]];
+        }
+
+        if (sql.includes('INSERT INTO messages')) {
+          return [{ insertId: 33 }];
+        }
+
+        if (sql.includes('UPDATE characters') && sql.includes('first_chat_at')) {
+          return [{ affectedRows: 1 }];
+        }
+
+        if (sql.includes('SELECT id, user_id, character_id')) {
+          return [[{
+            id: 33,
+            user_id: 1,
+            character_id: 7,
+            role: 'user',
+            content: '我们约好 2026年8月6日一起看电影',
+            message_type: 'text',
+            media_url: null,
+            is_active: 1,
+            created_at: '2026-05-26 12:00:00'
+          }]];
+        }
+
+        if (sql.includes('SELECT state_json, relationship_json')) {
+          return [[]];
+        }
+
+        if (sql.includes('INSERT INTO character_runtime_states')) {
+          sideEffects.push('runtime');
+          return [{ affectedRows: 1 }];
+        }
+
+        if (sql.includes('SELECT id FROM memories')) {
+          return [[]];
+        }
+
+        if (sql.includes('INSERT INTO memories')) {
+          sideEffects.push('memory');
+          return [{ insertId: 44 }];
+        }
+
+        if (sql.includes('FROM life_event_sources')) {
+          return [[]];
+        }
+
+        if (sql.includes('FROM life_events')) {
+          return [[]];
+        }
+
+        if (sql.includes('INSERT INTO life_events')) {
+          sideEffects.push('life_event');
+          return [{ insertId: 45 }];
+        }
+
+        if (sql.includes('INSERT INTO life_event_sources')) {
+          sideEffects.push('life_event_source');
+          return [{ insertId: 46 }];
+        }
+
+        throw new Error(`Unexpected query: ${sql}`);
+      }
+    }
+  });
+
+  await withServer(createApp({ router }), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/chat?character_id=7`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        role: 'user',
+        content: '我们约好 2026年8月6日一起看电影'
+      })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 201);
+    assert.equal(payload.success, true);
+    assert.deepEqual(sideEffects.sort(), ['life_event', 'life_event_source', 'memory', 'runtime']);
+  });
+});
+
 test('POST /api/chat save does not record first chat time for assistant messages', async () => {
   const calls = [];
   const router = createChatRouter({

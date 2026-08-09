@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ensureCharacterRuntimeColumns, ensureCredentialRuntimeColumns, ensureMessageRuntimeColumns, ensureMemoryRuntimeColumns, ensurePersonaRuntimeTables, ensurePushRuntimeTables, ensureDynamicCapabilityAssignment } from './schema.js';
+import { ensureCharacterRuntimeColumns, ensureCredentialRuntimeColumns, ensureLifeEventRuntimeColumns, ensureMessageRuntimeColumns, ensureMemoryRuntimeColumns, ensurePersonaRuntimeTables, ensurePushRuntimeTables, ensureDynamicCapabilityAssignment } from './schema.js';
 
 test('ensureDynamicCapabilityAssignment upgrades the legacy capability enum', async () => {
   const calls = [];
@@ -106,6 +106,7 @@ test('ensurePushRuntimeTables creates FCM and proactive-message tables', async (
   assert.match(joined, /CREATE TABLE IF NOT EXISTS push_preferences/i);
   assert.match(joined, /CREATE TABLE IF NOT EXISTS proactive_events/i);
   assert.match(joined, /UNIQUE KEY unique_fcm_token/i);
+  assert.match(joined, /UNIQUE KEY unique_proactive_source \(user_id, character_id, event_type, source_type, source_id\)/i);
 });
 
 test('ensurePersonaRuntimeTables creates one persistent state per user character', async () => {
@@ -160,6 +161,25 @@ test('ensureMessageRuntimeColumns adds separate inner OS fields once', async () 
   assert.match(joined, /ADD COLUMN reasoning_summary TEXT AFTER content/i);
   assert.match(joined, /ADD COLUMN inner_os_content TEXT AFTER reasoning_summary/i);
   assert.match(joined, /ADD COLUMN inner_os_source VARCHAR\(50\) DEFAULT NULL AFTER inner_os_content/i);
+});
+
+test('ensureLifeEventRuntimeColumns adds lifecycle and merge fields', async () => {
+  const calls = [];
+  const db = {
+    query: async (sql, params = []) => {
+      calls.push({ sql, params });
+      if (sql.includes('information_schema.COLUMNS')) return [[]];
+      return [{ affectedRows: 0 }];
+    }
+  };
+
+  await ensureLifeEventRuntimeColumns(db);
+
+  const joined = calls.filter(call => /^ALTER TABLE life_events/i.test(call.sql)).map(call => call.sql).join('\n');
+  assert.match(joined, /ADD COLUMN event_key VARCHAR\(64\) DEFAULT NULL AFTER event_type/i);
+  assert.match(joined, /ADD COLUMN status_note VARCHAR\(500\) DEFAULT NULL AFTER status/i);
+  assert.match(joined, /ADD COLUMN expires_at DATETIME DEFAULT NULL AFTER occurred_at/i);
+  assert.match(joined, /ADD COLUMN corrected_at DATETIME DEFAULT NULL AFTER updated_at/i);
 });
 
 test('ensureCharacterRuntimeColumns adds dynamic profile and template fields on startup', async () => {

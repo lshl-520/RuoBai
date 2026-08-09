@@ -9,10 +9,11 @@
 }
 
 async function request(path, options = {}) {
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const response = await fetch(path, {
     credentials: "same-origin",
     ...options,
-    headers: {
+    headers: isFormData ? { ...(options.headers ?? {}) } : {
       "Content-Type": "application/json",
       ...(options.headers ?? {}),
     },
@@ -99,6 +100,21 @@ export function uploadRolePortrait(roleId, imageData) {
   });
 }
 
+export function uploadRoleLive2D(roleId, file) {
+  const body = new FormData();
+  body.append("file", file);
+  return request(`/api/roles/${encodeURIComponent(roleId)}/live2d-asset`, {
+    method: "POST",
+    body,
+  });
+}
+
+export function removeRoleLive2D(roleId) {
+  return request(`/api/roles/${encodeURIComponent(roleId)}/live2d-asset`, {
+    method: "DELETE",
+  });
+}
+
 export function clampIntimacy(value) {
   const numeric = Number(value);
 
@@ -110,6 +126,10 @@ export function clampIntimacy(value) {
 }
 
 export function getRolePortraitSrc(role) {
+  const visualMode = String(role?.visual_mode ?? role?.visualMode ?? "").trim().toLowerCase();
+  const visualPreview = String(role?.visual_preview_url ?? role?.visualPreviewUrl ?? "").trim();
+  if (visualMode === "live2d" && visualPreview) return visualPreview;
+
   const portraitId = Number(role?.portrait_id ?? role?.portraitId);
   const customUrl = String(
     role?.portrait_custom_url ?? role?.portraitCustomUrl ?? "",
@@ -128,6 +148,10 @@ export function getRolePortraitSrc(role) {
 }
 
 export function getRoleFullPortrait(role) {
+  const visualMode = String(role?.visual_mode ?? role?.visualMode ?? "").trim().toLowerCase();
+  const visualPreview = String(role?.visual_preview_url ?? role?.visualPreviewUrl ?? "").trim();
+  if (visualMode === "live2d" && visualPreview) return visualPreview;
+
   const portraitId = Number(role?.portrait_id ?? role?.portraitId);
   const customUrl = String(role?.portrait_custom_url ?? role?.portraitCustomUrl ?? "").trim();
   if (portraitId === 999 && customUrl) return customUrl;
@@ -136,6 +160,10 @@ export function getRoleFullPortrait(role) {
 }
 
 export function getRoleAvatarRound(role) {
+  const visualMode = String(role?.visual_mode ?? role?.visualMode ?? "").trim().toLowerCase();
+  const visualPreview = String(role?.visual_preview_url ?? role?.visualPreviewUrl ?? "").trim();
+  if (visualMode === "live2d" && visualPreview) return visualPreview;
+
   const portraitId = Number(role?.portrait_id ?? role?.portraitId);
   const customUrl = String(role?.portrait_custom_url ?? role?.portraitCustomUrl ?? "").trim();
   if (portraitId === 999 && customUrl) return customUrl;

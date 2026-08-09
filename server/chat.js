@@ -16,6 +16,11 @@ import { getCityWeatherText } from './weather.js';
 import { detectDrawIntent, generateImage } from './image-gen.js';
 import { guessModelCapabilities } from './model-capabilities.js';
 import { buildPersonaRuntimePrompt, loadPersonaRuntime, recordPersonaRuntimeTurn } from './persona-runtime.js';
+import {
+  buildCharacterContextPrompt,
+  buildCharacterContextSnapshot,
+  loadRecentLifeEvents,
+} from './character-context.js';
 import { recordAutoMemoryCandidate, recordExplicitChatMemory } from './memory-extractor.js';
 import { recordLifeEventSource } from './life-events.js';
 
@@ -137,20 +142,29 @@ function cleanInnerOsText(text) {
     .slice(0, 420);
 }
 
-export function buildInnerOsPrompt({ character, userContent, assistantContent, level }) {
-  const limit = INNER_OS_LIMITS[normalizeInnerOsLevel(level)] || INNER_OS_LIMITS.low;
+export function buildInnerOsPrompt({ character, userContent, assistantContent, level, context = null }) {
+  const normalizedLevel = normalizeInnerOsLevel(level);
+  const limit = INNER_OS_LIMITS[normalizedLevel] || INNER_OS_LIMITS.low;
   const name = String(character?.name || '她').trim() || '她';
+  const levelRule = normalizedLevel === 'low'
+    ? '简洁档只写此刻的即时感受，不引用过去。'
+    : normalizedLevel === 'mid'
+      ? '细腻档可以写一个自然动作、愿望或犹豫，但不要为了变长而编造背景。'
+      : '深入档只有在快照提供相关且已确认的连续性事实时才可以轻轻带到；没有证据就自然写成细腻档。';
+  const contextBlock = context ? `\n\n${buildCharacterContextPrompt(context, { consumer: 'os' })}` : '';
   return [
     `你是陪伴角色“${name}”的内心 OS 编辑器。`,
     '根据这一轮用户说的话与角色已经发出的回复，写一小段能公开显示在聊天气泡下的中文内心小心思。',
     '这不是原始思维链，不要解释推理步骤，不要提系统、模型、提示词、渠道、API 或“正在生成”。',
     `必须使用自然简体中文；${limit.sentences}`,
+    levelRule,
     '只写内心内容本身，不要标题、Markdown、引号、列表、英文。',
     '可以写她注意到的情绪、她想接住的重点或她选择这样回复的心意；不能编造记忆、事实或用户没有表达过的关系。',
     '',
     `用户这一轮：${String(userContent || '').slice(0, 800)}`,
-    `${name}已经回复：${String(assistantContent || '').slice(0, 800)}`
-  ].join('\n');
+    `${name}已经回复：${String(assistantContent || '').slice(0, 800)}`,
+    contextBlock
+  ].filter(Boolean).join('\n');
 }
 
 function shouldUseResponsesApi(modelConfig, thinkLevel) {
@@ -548,12 +562,12 @@ export function createChatRouter({
     const [rows] = await pool.query(
       `
         SELECT id, user_id, character_id, content, tag, category, is_important, is_deleted,
-               review_status, detected_reason, created_at
+               review_status, detected_reason, memory_type, source_type, source_id,
+               occurred_at, appointment_status, weight, created_at
         FROM memories
         WHERE user_id = ? AND character_id = ? AND is_deleted = 0
-        ORDER BY is_important DESC,
-                 CASE WHEN review_status = 'candidate' THEN 1 ELSE 0 END,
-                 weight DESC, created_at DESC, id DESC
+          AND COALESCE(review_status, 'active') <> 'candidate'
+        ORDER BY is_important DESC, weight DESC, created_at DESC, id DESC
         LIMIT ?
       `,
       [userId, characterId, limit]
@@ -627,6 +641,39 @@ export function createChatRouter({
     );
 
     return rows[0];
+  }
+
+  async function recordUserMessageSideEffects({ userId, characterId, messageId, content, messageType }) {
+    if (!messageId || !String(content || '').trim()) return;
+
+    await recordPersonaRuntimeTurn(pool, {
+      userId,
+      characterId,
+      content,
+      messageType
+    });
+    await recordExplicitChatMemory(pool, {
+      userId,
+      characterId,
+      messageId,
+      content
+    });
+    await Promise.all([
+      recordAutoMemoryCandidate(pool, {
+        userId,
+        characterId,
+        messageId,
+        content
+      }),
+      recordLifeEventSource(pool, {
+        userId,
+        characterId,
+        sourceType: 'chat',
+        sourceId: messageId,
+        title: content,
+        eventType: /(?:约好|约定|下次|明天)/u.test(content) ? 'appointment' : 'life'
+      })
+    ]);
   }
 
   async function getActiveModelConfig(userId) {
@@ -731,7 +778,7 @@ export function createChatRouter({
     return getActiveModelConfig(userId);
   }
 
-  async function generateInnerOs({ modelConfig, character, userContent, assistantContent, level }) {
+  async function generateInnerOs({ modelConfig, character, userContent, assistantContent, level, context = null }) {
     const normalizedLevel = normalizeInnerOsLevel(level);
     if (normalizedLevel === 'off') return '';
     if (!modelConfig) {
@@ -739,7 +786,13 @@ export function createChatRouter({
     }
 
     const requestInnerOs = async (correction = '') => {
-      const prompt = buildInnerOsPrompt({ character, userContent, assistantContent, level: normalizedLevel }) + correction;
+      const prompt = buildInnerOsPrompt({
+        character,
+        userContent,
+        assistantContent,
+        level: normalizedLevel,
+        context
+      }) + correction;
       const reflectionProtocol = getChatProtocol(modelConfig, normalizedLevel);
       const response = await fetchImpl(
         reflectionProtocol === 'responses'
@@ -1197,6 +1250,16 @@ export function createChatRouter({
           mediaUrl
         });
 
+        if (role === 'user') {
+          await recordUserMessageSideEffects({
+            userId: req.userId,
+            characterId,
+            messageId: saved.id,
+            content,
+            messageType
+          });
+        }
+
         return res.status(201).json({
           success: true,
           item: saved
@@ -1233,7 +1296,7 @@ export function createChatRouter({
         });
       }
 
-      const [[userRow], [recent, activeMemories, vectorMemoryBlock, personaRuntime]] = await Promise.all([
+      const [[userRow], [recent, activeMemories, vectorMemoryBlock, personaRuntime, recentLifeEvents]] = await Promise.all([
         pool.query('SELECT city FROM users WHERE id = ? LIMIT 1', [req.userId]),
         Promise.all([
           loadRecentMessages(req.userId, characterId, 20),
@@ -1244,11 +1307,21 @@ export function createChatRouter({
             recentMessages: [],
             currentContent: content
           }).catch(() => ''),
-          loadPersonaRuntime(pool, { userId: req.userId, characterId })
+          loadPersonaRuntime(pool, { userId: req.userId, characterId }),
+          loadRecentLifeEvents(pool, { userId: req.userId, characterId, limit: 8 })
         ])
       ]);
       const weatherText = await getCityWeatherText(userRow?.[0]?.city || '').catch(() => null);
       const weatherBlock = weatherText ? `\n\n${weatherText}` : '';
+      const contextSnapshot = buildCharacterContextSnapshot({
+        character,
+        personaRuntime,
+        currentContent: content,
+        messageType,
+        recentMessages: recent,
+        memories: activeMemories,
+        recentLifeEvents,
+      });
 
       const messages = [];
       const videoHint = buildVideoShareHint(extractVideoShareContext(content));
@@ -1257,7 +1330,8 @@ export function createChatRouter({
         : '';
 
       const personaRuntimeBlock = `\n\n${buildPersonaRuntimePrompt(personaRuntime, { content, messageType })}`;
-      messages.push({ role: 'system', content: buildSystemPrompt(character) + personaRuntimeBlock + buildMemoryPromptBlock(activeMemories) + vectorMemoryBlock + weatherBlock + downgradeHint });
+      const characterContextBlock = `\n\n${buildCharacterContextPrompt(contextSnapshot, { consumer: 'chat' })}`;
+      messages.push({ role: 'system', content: buildSystemPrompt(character) + personaRuntimeBlock + characterContextBlock + buildMemoryPromptBlock(activeMemories) + vectorMemoryBlock + weatherBlock + downgradeHint });
 
       messages.push(
         ...recent
@@ -1467,7 +1541,8 @@ export function createChatRouter({
                 character,
                 userContent: content,
                 assistantContent: streamedContent,
-                level: innerOsLevel
+                level: innerOsLevel,
+                context: contextSnapshot
               });
               res.write(`data: ${JSON.stringify({ type: 'inner_os', content: innerOs, source: INNER_OS_SOURCE })}\n\n`);
             } catch (innerOsError) {
@@ -1506,7 +1581,8 @@ export function createChatRouter({
             character,
             userContent: content,
             assistantContent: finalContent,
-            level: innerOsLevel
+            level: innerOsLevel,
+            context: contextSnapshot
           });
         } catch (innerOsError) {
           console.error('[inner-os] 生成失败', innerOsError.message);
@@ -1582,31 +1658,12 @@ export function createChatRouter({
       });
 
       if (role === 'user') {
-        await recordPersonaRuntimeTurn(pool, {
+        await recordUserMessageSideEffects({
           userId: req.userId,
           characterId,
+          messageId: saved.id,
           content,
           messageType
-        });
-        await recordExplicitChatMemory(pool, {
-          userId: req.userId,
-          characterId,
-          messageId: saved.id,
-          content
-        });
-        void recordAutoMemoryCandidate(pool, {
-          userId: req.userId,
-          characterId,
-          messageId: saved.id,
-          content
-        });
-        void recordLifeEventSource(pool, {
-          userId: req.userId,
-          characterId,
-          sourceType: 'chat',
-          sourceId: saved.id,
-          title: content,
-          eventType: /(?:约好|约定|下次|明天)/u.test(content) ? 'appointment' : 'life'
         });
       }
 
