@@ -8,6 +8,7 @@ const app = await readFile(new URL("./App.jsx", import.meta.url), "utf8");
 const agents = await readFile(new URL("./pages/agents.jsx", import.meta.url), "utf8");
 const moments = await readFile(new URL("./pages/moments.jsx", import.meta.url), "utf8");
 const chat = await readFile(new URL("./pages/chat.jsx", import.meta.url), "utf8");
+const nativeMain = await readFile(new URL("../android/app/src/main/java/fun/lshl/ruobai/MainActivity.java", import.meta.url), "utf8");
 const classic = await readFile(new URL("./styles/classic-theme.css", import.meta.url), "utf8");
 const components = await readFile(new URL("./styles/components.css", import.meta.url), "utf8");
 const components2 = await readFile(new URL("./styles/components2.css", import.meta.url), "utf8");
@@ -89,4 +90,13 @@ test("两套聊天室共用的图标入口具有大白话名称", () => {
   for (const label of ["返回聊天列表", "搜索聊天记录", "更多聊天操作", "开始实时通话", "选择图片", "打开表情包", "发送消息"]) {
     assert.ok(chat.includes(label), `缺少 ${label} 的可读名称`);
   }
+});
+
+test("Android 系统返回会先回退网页层级，再允许关闭 App", () => {
+  assert.match(nativeMain, /OnBackPressedCallback/);
+  assert.match(nativeMain, /webView\.canGoBack\(\)/);
+  assert.match(nativeMain, /webView\.goBack\(\)/);
+  assert.match(app, /pushState\(\{ rbChat: true \}/);
+  assert.match(chat, /pushState\(\{ rbFigure: true \}/);
+  assert.match(chat, /onClose=\{closeBig\}/);
 });

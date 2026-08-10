@@ -1044,6 +1044,7 @@ function ChatRoom({ agent, onBack }) {
   const areaRef = useRefC(null);
   const fileRef = useRefC(null);
   const draftRef = useRefC(null);
+  const bigHistoryRef = useRefC(false);
 
   const resizeDraft = (node) => {
     if (!node) return;
@@ -1096,6 +1097,27 @@ function ChatRoom({ agent, onBack }) {
     () => getChatLive2DState(msgs, { isResponding: typing }),
     [msgs, typing],
   );
+
+  useEffectC(() => {
+    if (!big) return undefined;
+
+    window.history.pushState({ rbFigure: true }, "");
+    bigHistoryRef.current = true;
+    const onPop = () => {
+      bigHistoryRef.current = false;
+      setBig(false);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [big]);
+
+  const closeBig = () => {
+    if (bigHistoryRef.current && window.history.state?.rbFigure) {
+      window.history.back();
+      return;
+    }
+    setBig(false);
+  };
 
   const scroll = () => requestAnimationFrame(() => { const el = areaRef.current; if (el) el.scrollTop = el.scrollHeight; });
   useEffectC(() => { scroll(); }, [msgs, typing]);
@@ -1538,7 +1560,7 @@ function ChatRoom({ agent, onBack }) {
   return (
     <div className="screen chat-screen anim-screen">
       {/* 常驻立绘 — 当前角色只保留一个舞台，点击后切换为全屏陪伴视图 */}
-      {(showFig || big) && <ChatFigure agent={agent} figSrc={figSrc} expanded={big} live2dState={live2dState} onOpen={() => setBig(true)} onClose={() => setBig(false)} />}
+      {(showFig || big) && <ChatFigure agent={agent} figSrc={figSrc} expanded={big} live2dState={live2dState} onOpen={() => setBig(true)} onClose={closeBig} />}
 
       <header className="chat-top">
         <button className="ct-back" onClick={onBack} aria-label="返回聊天列表" title="返回聊天列表"><Icon name="back" /></button>
