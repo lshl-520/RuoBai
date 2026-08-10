@@ -95,17 +95,17 @@ function isMergeableEvent(row = {}) {
   return Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() > Date.now();
 }
 
-async function findEventBySource(db, { userId, sourceType, sourceId } = {}) {
-  if (!userId || !sourceType || !sourceId) return null;
+async function findEventBySource(db, { userId, characterId, sourceType, sourceId } = {}) {
+  if (!userId || !characterId || !sourceType || !sourceId) return null;
   const [rows] = await db.query(
     `
       SELECT e.id, e.character_id, e.title, e.event_type, e.status, e.expires_at, e.event_key
       FROM life_event_sources s
       INNER JOIN life_events e ON e.id = s.event_id AND e.user_id = s.user_id
-      WHERE s.user_id = ? AND s.source_type = ? AND s.source_id = ?
+      WHERE s.user_id = ? AND e.character_id = ? AND s.source_type = ? AND s.source_id = ?
       LIMIT 1
     `,
-    [userId, sourceType, sourceId]
+    [userId, characterId, sourceType, sourceId]
   );
   return rows[0] || null;
 }
@@ -116,6 +116,7 @@ async function findMergeableEvent(db, {
   if (relatedSourceType && relatedSourceId) {
     const relatedEvent = await findEventBySource(db, {
       userId,
+      characterId,
       sourceType: relatedSourceType,
       sourceId: relatedSourceId
     });
@@ -166,6 +167,7 @@ export async function recordLifeEventSource(db = pool, {
   try {
     const existing = await findEventBySource(db, {
       userId,
+      characterId,
       sourceType: normalizedSourceType,
       sourceId
     });

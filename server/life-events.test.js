@@ -74,6 +74,52 @@ test('life event source keeps an auditable source and deduplicates it', async ()
   assert.equal(calls[3].params[2], 'moment');
 });
 
+test('one shared moment can be indexed independently for multiple roles', async () => {
+  let nextEventId = 40;
+  const createdEvents = [];
+  const sourceLookups = [];
+  const db = {
+    query: async (sql, params = []) => {
+      if (sql.includes('FROM life_event_sources')) {
+        sourceLookups.push(params);
+        return [[]];
+      }
+      if (sql.includes('FROM life_events')) return [[]];
+      if (sql.includes('INSERT INTO life_events')) {
+        const id = ++nextEventId;
+        createdEvents.push({ id, characterId: params[1] });
+        return [{ insertId: id }];
+      }
+      if (sql.includes('INSERT INTO life_event_sources')) return [{ insertId: 1 }];
+      throw new Error(`Unexpected query: ${sql}`);
+    }
+  };
+
+  await recordLifeEventSource(db, {
+    userId: 1,
+    characterId: 6,
+    sourceType: 'moment',
+    sourceId: 88,
+    title: '今天和小师分享了窗边的晚风'
+  });
+  await recordLifeEventSource(db, {
+    userId: 1,
+    characterId: 7,
+    sourceType: 'moment',
+    sourceId: 88,
+    title: '今天和小师分享了窗边的晚风'
+  });
+
+  assert.deepEqual(createdEvents, [
+    { id: 41, characterId: 6 },
+    { id: 42, characterId: 7 }
+  ]);
+  assert.deepEqual(sourceLookups, [
+    [1, 6, 'moment', 88],
+    [1, 7, 'moment', 88]
+  ]);
+});
+
 test('life event source reuses an existing source without rewriting it', async () => {
   const db = {
     query: async (sql) => {
@@ -148,8 +194,8 @@ test('life event source attaches a comment to the existing moment event', async 
     query: async (sql, params) => {
       calls.push({ sql, params });
       if (sql.includes('FROM life_event_sources')) {
-        if (params[1] === 'comment') return [[]];
-        if (params[1] === 'moment') {
+        if (params[2] === 'comment') return [[]];
+        if (params[2] === 'moment') {
           return [[{
             id: 41,
             event_id: 41,
@@ -185,7 +231,7 @@ test('a completed event is not revived by a matching new source', async () => {
   const db = {
     query: async (sql, params) => {
       if (sql.includes('FROM life_event_sources')) {
-        if (params[1] === 'chat') return [[]];
+        if (params[2] === 'chat') return [[]];
         return [[{
           id: 71,
           event_id: 41,

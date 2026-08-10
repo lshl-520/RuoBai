@@ -264,6 +264,55 @@ test('POST /api/moments/:id/share only shares a user moment to explicitly select
   });
 });
 
+test('POST /api/moments/:id/share indexes the same shared moment for every selected role', async () => {
+  const sourceCalls = [];
+  let nextEventId = 40;
+  const connection = {
+    query: async (sql) => {
+      if (sql.includes('SELECT id, character_id FROM moments')) return [[{ id: 7, character_id: null }]];
+      if (sql.includes('DELETE FROM moment_audiences')) return [{ affectedRows: 0 }];
+      if (sql.includes('INSERT IGNORE INTO moment_audiences')) return [{ affectedRows: 1 }];
+      if (sql.includes('UPDATE moments SET visibility_mode')) return [{ affectedRows: 1 }];
+      throw new Error(`Unexpected query: ${sql}`);
+    }
+  };
+  const pool = {
+    query: async (sql, params = []) => {
+      sourceCalls.push({ sql, params });
+      if (sql.includes('SELECT content FROM moments')) return [[{ content: '今天路过一家小店，想和你们分享。' }]];
+      if (sql.includes('FROM life_event_sources')) return [[]];
+      if (sql.includes('FROM life_events')) return [[]];
+      if (sql.includes('INSERT INTO life_events')) return [{ insertId: ++nextEventId }];
+      if (sql.includes('INSERT INTO life_event_sources')) return [{ insertId: 1 }];
+      throw new Error(`Unexpected source query: ${sql}`);
+    }
+  };
+  const router = createMomentsRouter({
+    pool,
+    requireCharacter: async (userId, characterId) => {
+      assert.equal(userId, 1);
+      assert.ok([6, 7].includes(characterId));
+      return { id: characterId, user_id: 1 };
+    },
+    withTransaction: async work => work(connection)
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/moments/7/share`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ character_ids: [6, 7] })
+    });
+
+    assert.equal(response.status, 200);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const indexedRoleIds = sourceCalls
+      .filter(call => call.sql.includes('INSERT INTO life_events'))
+      .map(call => call.params[1]);
+    assert.deepEqual(indexedRoleIds, [6, 7]);
+  });
+});
+
 test('POST /api/moments/:id/share rejects a role moment', async () => {
   const router = createMomentsRouter({
     pool: { query: async () => { throw new Error('unused'); } },
@@ -622,8 +671,8 @@ test('POST /api/moments/:id/comment creates a comment', async () => {
         return [[{ character_id: 6, content: '原动态' }]];
       }
       if (sql.includes('FROM life_event_sources')) {
-        if (params[1] === 'comment') return [[]];
-        if (params[1] === 'moment') {
+        if (params[2] === 'comment') return [[]];
+        if (params[2] === 'moment') {
           return [[{
             id: 41,
             character_id: 6,
@@ -658,9 +707,77 @@ test('POST /api/moments/:id/comment creates a comment', async () => {
     assert.equal(payload.item.id, 11);
     assert.equal(payload.item.content, 'nice');
     await new Promise(resolve => setTimeout(resolve, 20));
-    const relatedQuery = sourceCalls.find(call => call.sql.includes('FROM life_event_sources') && call.params[1] === 'moment');
-    assert.deepEqual(relatedQuery?.params, [1, 'moment', 8]);
+    const relatedQuery = sourceCalls.find(call => call.sql.includes('FROM life_event_sources') && call.params[2] === 'moment');
+    assert.deepEqual(relatedQuery?.params, [1, 6, 'moment', 8]);
     assert.ok(sourceCalls.some(call => call.sql.includes('INSERT IGNORE INTO life_event_sources') && call.params[0] === 41));
+  });
+});
+
+test('POST /api/moments/:id/comment keeps a shared user moment in every recipient role timeline', async () => {
+  const sourceCalls = [];
+  const connection = {
+    query: async (sql, params) => {
+      if (sql.includes('SELECT id FROM moments')) {
+        assert.deepEqual(params, [8, 1]);
+        return [[{ id: 8 }]];
+      }
+      if (sql.includes('INSERT INTO moment_comments')) return [{ insertId: 11 }];
+      if (sql.includes('SELECT id, moment_id, user_id, character_id, content, created_at')) {
+        return [[{
+          id: 11,
+          moment_id: 8,
+          user_id: 1,
+          character_id: null,
+          content: '我也想把这个感受说给你们听。',
+          created_at: '2026-05-21 23:33:00'
+        }]];
+      }
+      throw new Error(`Unexpected query: ${sql}`);
+    }
+  };
+  const pool = {
+    query: async (sql, params = []) => {
+      sourceCalls.push({ sql, params });
+      if (sql.includes('SELECT character_id, content FROM moments')) {
+        return [[{ character_id: null, content: '今天路过一家小店。' }]];
+      }
+      if (sql.includes('FROM moment_audiences')) return [[{ character_id: 6 }, { character_id: 7 }]];
+      if (sql.includes('FROM life_event_sources')) {
+        if (params[2] === 'comment') return [[]];
+        if (params[2] === 'moment') {
+          return [[{
+            id: params[1] === 6 ? 41 : 42,
+            character_id: params[1],
+            title: '今天路过一家小店。',
+            event_type: 'life',
+            status: 'active',
+            expires_at: null,
+            event_key: null
+          }]];
+        }
+      }
+      if (sql.includes('INSERT IGNORE INTO life_event_sources')) return [{ affectedRows: 1 }];
+      throw new Error(`Unexpected source query: ${sql}`);
+    }
+  };
+  const router = createMomentsRouter({
+    pool,
+    withTransaction: async work => work(connection)
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/moments/8/comment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: '我也想把这个感受说给你们听。' })
+    });
+
+    assert.equal(response.status, 201);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const commentEventIds = sourceCalls
+      .filter(call => call.sql.includes('INSERT IGNORE INTO life_event_sources'))
+      .map(call => call.params[0]);
+    assert.deepEqual(commentEventIds, [41, 42]);
   });
 });
 

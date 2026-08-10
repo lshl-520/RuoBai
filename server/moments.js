@@ -602,8 +602,8 @@ export function createMomentsRouter({
         );
       });
 
-      // 用户动态只有在明确分享给角色后，才进入该角色的生活事件索引。
-      // 原始动态和分享关系仍保留；取消分享不删除历史来源。
+      // 用户动态只有在明确分享给角色后，才进入对应角色的生活事件索引。
+      // 同一条动态可以分别属于多个角色；取消分享不删除历史来源，读取时再按当前权限过滤。
       if (requestedIds.length > 0) {
         void (async () => {
           try {
@@ -611,14 +611,16 @@ export function createMomentsRouter({
               'SELECT content FROM moments WHERE id = ? AND user_id = ? AND is_deleted = 0 LIMIT 1',
               [momentId, req.userId]
             );
-            await recordLifeEventSource(db, {
-              userId: req.userId,
-              characterId: requestedIds[0],
-              sourceType: 'moment',
-              sourceId: momentId,
-              title: rows[0]?.content || '',
-              eventType: 'life'
-            });
+            for (const characterId of requestedIds) {
+              await recordLifeEventSource(db, {
+                userId: req.userId,
+                characterId,
+                sourceType: 'moment',
+                sourceId: momentId,
+                title: rows[0]?.content || '',
+                eventType: 'life'
+              });
+            }
           } catch {
             // 事件索引是辅助能力，不能影响分享结果。
           }
@@ -792,18 +794,30 @@ export function createMomentsRouter({
             'SELECT character_id, content FROM moments WHERE id = ? AND user_id = ? LIMIT 1',
             [momentId, req.userId]
           );
-          const characterId = Number(momentRows[0]?.character_id || 0);
-          if (!characterId) return;
-          await recordLifeEventSource(db, {
-            userId: req.userId,
-            characterId,
-            sourceType: 'comment',
-            sourceId: item.id,
-            title: `${momentRows[0]?.content || ''} ${content}`,
-            eventType: 'life',
-            relatedSourceType: 'moment',
-            relatedSourceId: momentId
-          });
+          const ownerCharacterId = Number(momentRows[0]?.character_id || 0);
+          const characterIds = ownerCharacterId
+            ? [ownerCharacterId]
+            : (await db.query(
+              `
+                SELECT character_id
+                FROM moment_audiences
+                WHERE moment_id = ? AND user_id = ?
+                ORDER BY character_id ASC
+              `,
+              [momentId, req.userId]
+            ))[0].map(row => Number(row.character_id)).filter(Boolean);
+          for (const characterId of characterIds) {
+            await recordLifeEventSource(db, {
+              userId: req.userId,
+              characterId,
+              sourceType: 'comment',
+              sourceId: item.id,
+              title: `${momentRows[0]?.content || ''} ${content}`,
+              eventType: 'life',
+              relatedSourceType: 'moment',
+              relatedSourceId: momentId
+            });
+          }
         } catch {
           // 事件索引是辅助能力，不能影响评论发送结果。
         }
