@@ -56,7 +56,11 @@ function RuobaiApp({ authed, setAuthed }) {
   useEffect(() => {
     if (!chatAgent) return;
     window.history.pushState({ rbChat: true }, "");
-    const onPop = () => setChatAgent(null);
+    const onPop = (event) => {
+      // Closing the fullscreen figure returns to this chat history entry.
+      if (event.state?.rbChat) return;
+      setChatAgent(null);
+    };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, [chatAgent]);
