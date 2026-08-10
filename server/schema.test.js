@@ -215,3 +215,21 @@ test('ensureCharacterRuntimeColumns adds dynamic profile and template fields on 
   assert.match(joined, /ADD COLUMN auto_moments_image_profile JSON DEFAULT NULL AFTER auto_moments_images_enabled/i);
   assert.match(joined, /ADD COLUMN auto_moments_templates JSON DEFAULT NULL AFTER auto_moments_image_profile/i);
 });
+
+test('ensureCharacterRuntimeColumns adds the disabled-by-default moment response switch', async () => {
+  const calls = [];
+  const db = {
+    query: async (sql, params = []) => {
+      calls.push({ sql, params });
+      if (sql.includes('information_schema.COLUMNS')) {
+        return [params[1] === 'moment_response_enabled' ? [] : [{ COLUMN_NAME: params[1] }]];
+      }
+      return [{ affectedRows: 0 }];
+    }
+  };
+
+  await ensureCharacterRuntimeColumns(db);
+
+  const joined = calls.filter(call => /^ALTER TABLE characters/i.test(call.sql)).map(call => call.sql).join('\n');
+  assert.match(joined, /ADD COLUMN moment_response_enabled TINYINT\(1\) DEFAULT 0 AFTER auto_moments_last_posted_at/i);
+});

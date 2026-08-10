@@ -19,7 +19,8 @@ const character = {
   auto_moments_templates: [{ category: '日常' }],
   auto_moments_daily_min: 1,
   auto_moments_daily_max: 3,
-  auto_moments_min_interval_hours: 4
+  auto_moments_min_interval_hours: 4,
+  moment_response_enabled: 1
 };
 
 const runtime = {
@@ -58,6 +59,7 @@ test('identity pack preserves identity, relationship, state and memories across 
   assert.deepEqual(stable(packFromModelA), stable(packFromModelB));
   assert.equal(packFromModelB.memories[0].content, memories[0].content);
   assert.equal(packFromModelB.memories[0].appointment_status, 'pending');
+  assert.equal(packFromModelB.dynamic_life.response_enabled, true);
 });
 
 test('model refusal rules do not replace the honest AI identity contract', () => {

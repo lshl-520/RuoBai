@@ -220,6 +220,11 @@ function sanitizeCharacterPayload(body = {}) {
   const autoMomentsEnabled = Object.prototype.hasOwnProperty.call(body, 'auto_moments_enabled')
     ? toBoolean(body.auto_moments_enabled)
     : false;
+  const momentResponseEnabled = Object.prototype.hasOwnProperty.call(body, 'moment_response_enabled')
+    ? toBoolean(body.moment_response_enabled)
+    : Object.prototype.hasOwnProperty.call(body, 'momentResponseEnabled')
+      ? toBoolean(body.momentResponseEnabled)
+      : false;
   const autoMomentsImagesEnabled = Object.prototype.hasOwnProperty.call(body, 'auto_moments_images_enabled')
     ? toBoolean(body.auto_moments_images_enabled)
     : false;
@@ -258,7 +263,8 @@ function sanitizeCharacterPayload(body = {}) {
     auto_moments_templates: sanitizeAutoMomentTemplates(body.auto_moments_templates ?? body.autoMomentsTemplates),
     auto_moments_daily_min: autoMomentsEnabled ? Math.min(dailyMin, dailyMax) : 0,
     auto_moments_daily_max: autoMomentsEnabled ? Math.max(dailyMin, dailyMax) : 0,
-    auto_moments_min_interval_hours: minIntervalHours
+    auto_moments_min_interval_hours: minIntervalHours,
+    moment_response_enabled: momentResponseEnabled ? 1 : 0
   };
 }
 
@@ -375,7 +381,7 @@ async function loadRoles(userId, { includeDeleted = false } = {}, connection = p
       SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, visual_mode, visual_preview_url, live2d_asset_id, live2d_model_url, live2d_manifest, visual_frame_config, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
              auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution, auto_moments_daily_min, auto_moments_daily_max,
              auto_moments_image_profile, auto_moments_templates,
-             auto_moments_min_interval_hours, auto_moments_last_posted_at,
+             auto_moments_min_interval_hours, auto_moments_last_posted_at, moment_response_enabled,
              is_active, is_deleted, delete_after, created_at
       FROM characters
       WHERE user_id = ? ${includeDeleted ? '' : 'AND is_deleted = 0'}
@@ -426,9 +432,10 @@ router.post('/', asyncHandler(async (req, res) => {
             auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution, auto_moments_daily_min, auto_moments_daily_max,
             auto_moments_image_profile, auto_moments_templates,
             auto_moments_min_interval_hours,
+            moment_response_enabled,
             is_active, is_deleted, delete_after, created_at
           )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NOW())
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NOW())
       `,
       [
         req.userId,
@@ -453,6 +460,7 @@ router.post('/', asyncHandler(async (req, res) => {
         payload.auto_moments_image_profile,
         payload.auto_moments_templates,
         payload.auto_moments_min_interval_hours,
+        payload.moment_response_enabled,
         activeRows.length === 0 ? 1 : 0
       ]
     );
@@ -462,7 +470,7 @@ router.post('/', asyncHandler(async (req, res) => {
         SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, visual_mode, visual_preview_url, live2d_asset_id, live2d_model_url, live2d_manifest, visual_frame_config, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
                auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution, auto_moments_daily_min, auto_moments_daily_max,
                auto_moments_image_profile, auto_moments_templates,
-               auto_moments_min_interval_hours, auto_moments_last_posted_at,
+               auto_moments_min_interval_hours, auto_moments_last_posted_at, moment_response_enabled,
                is_active, is_deleted, delete_after, created_at
         FROM characters
         WHERE id = ? AND user_id = ?
@@ -605,6 +613,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
           auto_moments_daily_min = COALESCE(?, auto_moments_daily_min),
           auto_moments_daily_max = COALESCE(?, auto_moments_daily_max),
           auto_moments_min_interval_hours = COALESCE(?, auto_moments_min_interval_hours),
+          moment_response_enabled = COALESCE(?, moment_response_enabled),
           delete_after = CASE WHEN ? = 1 THEN ? ELSE delete_after END
         WHERE id = ? AND user_id = ? AND is_deleted = 0
       `,
@@ -645,6 +654,9 @@ router.patch('/:id', asyncHandler(async (req, res) => {
         req.body?.auto_moments_daily_min !== undefined ? payload.auto_moments_daily_min : null,
         req.body?.auto_moments_daily_max !== undefined ? payload.auto_moments_daily_max : null,
         req.body?.auto_moments_min_interval_hours !== undefined ? payload.auto_moments_min_interval_hours : null,
+        (req.body?.moment_response_enabled !== undefined || req.body?.momentResponseEnabled !== undefined)
+          ? payload.moment_response_enabled
+          : null,
         deleteAfterProvided ? 1 : 0,
         deleteAfter ? deleteAfter : null,
         characterId,
@@ -657,7 +669,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
         SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, visual_mode, visual_preview_url, live2d_asset_id, live2d_model_url, live2d_manifest, visual_frame_config, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
                auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution, auto_moments_daily_min, auto_moments_daily_max,
                auto_moments_image_profile, auto_moments_templates,
-               auto_moments_min_interval_hours, auto_moments_last_posted_at,
+               auto_moments_min_interval_hours, auto_moments_last_posted_at, moment_response_enabled,
                is_active, is_deleted, delete_after, created_at
         FROM characters
         WHERE id = ? AND user_id = ?
@@ -681,7 +693,7 @@ router.get('/:id/identity-pack', asyncHandler(async (req, res) => {
       SELECT id, user_id, name, tag, persona, avatar, speech_style, portrait_id, portrait_custom_url, visual_mode, visual_preview_url, live2d_model_url, live2d_manifest, visual_frame_config,
              mood, intimacy, auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution,
              auto_moments_image_profile, auto_moments_templates,
-             auto_moments_daily_min, auto_moments_daily_max, auto_moments_min_interval_hours
+             auto_moments_daily_min, auto_moments_daily_max, auto_moments_min_interval_hours, moment_response_enabled
       FROM characters
       WHERE id = ? AND user_id = ? AND is_deleted = 0
       LIMIT 1
@@ -973,7 +985,7 @@ router.post('/:id/restore', asyncHandler(async (req, res) => {
       `
         SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, visual_mode, visual_preview_url, live2d_asset_id, live2d_model_url, live2d_manifest, visual_frame_config, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
                auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution, auto_moments_daily_min, auto_moments_daily_max,
-               auto_moments_min_interval_hours, auto_moments_last_posted_at,
+               auto_moments_min_interval_hours, auto_moments_last_posted_at, moment_response_enabled,
                is_active, is_deleted, delete_after, created_at
         FROM characters
         WHERE id = ? AND user_id = ?

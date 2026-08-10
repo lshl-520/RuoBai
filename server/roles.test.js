@@ -217,6 +217,7 @@ test('PATCH /api/roles/:id updates per-role auto moment settings with safe limit
     auto_moments_image_resolution: '2k',
     auto_moments_daily_max: 8,
     auto_moments_min_interval_hours: 3,
+    moment_response_enabled: 1,
     auto_moments_last_posted_at: null,
     is_active: 1,
     is_deleted: 0,
@@ -238,6 +239,7 @@ test('PATCH /api/roles/:id updates per-role auto moment settings with safe limit
         assert.match(sql, /auto_moments_daily_min = COALESCE/i);
         assert.match(sql, /auto_moments_daily_max = COALESCE/i);
         assert.match(sql, /auto_moments_min_interval_hours = COALESCE/i);
+        assert.match(sql, /moment_response_enabled = COALESCE/i);
         assert.equal(params.includes(1), true);
         assert.equal(params.includes(2), true);
         assert.equal(params.includes(8), true);
@@ -269,7 +271,8 @@ test('PATCH /api/roles/:id updates per-role auto moment settings with safe limit
         auto_moments_daily_min: 2,
         auto_moments_image_resolution: '2k',
         auto_moments_daily_max: 8,
-        auto_moments_min_interval_hours: 3
+        auto_moments_min_interval_hours: 3,
+        moment_response_enabled: true
       })
     });
     const payload = await response.json();
@@ -281,6 +284,7 @@ test('PATCH /api/roles/:id updates per-role auto moment settings with safe limit
     assert.equal(payload.item.auto_moments_image_resolution, '2k');
     assert.equal(payload.item.auto_moments_daily_max, 8);
     assert.equal(payload.item.auto_moments_min_interval_hours, 3);
+    assert.equal(payload.item.moment_response_enabled, 1);
   });
 });
 
