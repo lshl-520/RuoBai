@@ -219,6 +219,10 @@
 .mem-card.candidate { border-left-color: #d9a342; background: color-mix(in srgb, var(--card) 94%, #fff3c4); }
 .mem-candidate { margin-left: auto; color: #9b6d12; font-size: 11px; }
 .mem-source { margin-top: 8px; color: var(--ink-faint); font-size: 11px; line-height: 1.5; }
+.mem-candidate-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.mem-candidate-actions button { min-height: 28px; padding: 5px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--ink-soft); font-size: 12px; }
+.mem-candidate-actions button.keep { border-color: var(--rose); background: var(--rose); color: #fff; }
+.mem-candidate-actions button.dismiss { color: var(--rose-deep); }
 .memory-lightbulb { margin-left: 6px; color: #b47a12; font-size: 14px; }
 .mem-top { display: flex; align-items: center; justify-content: space-between; }
 .mem-tag { font-size: 15px; font-weight: 600; }

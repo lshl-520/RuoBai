@@ -3,6 +3,7 @@ import { pool } from './db.js';
 import { getRequestCharacterId } from './middleware.js';
 import { normalizeLimit, requireCharacterForUser, toBoolean } from './helpers.js';
 import { memoryTypeLabel, normalizeMemoryFields } from './memory-fields.js';
+import { recordLifeEventSource } from './life-events.js';
 
 const router = express.Router();
 
@@ -27,6 +28,34 @@ function mapMemory(row) {
     is_important: Boolean(row.is_important),
     is_deleted: Boolean(row.is_deleted)
   };
+}
+
+export async function recordConfirmedCandidateLifeEvent(db = pool, {
+  userId,
+  previousReviewStatus,
+  memory
+} = {}) {
+  const sourceId = Number(memory?.source_id);
+  const sourceType = String(memory?.source_type || '').trim();
+  const nextReviewStatus = String(memory?.review_status || '').trim();
+  if (previousReviewStatus !== 'candidate'
+    || !['active', 'important'].includes(nextReviewStatus)
+    || sourceType !== 'chat_candidate'
+    || !Number.isFinite(sourceId)
+    || sourceId <= 0) {
+    return null;
+  }
+
+  return recordLifeEventSource(db, {
+    userId,
+    characterId: memory.character_id,
+    sourceType: 'memory',
+    sourceId: memory.id,
+    title: memory.content,
+    eventType: memory.memory_type === 'appointment' ? 'appointment' : 'life',
+    relatedSourceType: 'chat',
+    relatedSourceId: sourceId
+  });
 }
 
 async function getOwnedMemory(memoryId, userId) {
@@ -176,6 +205,11 @@ router.patch('/:id', async (req, res) => {
     );
 
     const updated = await getOwnedMemory(memoryId, userId);
+    await recordConfirmedCandidateLifeEvent(pool, {
+      userId,
+      previousReviewStatus: memory.review_status,
+      memory: updated
+    });
     return res.json({ success: true, data: mapMemory(updated) });
   } catch (error) {
     return res.status(400).json({ success: false, error: error.message });

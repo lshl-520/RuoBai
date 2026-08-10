@@ -111,7 +111,7 @@ function MemoryEditor({ agent, memory, onClose, onSave }) {
   );
 }
 
-function MemoryCard({ m, onPin, onEdit, onDelete }) {
+function MemoryCard({ m, onPin, onEdit, onDelete, onConfirmCandidate, onViewCandidateSource }) {
   return (
     <div className={"mem-card" + (m.isImportant ? " pinned" : "") + (m.reviewStatus === "candidate" ? " candidate" : "")}>
       <div className="mem-top">
@@ -121,14 +121,21 @@ function MemoryCard({ m, onPin, onEdit, onDelete }) {
       </div>
       <div className="mem-content">{m.content}</div>
       {m.reviewStatus === "candidate" && (
-        <div className="mem-source">来源：{m.sourceType === "chat_candidate" ? "聊天" : m.sourceType} · {m.detectedReason || "系统暂存为低优先级参考"}</div>
+        <>
+          <div className="mem-source">来源：{m.sourceType === "chat_candidate" ? "聊天" : m.sourceType} · {m.detectedReason || "系统暂存为低优先级参考"}</div>
+          <div className="mem-candidate-actions">
+            <button type="button" onClick={() => onViewCandidateSource(m)}>查看聊天</button>
+            <button type="button" className="keep" onClick={() => onConfirmCandidate(m)}>记住它</button>
+            <button type="button" className="dismiss" onClick={() => onDelete(m)}>暂不保留</button>
+          </div>
+        </>
       )}
       <div className="mem-foot">
         <span className="mem-meta">{m.memoryTypeLabel}{m.appointmentAt ? " · " + String(m.appointmentAt).slice(0, 10) : ""}{m.category ? " · " + m.category : ""}</span>
         <div className="mem-actions">
-          <button onClick={() => onPin(m)}>{m.isImportant ? "取消置顶" : "置顶"}</button>
+          {m.reviewStatus !== "candidate" && <button onClick={() => onPin(m)}>{m.isImportant ? "取消置顶" : "置顶"}</button>}
           <button onClick={() => onEdit(m)}>编辑</button>
-          <button className="del" onClick={() => onDelete(m)}>删除</button>
+          {m.reviewStatus !== "candidate" && <button className="del" onClick={() => onDelete(m)}>删除</button>}
         </div>
       </div>
     </div>
@@ -229,6 +236,7 @@ function MemoryScreen() {
   const [loading, setLoading] = useStateMem(true);
   const [editor, setEditor] = useStateMem(undefined);
   const [history, setHistory] = useStateMem(false);
+  const [historyQuery, setHistoryQuery] = useStateMem("");
   const [sourceSheet, setSourceSheet] = useStateMem(null);
   const [sourceData, setSourceData] = useStateMem(null);
   const [sourceLoading, setSourceLoading] = useStateMem(false);
@@ -406,7 +414,10 @@ function MemoryScreen() {
   };
 
   const handleDelete = async (m) => {
-    if (!window.confirm("只删除这张记忆卡，不会删除聊天、动态或评论原文。确定删除吗？")) return;
+    const prompt = m.reviewStatus === "candidate"
+      ? "暂不保留会把这张候选记忆移到已删除，不会删除原聊天。确定吗？"
+      : "只删除这张记忆卡，不会删除聊天、动态或评论原文。确定删除吗？";
+    if (!window.confirm(prompt)) return;
     setActionError("");
     try {
       await apiDeleteMemory(m.id);
@@ -421,7 +432,29 @@ function MemoryScreen() {
     refreshList();
   };
 
-  if (history && agent) return <ChatHistoryView agent={agent} onBack={() => setHistory(false)} />;
+  const handleConfirmCandidate = async (m) => {
+    setActionError("");
+    try {
+      const result = await apiUpdateMemory(m.id, { review_status: "active" });
+      if (result?.data) {
+        const updated = fromApiMemory(result.data);
+        setList((current) => current.map((item) => item.id === m.id ? updated : item));
+      } else {
+        await refreshList();
+      }
+      await refreshEvents();
+    } catch (e) {
+      setActionError(e?.message || "这张候选记忆暂时没确认成功，请再试一次。");
+      await refreshList();
+    }
+  };
+
+  const handleViewCandidateSource = (m) => {
+    setHistoryQuery(m.content);
+    setHistory(true);
+  };
+
+  if (history && agent) return <ChatHistoryView agent={agent} initialQuery={historyQuery} onBack={() => { setHistory(false); setHistoryQuery(""); }} />;
 
   return (
     <div className="screen anim-screen">
@@ -508,7 +541,9 @@ function MemoryScreen() {
               <MemoryCard key={m.id} m={m}
                 onPin={(x) => handlePin(x)}
                 onEdit={(x) => setEditor(x)}
-                onDelete={(x) => handleDelete(x)} />
+                onDelete={(x) => handleDelete(x)}
+                onConfirmCandidate={(x) => handleConfirmCandidate(x)}
+                onViewCandidateSource={(x) => handleViewCandidateSource(x)} />
             ))}
           </div>
           )}
