@@ -56,7 +56,7 @@ function mapMessage(m) {
   };
 }
 
-function ChatHistoryView({ agent, onBack }) {
+function ChatHistoryView({ agent, onBack, initialQuery = "" }) {
   const [full, setFull] = useStateH([]);
   const [loading, setLoading] = useStateH(true);
   const [myAvatar, setMyAvatar] = useStateH(DEFAULT_USER_AVATAR);
@@ -89,8 +89,8 @@ function ChatHistoryView({ agent, onBack }) {
   const days = React.useMemo(() => [...new Set(full.map((m) => m.day).filter(Boolean))], [full]);
 
   const [count, setCount] = useStateH(Math.min(full.length, HIST_INIT));
-  const [q, setQ] = useStateH("");
-  const [searching, setSearching] = useStateH(false);
+  const [q, setQ] = useStateH(initialQuery);
+  const [searching, setSearching] = useStateH(Boolean(initialQuery));
   const [showDates, setShowDates] = useStateH(false);
   const [hit, setHit] = useStateH(null);
 
