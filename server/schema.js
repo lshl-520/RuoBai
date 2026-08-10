@@ -292,7 +292,7 @@ const FUNCTIONAL_RUNTIME_TABLES = [
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (event_id) REFERENCES life_events(id) ON DELETE CASCADE,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      UNIQUE KEY unique_life_event_source (user_id, source_type, source_id),
+      UNIQUE KEY unique_life_event_source_event (event_id, source_type, source_id),
       INDEX idx_life_event_source_event (event_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `
@@ -421,6 +421,23 @@ export async function ensureLifeEventRuntimeColumns(db) {
   }
 }
 
+export async function ensureLifeEventSourceRuntimeIndex(db) {
+  try {
+    const oldIndexExists = await indexExists(db, 'life_event_sources', 'unique_life_event_source');
+    const newIndexExists = await indexExists(db, 'life_event_sources', 'unique_life_event_source_event');
+    if (oldIndexExists) {
+      await db.query('ALTER TABLE life_event_sources DROP INDEX unique_life_event_source');
+    }
+    if (!newIndexExists) {
+      await db.query(
+        'ALTER TABLE life_event_sources ADD UNIQUE KEY unique_life_event_source_event (event_id, source_type, source_id)'
+      );
+    }
+  } catch {
+    // Older test doubles and read-only deployments may not expose INFORMATION_SCHEMA.
+  }
+}
+
 export async function ensurePushRuntimeTables(db) {
   for (const statement of PUSH_RUNTIME_TABLES) {
     await db.query(statement);
@@ -455,6 +472,7 @@ export async function ensureFunctionalRuntimeTables(db) {
   for (const statement of FUNCTIONAL_RUNTIME_TABLES) {
     await db.query(statement);
   }
+  await ensureLifeEventSourceRuntimeIndex(db);
 }
 
 export async function ensureRuntimeSchema(db) {

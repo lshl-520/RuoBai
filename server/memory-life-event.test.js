@@ -8,8 +8,8 @@ test('confirming a chat candidate adds its memory to the existing chat life even
     query: async (sql, params) => {
       calls.push({ sql, params });
       if (sql.includes('FROM life_event_sources')) {
-        if (params[1] === 'memory') return [[]];
-        if (params[1] === 'chat') {
+        if (params[2] === 'memory') return [[]];
+        if (params[2] === 'chat') {
           return [[{
             id: 41,
             event_id: 41,

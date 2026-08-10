@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ensureCharacterRuntimeColumns, ensureCredentialRuntimeColumns, ensureLifeEventRuntimeColumns, ensureMessageRuntimeColumns, ensureMemoryRuntimeColumns, ensurePersonaRuntimeTables, ensurePushRuntimeTables, ensureDynamicCapabilityAssignment } from './schema.js';
+import { ensureCharacterRuntimeColumns, ensureCredentialRuntimeColumns, ensureLifeEventRuntimeColumns, ensureLifeEventSourceRuntimeIndex, ensureMessageRuntimeColumns, ensureMemoryRuntimeColumns, ensurePersonaRuntimeTables, ensurePushRuntimeTables, ensureDynamicCapabilityAssignment } from './schema.js';
 
 test('ensureDynamicCapabilityAssignment upgrades the legacy capability enum', async () => {
   const calls = [];
@@ -180,6 +180,24 @@ test('ensureLifeEventRuntimeColumns adds lifecycle and merge fields', async () =
   assert.match(joined, /ADD COLUMN status_note VARCHAR\(500\) DEFAULT NULL AFTER status/i);
   assert.match(joined, /ADD COLUMN expires_at DATETIME DEFAULT NULL AFTER occurred_at/i);
   assert.match(joined, /ADD COLUMN corrected_at DATETIME DEFAULT NULL AFTER updated_at/i);
+});
+
+test('ensureLifeEventSourceRuntimeIndex scopes source uniqueness to one event', async () => {
+  const calls = [];
+  const db = {
+    query: async (sql, params = []) => {
+      calls.push({ sql, params });
+      if (sql.includes('information_schema.STATISTICS')) {
+        return [params[1] === 'unique_life_event_source' ? [{ INDEX_NAME: params[1] }] : []];
+      }
+      return [{ affectedRows: 1 }];
+    }
+  };
+
+  await ensureLifeEventSourceRuntimeIndex(db);
+
+  assert.ok(calls.some(call => /DROP INDEX unique_life_event_source/i.test(call.sql)));
+  assert.ok(calls.some(call => /ADD UNIQUE KEY unique_life_event_source_event \(event_id, source_type, source_id\)/i.test(call.sql)));
 });
 
 test('ensureCharacterRuntimeColumns adds dynamic profile and template fields on startup', async () => {
