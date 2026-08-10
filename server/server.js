@@ -14,6 +14,7 @@ import { requireAuth, requireOwner } from './middleware.js';
 import { createAdminRouter } from './admin.js';
 import { createUpdateService, startDailyBackupScheduler } from './admin-update.js';
 import { createFcmSender, startProactiveScheduler } from './proactive.js';
+import { startMomentResponseScheduler } from './moment-responses.js';
 import { createPushRouter } from './push.js';
 import { createAutoMomentsService, startAutoMomentsScheduler } from './auto-moments.js';
 import { createAutoMomentsRouter } from './auto-moments-routes.js';
@@ -253,6 +254,7 @@ async function start() {
         startDailyBackupScheduler(updateService);
         startProactiveScheduler({ pool, sendPush: fcmSender });
         startAutoMomentsScheduler({ service: autoMomentsService });
+        startMomentResponseScheduler({ pool });
         return;
       } catch (error) {
         lastError = error;

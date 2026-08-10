@@ -105,6 +105,11 @@ const CHARACTER_RUNTIME_COLUMNS = [
     after: 'auto_moments_min_interval_hours'
   },
   {
+    name: 'moment_response_enabled',
+    definition: 'TINYINT(1) DEFAULT 0',
+    after: 'auto_moments_last_posted_at'
+  },
+  {
     name: 'delete_after',
     definition: 'DATETIME DEFAULT NULL',
     after: 'is_deleted'

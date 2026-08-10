@@ -42,7 +42,8 @@ export function buildIdentityPack({ character = {}, runtime = {}, memories = [] 
       templates: parseJson(character.auto_moments_templates, []),
       daily_min: toNumberOrNull(character.auto_moments_daily_min),
       daily_max: toNumberOrNull(character.auto_moments_daily_max),
-      min_interval_hours: toNumberOrNull(character.auto_moments_min_interval_hours)
+      min_interval_hours: toNumberOrNull(character.auto_moments_min_interval_hours),
+      response_enabled: toBoolean(character.moment_response_enabled)
     },
     relationship: parseJson(runtime.relationship_json || runtime.relationship, {}),
     state: parseJson(runtime.state_json || runtime.state, {}),

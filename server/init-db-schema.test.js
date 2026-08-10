@@ -52,3 +52,7 @@ test('characters schema stores a dedicated chat model and thinking level per rol
   assert.match(initDbSource, /chat_model_id VARCHAR\(100\) DEFAULT NULL/);
   assert.match(initDbSource, /chat_thinking_level VARCHAR\(20\) DEFAULT 'off'/);
 });
+
+test('characters schema keeps automatic moment responses disabled by default', () => {
+  assert.match(initDbSource, /moment_response_enabled TINYINT\(1\) DEFAULT 0/);
+});
