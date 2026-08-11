@@ -1,8 +1,8 @@
 {
   "runId": "ruobai-ds-20260730",
-  "updatedAt": "2026-08-10",
+  "updatedAt": "2026-08-11",
   "phase": "page-design",
-  "step": "Character moment-response settings are drafted in Figma; review the three mobile states before implementing React",
+  "step": "Review the Pencil full-screen Live2D moment-response master before revising the provisional Figma states",
   "figma": {
     "teamName": "新思维's team",
     "teamId": "1628718300400662760",
@@ -36,7 +36,7 @@
   "partialSteps": ["Page.CharacterSettings.MomentResponse.a"],
   "blockedSteps": [],
   "blocker": null,
-  "awaitingApproval": "Character Settings / Mobile / Moment Response / Off (214:2), On / Skipped (215:44), On / Failed (216:6); user review is required before React implementation",
+  "awaitingApproval": "Pencil node jsvAK (full-screen Live2D + Illustrated Warm bottom-sheet master) is awaiting user review. Figma Off (214:2), On / Skipped (215:44), and On / Failed (216:6) remain valid functional-state references but require a visual-layout revision before React implementation.",
   "connectionDiagnostics": {
     "oauth": "completed",
     "endpointReachable": true,
@@ -362,7 +362,7 @@
   },
   "next": {
     "phase": "page-design-review",
-    "step": "Review the character moment-response setting states, then implement only the approved structure in React and run a controlled real-channel acceptance",
+    "step": "Review Pencil node jsvAK; after approval, revise the Figma three-state layout with the approved full-screen Live2D and Illustrated Warm depth rules, then implement only that approved structure in React and run a controlled real-channel acceptance",
     "requirements": [
       "Read component-creation.md before creating components",
       "Run search_design_system again immediately before each component creation",
@@ -382,7 +382,8 @@
       "Moments comment-flow screens completed: Collapsed (156:2), Expanded (156:3), Focused (156:4), Sending (156:5), Success (156:6), Failed (156:7); all are 390x844 using Noto Sans SC. A fill audit repaired gray fallback fills by rebinding all visible layers to existing color variables; six-state screenshot review confirms no clipping or overlap and preserves sending, success, and retry feedback.",
       "Figma structural validation confirmed list-search removal. A repair audit found every Chat List child using the same gray fallback fill as its canvas; all affected fills now bind to existing color variables. Direct Figma desktop-client review confirms Mobile Default, Mobile Empty, and Desktop Default render correctly with no clipping or overlap.",
       "App Shell first draft completed in 05 Chat System: Mobile Default (184:3) is 390x844 with a fixed header, a scrollable content region, and the existing active bottom-navigation component; Desktop Default (184:4) is 1440x900 with the existing active sidebar-navigation component, a global header, a 720px readable content column, and a companion-context column. Both were screenshot-checked with no remaining placeholders; product fonts are Noto Sans SC, with the sidebar brand retaining its existing Noto Serif SC treatment.",
-      "Character moment-response settings are drafted but not approved for development: Off (214:2), On / Skipped (215:44), and On / Failed (216:6), all 390x844 in 06 Companion Patterns. The three states keep the role-specific sharing boundary explicit, do not create AI-to-AI social UI, and use existing Shadow/Small and Shadow/Brand effect styles to correct the flat visual hierarchy."
+      "Character moment-response settings are drafted but not approved for development: Off (214:2), On / Skipped (215:44), and On / Failed (216:6), all 390x844 in 06 Companion Patterns. The three states keep the role-specific sharing boundary explicit, do not create AI-to-AI social UI, and use existing Shadow/Small and Shadow/Brand effect styles to correct the flat visual hierarchy.",
+      "Pencil master jsvAK is the current visual review target: it keeps the Live2D stage full screen and presents settings in an Illustrated Warm bottom sheet with layered card, status, toggle, and action depth. Its transparent portrait is only a Canvas composition stand-in; React must continue to use the real Live2D runtime."
     ],
     "componentOrder": ["Button", "Input", "Avatar", "Navigation", "Bubble", "Feedback"]
   }
