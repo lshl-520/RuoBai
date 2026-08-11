@@ -2,7 +2,9 @@ import React from "react";
 import { Icon } from "../store.jsx";
 import { getRoles, getRolePortraitSrc, createRole, updateRole, switchRole, buildRolePayload, restoreRole, getIdentityPack, testAutoMoment, uploadRolePortrait, uploadRoleLive2D, removeRoleLive2D } from "../lib/roles.js";
 import { getProactiveEvents } from "../lib/proactive.js";
-import { getRoleVisualFrame, VISUAL_FRAME_OPTIONS } from "../lib/visual-frames.js";
+import { Live2DStage } from "../components/Live2DStage.jsx";
+import { getRoleVisualFrame, getVisualFrameView, VISUAL_FRAME_OPTIONS } from "../lib/visual-frames.js";
+import { getMomentResponseStatus } from "../lib/moment-response-status.js";
 /* 角色 — 列表(Hero + 网格) + 详情 + 创建/编辑 */
 const { useState: useStateA, useEffect: useEffectA, useRef: useRefA } = React;
 const MOMENT_FREQ_PRESETS = [2, 4, 6];
@@ -46,6 +48,7 @@ function toAgent(role) {
     isDefault: Boolean(role.is_active),
     autoMoments: Boolean(role.auto_moments_enabled),
     autoMomentsImages: Boolean(role.auto_moments_images_enabled),
+    momentResponseEnabled: Boolean(role.moment_response_enabled ?? role.momentResponseEnabled),
     visualMode,
     visualPreviewUrl: String(role.visual_preview_url || role.visualPreviewUrl || ""),
     live2dModelUrl: visualMode === "live2d" ? String(role.live2d_model_url || role.live2dModelUrl || "") : "",
@@ -224,8 +227,9 @@ function AgentsScreen({ agents: fallbackAgents, onChat, onDetail, onCreate, onRe
 }
 
 /* ============ 角色详情 ============ */
-function CharacterDetail({ agent, onClose, onChat, onEdit, onDelete, onSetMain, onOnboard }) {
+function CharacterDetail({ agent, onClose, onChat, onEdit, onDelete, onSetMain, onOnboard, onMomentResponseSaved }) {
   const [confirm, setConfirm] = useStateA(false);
+  const [momentResponseSheet, setMomentResponseSheet] = useStateA(false);
   const [deleting, setDeleting] = useStateA(false);
   const [deleteError, setDeleteError] = useStateA("");
   const [mainError, setMainError] = useStateA("");
@@ -325,6 +329,14 @@ function CharacterDetail({ agent, onClose, onChat, onEdit, onDelete, onSetMain, 
           <span className="dr-l">自动动态配图</span>
           <span className="dr-r">{agent.autoMomentsImages ? "已开启" : "已关闭"}</span>
         </div>
+        <button className="onboard-card response-settings-entry" type="button" onClick={() => setMomentResponseSheet(true)}>
+          <span className="ob-main">
+            <span className="ob-t serif">{agent.name}的动态回应</span>
+            <span className="ob-s">只回应你明确分享给她的动态</span>
+          </span>
+          <span className={"response-entry-status" + (agent.momentResponseEnabled ? " on" : "")}>{agent.momentResponseEnabled ? "已开启" : "默认关闭"}</span>
+          <Icon name="chevron" className="row-chev" />
+        </button>
       </div>
 
       <div className="detail-foot">
@@ -357,7 +369,116 @@ function CharacterDetail({ agent, onClose, onChat, onEdit, onDelete, onSetMain, 
           </div>
         </div>
       )}
+      {momentResponseSheet && <MomentResponseSettingsSheet
+        agent={agent}
+        onClose={() => setMomentResponseSheet(false)}
+        onSaved={(enabled) => {
+          onMomentResponseSaved?.(agent.id, enabled);
+          setMomentResponseSheet(false);
+        }}
+      />}
     </div>
+  );
+}
+
+function MomentResponseSettingsSheet({ agent, onClose, onSaved }) {
+  const [enabled, setEnabled] = useStateA(Boolean(agent?.momentResponseEnabled ?? agent?._raw?.moment_response_enabled));
+  const [events, setEvents] = useStateA([]);
+  const [loadError, setLoadError] = useStateA("");
+  const [busy, setBusy] = useStateA(false);
+  const [error, setError] = useStateA("");
+  const framing = getVisualFrameView(agent?.visualFrame, "fullscreen");
+  const status = getMomentResponseStatus({ enabled, events });
+
+  useEffectA(() => {
+    let cancelled = false;
+    async function loadStatus() {
+      try {
+        const result = await getProactiveEvents({ characterId: agent.id, limit: 20 });
+        const items = Array.isArray(result) ? result : (result?.items || []);
+        if (!cancelled) setEvents(items);
+      } catch (requestError) {
+        if (!cancelled) setLoadError(requestError instanceof Error ? requestError.message : "状态记录暂时未加载");
+      }
+    }
+    loadStatus();
+    return () => { cancelled = true; };
+  }, [agent.id]);
+
+  const handleSave = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await updateRole(agent.id, { moment_response_enabled: enabled });
+      const savedEnabled = Boolean(result?.item?.moment_response_enabled ?? enabled);
+      onSaved?.(savedEnabled);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "动态回应设置没有保存成功");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="moment-response-screen" role="dialog" aria-modal="true" aria-label={`${agent.name}的动态回应设置`}>
+      <div className="mrs-stage" aria-hidden="true">
+        <Live2DStage
+          className="mrs-live2d-stage"
+          modelUrl={agent.live2dModelUrl}
+          manifest={agent.live2dManifest}
+          framing={framing}
+          staticSrc={agent.visualPreviewUrl || agent.cover}
+          fallbackSrc={agent.cover}
+          alt={agent.name}
+        />
+        <div className="mrs-stage-scrim" />
+      </div>
+
+      <header className="mrs-topbar">
+        <button type="button" className="mrs-back" onClick={onClose} aria-label="返回角色详情"><Icon name="back" /></button>
+        <div><h1>动态生活</h1><p>{agent.name} · 角色设置</p></div>
+      </header>
+
+      <div className={`mrs-status-card ${status.tone}`} aria-live="polite">
+        <strong>{status.label}</strong>
+        <span>{status.description}</span>
+      </div>
+
+      <section className="mrs-sheet">
+        <div className="mrs-grip" />
+        <div className="mrs-sheet-body">
+          <div className="mrs-section-heading">
+            <h2>回应分享的动态</h2>
+            <p>只处理你明确分享给她的生活记录</p>
+          </div>
+          <div className="mrs-setting-card">
+            <div><strong>允许回应我分享的动态</strong><span>仅限分享给{agent.name}的动态</span></div>
+            <button
+              type="button"
+              className={"toggle" + (enabled ? " on" : "")}
+              aria-label="允许回应我分享的动态"
+              aria-pressed={enabled}
+              onClick={() => setEnabled((value) => !value)}
+            ><i /></button>
+          </div>
+
+          <div className="mrs-rules">
+            <h2>回应方式</h2>
+            <ul>
+              <li>仅你明确分享给她的动态会被看到</li>
+              <li>每位角色至少间隔 4 小时再回应</li>
+              <li>她可以选择不评论，不制造热闹</li>
+            </ul>
+          </div>
+        </div>
+        <footer className="mrs-footer">
+          {loadError && <p className="mrs-load-note">状态记录暂时未加载，不影响开关保存</p>}
+          {error && <p className="mrs-error" role="alert">{error}</p>}
+          <button type="button" className="pill pill-primary grow" disabled={busy} onClick={handleSave}>{busy ? "保存中…" : "保存修改"}</button>
+        </footer>
+      </section>
+    </section>
   );
 }
 
