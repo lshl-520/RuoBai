@@ -129,6 +129,14 @@ function RuobaiApp({ authed, setAuthed }) {
       throw new Error(withDiagnosticId("设置主陪伴失败，请稍后重试。", id));
     }
   };
+  const saveMomentResponseSetting = (id, enabled) => {
+    const apply = (agent) => agent?.id === id
+      ? { ...agent, momentResponseEnabled: enabled, _raw: { ...(agent._raw || {}), moment_response_enabled: enabled ? 1 : 0 } }
+      : agent;
+    setAgents((current) => current.map(apply));
+    setDetailAgent((current) => apply(current));
+    window.dispatchEvent(new CustomEvent("ruobai:role-saved"));
+  };
 
   const likeMoment = (id) => setMoments((p) => p.map((m) => m.id === id ? { ...m, liked: !m.liked, likes: m.likes + (m.liked ? -1 : 1) } : m));
   const postMoment = (data) => {
@@ -168,6 +176,7 @@ function RuobaiApp({ authed, setAuthed }) {
           <CharacterDetail agent={detailAgent} memCount={(memories[detailAgent.id] || []).length}
             onClose={() => setDetailAgent(null)} onChat={openChat}
             onEdit={setEditAgent} onDelete={deleteAgent} onSetMain={setMainCompanion}
+            onMomentResponseSaved={saveMomentResponseSetting}
             onOnboard={(a) => setOnboardRole(a._raw || a)} />
         )}
       </div>
