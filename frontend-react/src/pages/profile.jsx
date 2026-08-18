@@ -676,7 +676,7 @@ function OnboardSheet({ role, onClose, onDone }) {
   );
 }
 
-function ProfileScreen({ user: userProp, onOnboard, onGoMemory, onLogout }) {
+function ProfileScreen({ user: userProp, onOnboard, onGoMemory, onGoUsage, onLogout }) {
   const [sheet, setSheet] = useStateP(null);
   const [theme, setThemeState] = useStateP((typeof document !== "undefined" && document.documentElement.dataset.theme) || "");
 
@@ -788,6 +788,10 @@ function ProfileScreen({ user: userProp, onOnboard, onGoMemory, onLogout }) {
 
       {/* 模型接入 — 用途路由 + 接口渠道 + 语音(见 models.jsx) */}
       <ModelsSection />
+
+      <div className="pad usage-entry-wrap">
+        <Row icon="coin" tint="lav" title="用量与健康" sub="查看调用、Token 和渠道状态" onClick={onGoUsage} trailing={<Icon name="chevron" className="row-chev" />} last />
+      </div>
 
       {/* 设置 */}
       <div className="section-label pad" style={{ marginTop: 18 }}><span>设置</span><span className="sl-line" /></div>

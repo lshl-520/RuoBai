@@ -264,7 +264,7 @@ test('POST /api/moments/:id/share only shares a user moment to explicitly select
   });
 });
 
-test('POST /api/moments/:id/share indexes the same shared moment for every selected role', async () => {
+test('POST /api/moments/:id/share keeps the raw moment without creating life events', async () => {
   const sourceCalls = [];
   let nextEventId = 40;
   const connection = {
@@ -309,7 +309,7 @@ test('POST /api/moments/:id/share indexes the same shared moment for every selec
     const indexedRoleIds = sourceCalls
       .filter(call => call.sql.includes('INSERT INTO life_events'))
       .map(call => call.params[1]);
-    assert.deepEqual(indexedRoleIds, [6, 7]);
+    assert.deepEqual(indexedRoleIds, []);
   });
 });
 

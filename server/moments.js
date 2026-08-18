@@ -544,15 +544,6 @@ export function createMomentsRouter({
         [result.insertId, req.userId]
       );
 
-      void recordLifeEventSource(db, {
-        userId: req.userId,
-        characterId,
-        sourceType: 'moment',
-        sourceId: result.insertId,
-        title: content,
-        eventType: 'life'
-      });
-
       return res.status(201).json({
         success: true,
         item: serializeMoment(rows[0], [], false, [])
@@ -601,31 +592,6 @@ export function createMomentsRouter({
           [requestedIds.length ? 'shared' : normalizeVisibilityMode(null, momentRows[0].character_id), momentId, req.userId]
         );
       });
-
-      // 用户动态只有在明确分享给角色后，才进入对应角色的生活事件索引。
-      // 同一条动态可以分别属于多个角色；取消分享不删除历史来源，读取时再按当前权限过滤。
-      if (requestedIds.length > 0) {
-        void (async () => {
-          try {
-            const [rows] = await db.query(
-              'SELECT content FROM moments WHERE id = ? AND user_id = ? AND is_deleted = 0 LIMIT 1',
-              [momentId, req.userId]
-            );
-            for (const characterId of requestedIds) {
-              await recordLifeEventSource(db, {
-                userId: req.userId,
-                characterId,
-                sourceType: 'moment',
-                sourceId: momentId,
-                title: rows[0]?.content || '',
-                eventType: 'life'
-              });
-            }
-          } catch {
-            // 事件索引是辅助能力，不能影响分享结果。
-          }
-        })();
-      }
 
       return res.json({
         success: true,

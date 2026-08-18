@@ -18,7 +18,10 @@ function createFixture({
   dynamicModel = 'gpt-image-dynamic',
   imageResolution = 'channel',
   imageProfile = null,
-  templates = null
+  templates = null,
+  roleChatEnabled = false,
+  plannerAttemptCount = 0,
+  nextPlannerRetryAt = null
 } = {}) {
   const calls = [];
   const inserted = [];
@@ -27,6 +30,8 @@ function createFixture({
     user_id: 19,
     name: '林夏',
     persona: '温柔又有一点小傲娇',
+    chat_credential_id: roleChatEnabled ? 77 : null,
+    chat_model_id: roleChatEnabled ? 'deepseek-role-model' : null,
     auto_moments_daily_max: 4,
     auto_moments_min_interval_hours: 6,
     auto_moments_last_posted_at: lastPostedAt,
@@ -40,7 +45,22 @@ function createFixture({
     query: async (sql, params = []) => {
       calls.push({ sql, params });
       if (sql.includes('FROM characters') && sql.includes('auto_moments_enabled = 1')) return [[character]];
+      if (sql.includes('FROM auto_moment_attempts') && sql.includes('MAX(next_retry_at)')) {
+        return [[{ cnt: plannerAttemptCount, next_retry_at: nextPlannerRetryAt }]];
+      }
       if (sql.includes('SELECT COUNT(*) AS cnt')) return [[{ cnt: todayCount }]];
+      if (sql.includes('INSERT INTO auto_moment_attempts')) return [{ insertId: 7001 }];
+      if (sql.includes('UPDATE auto_moment_attempts')) return [{ affectedRows: 1 }];
+      if (sql.includes('FROM credentials c') && sql.includes('INNER JOIN credential_models')) {
+        return [roleChatEnabled ? [{
+          id: 77,
+          name: '角色专属 DeepSeek',
+          provider_type: 'openai-compatible',
+          api_base: 'https://role-chat.example.com/v1',
+          api_key: 'ROLE_CHAT_TOKEN',
+          model: 'deepseek-role-model'
+        }] : []];
+      }
       if (sql.includes('FROM capability_assignments') && params[1] === 'chat') {
         return [[{
           id: 1,
@@ -176,6 +196,78 @@ test('enabled character reads selected chat capability plus recent chat and memo
   assert.equal(fixture.inserted[0].params[4], 'disabled');
   assert.match(fixture.calls.find(call => call.sql.includes('INSERT INTO moments')).sql, /publisher/);
   assert.ok(fixture.calls.some(call => call.sql.includes('auto_moments_last_posted_at = NOW()')));
+});
+
+test('automatic moments prefer the character selected chat model over the user default', async () => {
+  const fixture = createFixture({ roleChatEnabled: true });
+  const service = createAutoMomentsService({
+    db: fixture.db,
+    fetchImpl: fixture.fetchImpl,
+    generateImageImpl: fixture.generateImageImpl,
+    logger: { log() {}, warn() {}, error() {} }
+  });
+
+  const [result] = await service.runScan({ characterId: 61 });
+  const request = fixture.getChatRequest();
+  assert.equal(result.status, 'posted');
+  assert.equal(request.url, 'https://role-chat.example.com/v1/chat/completions');
+  assert.equal(request.body.model, 'deepseek-role-model');
+  assert.equal(fixture.calls.some(call => call.sql.includes('FROM capability_assignments') && call.params[1] === 'chat'), false);
+  const attemptInsert = fixture.calls.find(call => call.sql.includes('INSERT INTO auto_moment_attempts'));
+  assert.equal(attemptInsert.params[2], '角色专属 DeepSeek');
+  assert.equal(attemptInsert.params[4], 'deepseek-role-model');
+});
+
+test('planner skip is audited and a recent paid attempt enters cooldown', async () => {
+  const skippedFixture = createFixture();
+  const skippedService = createAutoMomentsService({
+    db: skippedFixture.db,
+    fetchImpl: async () => jsonResponse({ choices: [{ message: { content: '{"should_post":false}' } }] }),
+    logger: { log() {}, warn() {}, error() {} }
+  });
+  const [skipped] = await skippedService.runScan({ characterId: 61 });
+  assert.equal(skipped.status, 'skipped_planner');
+  const auditUpdate = skippedFixture.calls.find(call => call.sql.includes('UPDATE auto_moment_attempts'));
+  assert.equal(auditUpdate.params[0], 'planner_skipped');
+
+  const cooldownFixture = createFixture({ nextPlannerRetryAt: '2026-07-21 12:30:00' });
+  const cooldownService = createAutoMomentsService({
+    db: cooldownFixture.db,
+    fetchImpl: cooldownFixture.fetchImpl,
+    now: () => new Date('2026-07-21T12:00:00+08:00'),
+    logger: { log() {}, warn() {}, error() {} }
+  });
+  const [cooldown] = await cooldownService.runScan({ characterId: 61 });
+  assert.equal(cooldown.status, 'skipped_planner_cooldown');
+  assert.equal(cooldownFixture.getChatRequest(), null);
+});
+
+test('automatic moments stop after six paid planner attempts in one day', async () => {
+  const fixture = createFixture({ plannerAttemptCount: 6 });
+  const service = createAutoMomentsService({
+    db: fixture.db,
+    fetchImpl: fixture.fetchImpl,
+    logger: { log() {}, warn() {}, error() {} }
+  });
+  const [result] = await service.runScan({ characterId: 61 });
+  assert.equal(result.status, 'skipped_planner_daily_limit');
+  assert.equal(fixture.getChatRequest(), null);
+});
+
+test('planner upstream failure is audited without storing response text', async () => {
+  const fixture = createFixture();
+  const service = createAutoMomentsService({
+    db: fixture.db,
+    fetchImpl: async () => new Response('temporary provider detail', { status: 503 }),
+    logger: { log() {}, warn() {}, error() {} }
+  });
+
+  const [result] = await service.runScan({ characterId: 61 });
+  assert.equal(result.status, 'failed');
+  const auditUpdate = fixture.calls.find(call => call.sql.includes('UPDATE auto_moment_attempts'));
+  assert.equal(auditUpdate.params[0], 'planner_failed');
+  assert.equal(auditUpdate.params[2], 'upstream');
+  assert.equal(auditUpdate.params.some(value => String(value).includes('temporary provider detail')), false);
 });
 
 test('disabled image capability publishes text without calling image generation', async () => {

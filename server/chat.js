@@ -23,6 +23,11 @@ import {
 } from './character-context.js';
 import { recordAutoMemoryCandidate, recordExplicitChatMemory } from './memory-extractor.js';
 import { recordLifeEventSource } from './life-events.js';
+import {
+  classifyUsageError,
+  extractUsageFromPayload,
+  recordUsageEvent
+} from './usage-ledger.js';
 
 const NO_MODEL_MESSAGE = '请先在“我的”页面配置 AI 模型。';
 const CHARACTER_NOT_FOUND_ERROR = '角色不存在或不属于当前用户';
@@ -446,6 +451,18 @@ export function createChatRouter({
   let supportsMessageReasoningSummary;
   let supportsMessageInnerOs;
 
+  async function writeUsageEvent(input) {
+    try {
+      return await recordUsageEvent(pool, input);
+    } catch (error) {
+      // 账本不能阻断正常聊天；旧数据库会在下次启动时自动升级。
+      if (!String(error?.message || '').startsWith('Unexpected query:')) {
+        console.error('[usage-ledger] 写入失败', error.message);
+      }
+      return null;
+    }
+  }
+
   function buildAbsoluteMediaUrl(mediaUrl) {
     if (!mediaUrl) {
       return '';
@@ -778,7 +795,7 @@ export function createChatRouter({
     return getActiveModelConfig(userId);
   }
 
-  async function generateInnerOs({ modelConfig, character, userContent, assistantContent, level, context = null }) {
+  async function generateInnerOs({ modelConfig, character, userContent, assistantContent, level, context = null, usageContext = null }) {
     const normalizedLevel = normalizeInnerOsLevel(level);
     if (normalizedLevel === 'off') return '';
     if (!modelConfig) {
@@ -786,6 +803,7 @@ export function createChatRouter({
     }
 
     const requestInnerOs = async (correction = '') => {
+      const startedAt = Date.now();
       const prompt = buildInnerOsPrompt({
         character,
         userContent,
@@ -794,13 +812,15 @@ export function createChatRouter({
         context
       }) + correction;
       const reflectionProtocol = getChatProtocol(modelConfig, normalizedLevel);
-      const response = await fetchImpl(
-        reflectionProtocol === 'responses'
-          ? buildResponsesUrl(modelConfig.api_base)
-          : reflectionProtocol === 'anthropic-messages'
-            ? buildAnthropicMessagesUrl(modelConfig.api_base)
-            : buildChatCompletionsUrl(modelConfig.api_base),
-        {
+      let response;
+      try {
+        response = await fetchImpl(
+          reflectionProtocol === 'responses'
+            ? buildResponsesUrl(modelConfig.api_base)
+            : reflectionProtocol === 'anthropic-messages'
+              ? buildAnthropicMessagesUrl(modelConfig.api_base)
+              : buildChatCompletionsUrl(modelConfig.api_base),
+          {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -836,15 +856,50 @@ export function createChatRouter({
                   max_tokens: INNER_OS_LIMITS[normalizedLevel].maxTokens
                 }
         )
+          }
+        );
+      } catch (error) {
+        await writeUsageEvent({
+          ...usageContext,
+          purpose: 'inner_os',
+          providerName: modelConfig.name,
+          providerType: modelConfig.provider_type,
+          model: modelConfig.model,
+          durationMs: Date.now() - startedAt,
+          status: 'failure',
+          errorCategory: classifyUsageError(error),
+          error
+        });
+        throw error;
       }
-      );
 
       if (!response.ok) {
         const detail = await response.text().catch(() => '');
+        await writeUsageEvent({
+          ...usageContext,
+          purpose: 'inner_os',
+          providerName: modelConfig.name,
+          providerType: modelConfig.provider_type,
+          model: modelConfig.model,
+          durationMs: Date.now() - startedAt,
+          status: 'failure',
+          errorCategory: classifyUsageError(response.status)
+        });
         throw new Error(friendlyUpstreamError(response.status, detail, modelConfig.api_base, modelConfig.model));
       }
 
       const payload = await response.json().catch(() => null);
+      const usage = extractUsageFromPayload(payload, reflectionProtocol);
+      await writeUsageEvent({
+        ...usageContext,
+        purpose: 'inner_os',
+        providerName: modelConfig.name,
+        providerType: modelConfig.provider_type,
+        model: modelConfig.model,
+        ...usage,
+        durationMs: Date.now() - startedAt,
+        status: 'success'
+      });
       const rawText = reflectionProtocol === 'responses'
         ? extractResponsesText(payload)
         : reflectionProtocol === 'anthropic-messages'
@@ -1210,6 +1265,20 @@ export function createChatRouter({
   });
 
   router.post('/', async (req, res) => {
+    let primaryUsageContext = null;
+    let primaryUsageRecorded = false;
+    const recordPrimaryUsage = async ({ status, usage = {}, error = null, errorCategory = null }) => {
+      if (!primaryUsageContext || primaryUsageRecorded) return;
+      primaryUsageRecorded = true;
+      await writeUsageEvent({
+        ...primaryUsageContext,
+        ...usage,
+        status,
+        durationMs: Date.now() - primaryUsageContext.startedAt,
+        error,
+        errorCategory: errorCategory || (status === 'failure' ? classifyUsageError(error) : null)
+      });
+    };
     try {
       const characterId = getRequestCharacterId(req);
       if (!characterId) {
@@ -1381,32 +1450,54 @@ export function createChatRouter({
         : {
             model: modelConfig.model,
             stream: shouldStream,
-            messages
+            messages,
+            ...(shouldStream ? { stream_options: { include_usage: true } } : {})
           };
 
-      const upstream = await fetchImpl(
-        useResponsesApi
-          ? buildResponsesUrl(modelConfig.api_base)
-          : useAnthropicMessagesApi
-            ? buildAnthropicMessagesUrl(modelConfig.api_base)
-            : buildChatCompletionsUrl(modelConfig.api_base),
-        {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${modelConfig.api_key}`,
-          ...(useAnthropicMessagesApi ? {
-            'x-api-key': modelConfig.api_key,
-            'anthropic-version': '2023-06-01'
-          } : {})
-        },
-        body: JSON.stringify(requestBody)
+      primaryUsageContext = {
+        userId: req.userId,
+        characterId,
+        startedAt: Date.now(),
+        purpose: 'chat',
+        providerName: modelConfig.name,
+        providerType: modelConfig.provider_type,
+        model: modelConfig.model
+      };
+
+      let upstream;
+      try {
+        upstream = await fetchImpl(
+          useResponsesApi
+            ? buildResponsesUrl(modelConfig.api_base)
+            : useAnthropicMessagesApi
+              ? buildAnthropicMessagesUrl(modelConfig.api_base)
+              : buildChatCompletionsUrl(modelConfig.api_base),
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${modelConfig.api_key}`,
+              ...(useAnthropicMessagesApi ? {
+                'x-api-key': modelConfig.api_key,
+                'anthropic-version': '2023-06-01'
+              } : {})
+            },
+            body: JSON.stringify(requestBody)
+          }
+        );
+      } catch (error) {
+        await recordPrimaryUsage({ status: 'failure', error });
+        throw error;
       }
-      );
 
       if (!upstream.ok) {
         const detail = await upstream.text().catch(() => '');
         const human = friendlyUpstreamError(upstream.status, detail, modelConfig.api_base, modelConfig.model);
+        await recordPrimaryUsage({
+          status: 'failure',
+          error: { status: upstream.status, message: human },
+          errorCategory: classifyUsageError(upstream.status)
+        });
         // 详细原始报错只打到服务端日志，便于排查
         console.error(`[chat] 上游 ${upstream.status} 接口=${modelConfig.api_base} 模型=${modelConfig.model} 原始=${detail.slice(0, 500)}`);
         throw new Error(human);
@@ -1427,6 +1518,7 @@ export function createChatRouter({
         let fillerState = shouldStrip ? 'start' : 'done';
         let fillerBuf = '';
         let streamedContent = '';
+        let upstreamUsage = null;
 
         try {
           let buffer = '';
@@ -1447,6 +1539,9 @@ export function createChatRouter({
               }
               try {
                 const json = JSON.parse(line.slice(6));
+                if (json?.usage) {
+                  upstreamUsage = extractUsageFromPayload(json, protocol);
+                }
                 if (useResponsesApi && json?.type === 'response.completed') {
                   // 上游摘要可能是英文或原始推理，不属于角色内心，绝不直接发给前端。
                   continue;
@@ -1542,7 +1637,8 @@ export function createChatRouter({
                 userContent: content,
                 assistantContent: streamedContent,
                 level: innerOsLevel,
-                context: contextSnapshot
+                context: contextSnapshot,
+                usageContext: { userId: req.userId, characterId }
               });
               res.write(`data: ${JSON.stringify({ type: 'inner_os', content: innerOs, source: INNER_OS_SOURCE })}\n\n`);
             } catch (innerOsError) {
@@ -1550,10 +1646,12 @@ export function createChatRouter({
               res.write(`data: ${JSON.stringify({ type: 'inner_os_error', message: '这一轮的小心思暂时没有写出来。' })}\n\n`);
             }
           }
+          await recordPrimaryUsage({ status: 'success', usage: upstreamUsage || {} });
           res.write('data: [DONE]\n\n');
           res.end();
         } catch (streamError) {
           console.error('AI 流中断', streamError.message);
+          await recordPrimaryUsage({ status: 'failure', error: streamError });
           if (!res.writableEnded) {
             res.write(`data: ${JSON.stringify({ type: 'error', message: STREAM_INTERRUPTED_MESSAGE })}\n\n`);
             res.end();
@@ -1563,6 +1661,7 @@ export function createChatRouter({
       }
 
       const payload = await upstream.json();
+      const upstreamUsage = extractUsageFromPayload(payload, protocol);
       const rawContent = useResponsesApi
         ? extractResponsesText(payload)
         : useAnthropicMessagesApi
@@ -1582,12 +1681,14 @@ export function createChatRouter({
             userContent: content,
             assistantContent: finalContent,
             level: innerOsLevel,
-            context: contextSnapshot
+            context: contextSnapshot,
+            usageContext: { userId: req.userId, characterId }
           });
         } catch (innerOsError) {
           console.error('[inner-os] 生成失败', innerOsError.message);
         }
       }
+      await recordPrimaryUsage({ status: 'success', usage: upstreamUsage });
       return res.json({
         success: true,
         item: {
@@ -1599,6 +1700,7 @@ export function createChatRouter({
         }
       });
     } catch (error) {
+      await recordPrimaryUsage({ status: 'failure', error });
       if (wantsEventStream(req)) {
         sendSyntheticStream(res, `模型暂时不可用：${error.message}`);
         return;

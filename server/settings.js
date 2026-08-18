@@ -9,6 +9,7 @@ import {
   requireCharacterForUser,
   toBoolean
 } from './helpers.js';
+import { listUsageEvents } from './usage-ledger.js';
 
 function normalizeTime(value, fallback) {
   const raw = String(value ?? '').trim();
@@ -288,6 +289,26 @@ export function createSettingsRouter({ pool = defaultPool } = {}) {
     return res.json({
       success: true,
       item: stats
+    });
+  }));
+
+  router.get('/events', asyncHandler(async (req, res) => {
+    if (!req.baseUrl.endsWith('/usage')) {
+      return res.status(405).json({ success: false, error: '当前路由不支持调用账本查询' });
+    }
+
+    const events = await listUsageEvents(pool, req.userId, {
+      days: req.query?.days,
+      purpose: req.query?.purpose,
+      limit: req.query?.limit
+    });
+    return res.json({
+      success: true,
+      item: {
+        events,
+        days: Math.min(Math.max(Number.parseInt(req.query?.days, 10) || 7, 1), 90),
+        purpose: String(req.query?.purpose || '').trim() || 'all'
+      }
     });
   }));
 

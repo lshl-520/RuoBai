@@ -303,6 +303,58 @@ const FUNCTIONAL_RUNTIME_TABLES = [
   `
 ];
 
+const USAGE_RUNTIME_TABLES = [
+  `
+    CREATE TABLE IF NOT EXISTS auto_moment_attempts (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      character_id INT NOT NULL,
+      provider_name VARCHAR(160) DEFAULT '',
+      provider_type VARCHAR(80) DEFAULT '',
+      model VARCHAR(160) DEFAULT '',
+      outcome VARCHAR(32) NOT NULL DEFAULT 'planner_started',
+      image_status VARCHAR(32) NOT NULL DEFAULT 'not_requested',
+      error_category VARCHAR(80) DEFAULT NULL,
+      duration_ms INT DEFAULT NULL,
+      next_retry_at DATETIME DEFAULT NULL,
+      moment_id INT DEFAULT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+      FOREIGN KEY (moment_id) REFERENCES moments(id) ON DELETE SET NULL,
+      INDEX idx_auto_moment_attempt_character (user_id, character_id, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS usage_events (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      character_id INT DEFAULT NULL,
+      purpose VARCHAR(32) NOT NULL,
+      provider_name VARCHAR(160) DEFAULT '',
+      provider_type VARCHAR(80) DEFAULT '',
+      model VARCHAR(160) DEFAULT '',
+      input_tokens INT DEFAULT NULL,
+      output_tokens INT DEFAULT NULL,
+      cache_read_tokens INT DEFAULT NULL,
+      cache_write_tokens INT DEFAULT NULL,
+      total_tokens INT DEFAULT NULL,
+      duration_ms INT DEFAULT NULL,
+      status VARCHAR(20) NOT NULL DEFAULT 'failure',
+      error_category VARCHAR(80) DEFAULT NULL,
+      actual_cost DECIMAL(18,6) DEFAULT NULL,
+      cost_currency VARCHAR(12) DEFAULT NULL,
+      cost_source VARCHAR(20) DEFAULT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE SET NULL,
+      INDEX idx_usage_user_created (user_id, created_at, id),
+      INDEX idx_usage_user_purpose (user_id, purpose, created_at),
+      INDEX idx_usage_provider (user_id, provider_name, model, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `
+];
+
 async function columnExists(db, tableName, columnName) {
   const [rows] = await db.query(
     `
@@ -480,6 +532,12 @@ export async function ensureFunctionalRuntimeTables(db) {
   await ensureLifeEventSourceRuntimeIndex(db);
 }
 
+export async function ensureUsageRuntimeTables(db) {
+  for (const statement of USAGE_RUNTIME_TABLES) {
+    await db.query(statement);
+  }
+}
+
 export async function ensureRuntimeSchema(db) {
   await ensureDynamicCapabilityAssignment(db);
   await ensureCharacterRuntimeColumns(db);
@@ -490,5 +548,6 @@ export async function ensureRuntimeSchema(db) {
   await ensurePushRuntimeTables(db);
   await ensurePersonaRuntimeTables(db);
   await ensureFunctionalRuntimeTables(db);
+  await ensureUsageRuntimeTables(db);
   await ensureLifeEventRuntimeColumns(db);
 }

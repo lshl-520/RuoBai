@@ -187,6 +187,27 @@ const statements = [
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `,
   `
+    CREATE TABLE IF NOT EXISTS auto_moment_attempts (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      character_id INT NOT NULL,
+      provider_name VARCHAR(160) DEFAULT '',
+      provider_type VARCHAR(80) DEFAULT '',
+      model VARCHAR(160) DEFAULT '',
+      outcome VARCHAR(32) NOT NULL DEFAULT 'planner_started',
+      image_status VARCHAR(32) NOT NULL DEFAULT 'not_requested',
+      error_category VARCHAR(80) DEFAULT NULL,
+      duration_ms INT DEFAULT NULL,
+      next_retry_at DATETIME DEFAULT NULL,
+      moment_id INT DEFAULT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+      FOREIGN KEY (moment_id) REFERENCES moments(id) ON DELETE SET NULL,
+      INDEX idx_auto_moment_attempt_character (user_id, character_id, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `,
+  `
     CREATE TABLE IF NOT EXISTS moment_audiences (
       id BIGINT AUTO_INCREMENT PRIMARY KEY,
       moment_id INT NOT NULL,
