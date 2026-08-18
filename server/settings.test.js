@@ -146,3 +146,51 @@ test('PATCH /api/settings saves auto moment frequency and quiet hours', async ()
     assert.equal(payload.item.auto_moments_quiet_end, '07:15');
   });
 });
+
+test('GET /api/usage/events returns the private call ledger without message content', async () => {
+  const calls = [];
+  const pool = {
+    async query(sql, params = []) {
+      calls.push({ sql, params });
+      if (sql.includes('FROM usage_events')) {
+        return [[{
+          id: 2,
+          character_id: 4,
+          purpose: 'chat',
+          provider_name: 'DeepSeek',
+          provider_type: 'official',
+          model: 'deepseek-chat',
+          input_tokens: 12,
+          output_tokens: 6,
+          cache_read_tokens: null,
+          cache_write_tokens: null,
+          total_tokens: 18,
+          duration_ms: 300,
+          status: 'success',
+          error_category: null,
+          actual_cost: null,
+          cost_currency: null,
+          cost_source: null,
+          created_at: '2026-08-11 12:00:00'
+        }]];
+      }
+      throw new Error(`Unexpected query: ${sql}`);
+    }
+  };
+  const router = createSettingsRouter({ pool });
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => { req.userId = 7; next(); });
+  app.use('/api/usage', router);
+
+  await withServer(app, async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/usage/events?days=30&purpose=chat&limit=20`);
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.success, true);
+    assert.equal(payload.item.events[0].total_tokens, 18);
+    assert.equal('content' in payload.item.events[0], false);
+    assert.deepEqual(calls[0].params, [7, 30, 'chat', 20]);
+  });
+});

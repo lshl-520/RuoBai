@@ -8,12 +8,12 @@ import {
   loadRecentLifeEvents,
 } from './character-context.js';
 import { loadPersonaRuntime } from './persona-runtime.js';
-import { recordLifeEventSource } from './life-events.js';
 
 const DEFAULT_DAILY_MAX = 4;
 const DEFAULT_MIN_INTERVAL_HOURS = 6;
 const FIRST_SCAN_DELAY_MS = 15 * 1000;
 const SCAN_INTERVAL_MS = 10 * 60 * 1000;
+const MAX_DAILY_PLANNER_ATTEMPTS = 6;
 const AUTO_IMAGE_MAX_ROUNDS = 2;
 const AUTO_IMAGE_RETRY_DELAYS_MS = [30 * 1000];
 const MAX_MOMENT_LENGTH = 120;
@@ -315,6 +315,91 @@ export function createAutoMomentsService({
     return capability === 'dynamic' && item && !supportsDynamicSingleImage(item.model) ? null : item;
   }
 
+  async function getCharacterChatCapability(userId, character) {
+    const credentialId = Number(character?.chat_credential_id);
+    const modelId = String(character?.chat_model_id || '').trim();
+    if (Number.isInteger(credentialId) && credentialId > 0 && modelId) {
+      const [rows] = await db.query(
+        `
+          SELECT c.id, c.name, c.provider_type, c.api_base, c.api_aux_base,
+                 c.api_key, cm.model_id AS model
+          FROM credentials c
+          INNER JOIN credential_models cm ON cm.credential_id = c.id
+          WHERE c.id = ? AND c.user_id = ? AND c.is_enabled = 1 AND cm.model_id = ?
+          LIMIT 1
+        `,
+        [credentialId, userId, modelId]
+      );
+      if (rows[0]) return rows[0];
+    }
+    return getCapability(userId, 'chat');
+  }
+
+  async function loadPlannerAttemptState(userId, characterId) {
+    const [rows] = await db.query(
+      `
+        SELECT SUM(created_at >= ?) AS cnt, MAX(next_retry_at) AS next_retry_at
+        FROM auto_moment_attempts
+        WHERE user_id = ? AND character_id = ?
+      `,
+      [startOfLocalDay(now()), userId, characterId]
+    );
+    return {
+      count: Number(rows[0]?.cnt || 0),
+      nextRetryAt: rows[0]?.next_retry_at || null
+    };
+  }
+
+  async function beginPlannerAttempt(userId, characterId, chatConfig) {
+    const [result] = await db.query(
+      `
+        INSERT INTO auto_moment_attempts
+          (user_id, character_id, provider_name, provider_type, model, outcome,
+           image_status, error_category, duration_ms, next_retry_at, created_at)
+        VALUES (?, ?, ?, ?, ?, 'planner_started', 'not_requested', NULL, NULL,
+                DATE_ADD(NOW(), INTERVAL 1 HOUR), NOW())
+      `,
+      [
+        userId,
+        characterId,
+        String(chatConfig?.name || '').slice(0, 160),
+        String(chatConfig?.provider_type || '').slice(0, 80),
+        String(chatConfig?.model || '').slice(0, 160)
+      ]
+    );
+    return Number(result?.insertId || 0);
+  }
+
+  async function finishPlannerAttempt(attemptId, {
+    outcome,
+    imageStatus = 'not_requested',
+    errorCategory = null,
+    durationMs = null,
+    momentId = null
+  }) {
+    if (!attemptId) return;
+    await db.query(
+      `
+        UPDATE auto_moment_attempts
+        SET outcome = ?, image_status = ?, error_category = ?, duration_ms = ?, moment_id = ?
+        WHERE id = ?
+      `,
+      [outcome, imageStatus, errorCategory, durationMs, momentId, attemptId]
+    );
+  }
+
+  function classifyAttemptError(error) {
+    const status = Number(error?.status || error?.statusCode || 0);
+    if (status === 401 || status === 403) return 'auth';
+    if (status === 429) return 'rate_limit';
+    if (status >= 500) return 'upstream';
+    const message = String(error?.message || error || '').toLowerCase();
+    if (/timeout|timed out|超时/.test(message)) return 'timeout';
+    if (/network|fetch failed|econn|连接|中断/.test(message)) return 'network';
+    if (/quota|balance|余额|额度|费用/.test(message)) return 'quota';
+    return 'unknown';
+  }
+
   async function loadContext(userId, characterId, character = {}) {
     const [[messages], [memories], [recentMoments]] = await Promise.all([
       db.query(
@@ -394,7 +479,9 @@ export function createAutoMomentsService({
 
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
-      throw new Error(detail || `聊天模型返回 ${response.status}`);
+      const error = new Error(detail || `聊天模型返回 ${response.status}`);
+      error.status = response.status;
+      throw error;
     }
 
     return parseGeneratedMomentPlan(await readGeneratedText(response));
@@ -419,21 +506,49 @@ export function createAutoMomentsService({
           return { characterId, status: 'skipped_interval' };
         }
       }
+
+      const attemptState = await loadPlannerAttemptState(userId, characterId);
+      if (attemptState.count >= MAX_DAILY_PLANNER_ATTEMPTS) {
+        return { characterId, status: 'skipped_planner_daily_limit' };
+      }
+      if (attemptState.nextRetryAt) {
+        const remainingMs = new Date(attemptState.nextRetryAt).getTime() - new Date(now()).getTime();
+        if (Number.isFinite(remainingMs) && remainingMs > 0) {
+          return { characterId, status: 'skipped_planner_cooldown' };
+        }
+      }
     }
 
     let plan;
+    let plannerAttemptId = 0;
+    let plannerStartedAt = 0;
     if (forceChannelTest) {
       plan = buildChannelTestPlan(character);
     } else {
-      const chatConfig = await getCapability(userId, 'chat');
+      const chatConfig = await getCharacterChatCapability(userId, character);
       if (!chatConfig) {
         logger.warn?.(`[auto-moments] ${character.name} 未启用聊天能力，跳过本次动态`);
         return { characterId, status: 'skipped_no_chat_capability' };
       }
       const context = await loadContext(userId, characterId, character);
-      plan = await generateMomentPlan(character, chatConfig, context);
+      plannerAttemptId = await beginPlannerAttempt(userId, characterId, chatConfig);
+      plannerStartedAt = Date.now();
+      try {
+        plan = await generateMomentPlan(character, chatConfig, context);
+      } catch (error) {
+        await finishPlannerAttempt(plannerAttemptId, {
+          outcome: 'planner_failed',
+          errorCategory: classifyAttemptError(error),
+          durationMs: Date.now() - plannerStartedAt
+        });
+        throw error;
+      }
     }
     if (!plan.shouldPost) {
+      await finishPlannerAttempt(plannerAttemptId, {
+        outcome: 'planner_skipped',
+        durationMs: plannerStartedAt ? Date.now() - plannerStartedAt : null
+      });
       return { characterId, status: 'skipped_planner' };
     }
     const content = plan.content;
@@ -508,27 +623,36 @@ export function createAutoMomentsService({
       });
     }
 
-    const [result] = await db.query(
-      `
-        INSERT INTO moments
-          (user_id, character_id, visibility_mode, content, images, image_generation_status, image_generation_error, mood, likes_count, image_mode, image_generation_metadata, created_at, is_deleted)
-        VALUES (?, ?, 'publisher', ?, ?, ?, ?, ?, 0, 'single', ?, NOW(), 0)
-      `,
-      [userId, characterId, content, images, imageStatus, imageError || null, null, imageMetadata]
-    );
+    let result;
+    try {
+      [result] = await db.query(
+        `
+          INSERT INTO moments
+            (user_id, character_id, visibility_mode, content, images, image_generation_status, image_generation_error, mood, likes_count, image_mode, image_generation_metadata, created_at, is_deleted)
+          VALUES (?, ?, 'publisher', ?, ?, ?, ?, ?, 0, 'single', ?, NOW(), 0)
+        `,
+        [userId, characterId, content, images, imageStatus, imageError || null, null, imageMetadata]
+      );
+    } catch (error) {
+      await finishPlannerAttempt(plannerAttemptId, {
+        outcome: 'publish_failed',
+        imageStatus,
+        errorCategory: classifyAttemptError(error),
+        durationMs: plannerStartedAt ? Date.now() - plannerStartedAt : null
+      });
+      throw error;
+    }
     await db.query(
       'UPDATE characters SET auto_moments_last_posted_at = NOW() WHERE id = ? AND user_id = ?',
       [characterId, userId]
     );
-    void recordLifeEventSource(db, {
-      userId,
-      characterId,
-      sourceType: 'moment',
-      sourceId: result?.insertId,
-      title: content,
-      eventType: 'life'
+    await finishPlannerAttempt(plannerAttemptId, {
+      outcome: images ? 'posted_image' : 'posted_text',
+      imageStatus,
+      errorCategory: imageStatus === 'failed' ? 'image_failed' : null,
+      durationMs: plannerStartedAt ? Date.now() - plannerStartedAt : null,
+      momentId: result?.insertId || null
     });
-
     logger.log?.(`[auto-moments] ${character.name}(id=${characterId}) 已发布${images ? '图文' : '文字'}动态`);
     return {
       characterId,
@@ -553,7 +677,7 @@ export function createAutoMomentsService({
     try {
       const [characters] = await db.query(
         `
-          SELECT id, user_id, name, persona, auto_moments_daily_max,
+          SELECT id, user_id, name, persona, chat_credential_id, chat_model_id, auto_moments_daily_max,
                  auto_moments_min_interval_hours, auto_moments_last_posted_at,
                  auto_moments_images_enabled, auto_moments_image_resolution, auto_moments_image_profile, auto_moments_templates
           FROM characters

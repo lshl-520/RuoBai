@@ -8,6 +8,7 @@ import { AgentsScreen, AgentEditor, CharacterDetail } from "./pages/agents.jsx";
 import { MomentsScreen } from "./pages/moments.jsx";
 import { MemoryScreen } from "./pages/memory.jsx";
 import { ProfileScreen, OnboardSheet } from "./pages/profile.jsx";
+import { UsageHealthScreen } from "./pages/usage.jsx";
 import { DEFAULT_USER_AVATAR } from "./lib/default-assets.js";
 import { bootNativePushIfPossible, isNativePushAvailable } from "./lib/push.js";
 import { recordDiagnostic, withDiagnosticId } from "./lib/diagnostics.js";
@@ -168,7 +169,8 @@ function RuobaiApp({ authed, setAuthed }) {
           <Route path="/characters" element={<AgentsScreen agents={agents} onChat={openChat} onDetail={setDetailAgent} onCreate={() => setEditAgent(null)} onRestore={restoreAgent} />} />
           <Route path="/moments" element={<MomentsScreen onLike={likeMoment} onPost={postMoment} />} />
           <Route path="/memory" element={<MemoryScreen agents={agents} memories={memories} onAdd={addMemory} onUpdate={updateMemory} onDelete={deleteMemory} onPin={pinMemory} />} />
-          <Route path="/profile" element={<ProfileScreen onGoMemory={() => navigate("/memory")} onLogout={() => { setAuthed(false); navigate("/auth"); }} />} />
+          <Route path="/profile" element={<ProfileScreen onGoMemory={() => navigate("/memory")} onGoUsage={() => navigate("/usage")} onLogout={() => { setAuthed(false); navigate("/auth"); }} />} />
+          <Route path="/usage" element={<UsageHealthScreen onBack={() => navigate("/profile")} />} />
           <Route path="*" element={<Navigate to="/chat" replace />} />
         </Routes>
 

@@ -47,7 +47,7 @@ test('life event statuses include explicit expiry but reject unknown values', ()
   assert.equal(normalizeLifeEventStatus('unknown'), null);
 });
 
-test('life event source keeps an auditable source and deduplicates it', async () => {
+test('life event source keeps an auditable appointment source and deduplicates it', async () => {
   const calls = [];
   const db = {
     query: async (sql, params) => {
@@ -63,18 +63,18 @@ test('life event source keeps an auditable source and deduplicates it', async ()
   const created = await recordLifeEventSource(db, {
     userId: 1,
     characterId: 6,
-    sourceType: 'moment',
+    sourceType: 'chat',
     sourceId: 9,
-    title: '今天和小白一起吃了晚饭',
-    eventType: 'life'
+    title: '我们约好明天一起吃晚饭',
+    eventType: 'appointment'
   });
 
   assert.deepEqual(created, { id: 41, reused: false, merged: false });
   assert.equal(calls.length, 4);
-  assert.equal(calls[3].params[2], 'moment');
+  assert.equal(calls[3].params[2], 'chat');
 });
 
-test('one shared moment can be indexed independently for multiple roles', async () => {
+test('one appointment source can be indexed independently for multiple roles', async () => {
   let nextEventId = 40;
   const createdEvents = [];
   const sourceLookups = [];
@@ -98,16 +98,18 @@ test('one shared moment can be indexed independently for multiple roles', async 
   await recordLifeEventSource(db, {
     userId: 1,
     characterId: 6,
-    sourceType: 'moment',
+    sourceType: 'chat',
     sourceId: 88,
-    title: '今天和小师分享了窗边的晚风'
+    title: '我们约好明天一起看电影',
+    eventType: 'appointment'
   });
   await recordLifeEventSource(db, {
     userId: 1,
     characterId: 7,
-    sourceType: 'moment',
+    sourceType: 'chat',
     sourceId: 88,
-    title: '今天和小师分享了窗边的晚风'
+    title: '我们约好明天一起看电影',
+    eventType: 'appointment'
   });
 
   assert.deepEqual(createdEvents, [
@@ -115,8 +117,8 @@ test('one shared moment can be indexed independently for multiple roles', async 
     { id: 42, characterId: 7 }
   ]);
   assert.deepEqual(sourceLookups, [
-    [1, 6, 'moment', 88],
-    [1, 7, 'moment', 88]
+    [1, 6, 'chat', 88],
+    [1, 7, 'chat', 88]
   ]);
 });
 
@@ -162,7 +164,21 @@ test('life event source ignores content without a personal event signal', async 
   assert.equal(called, false);
 });
 
-test('life event source keeps a generated moment even without chat-like keywords', async () => {
+test('life event source ignores ordinary personal chat even when it has common memory words', async () => {
+  let called = false;
+  const result = await recordLifeEventSource({ query: async () => { called = true; } }, {
+    userId: 1,
+    characterId: 6,
+    sourceType: 'chat',
+    sourceId: 35,
+    title: '我今天有点累，但还是想和你聊一会儿。'
+  });
+
+  assert.equal(result, null);
+  assert.equal(called, false);
+});
+
+test('life event source ignores an ordinary moment because the moment is already stored raw', async () => {
   const calls = [];
   const db = {
     query: async (sql, params) => {
@@ -184,8 +200,8 @@ test('life event source keeps a generated moment even without chat-like keywords
     eventType: 'life'
   });
 
-  assert.deepEqual(created, { id: 42, reused: false, merged: false });
-  assert.equal(calls.length, 4);
+  assert.equal(created, null);
+  assert.equal(calls.length, 0);
 });
 
 test('life event source attaches a comment to the existing moment event', async () => {

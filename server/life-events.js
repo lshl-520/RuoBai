@@ -80,11 +80,14 @@ function sourceVisibilitySql(alias = 'm') {
   )`;
 }
 
-function shouldTrackTitle(value, sourceType = 'chat') {
+const CHAT_LIFE_EVENT_PATTERN = /(?:约好|约定|预约|约了|提醒我|周末一起|下周一起|明天一起|后天一起|完成了|做完了|修好了|终于把.+(?:做好|完成|跑通)|毕业了|搬家了|旅行回来|住院|手术|离职了|入职了|生日|纪念日)/u;
+
+function shouldTrackTitle(value, sourceType = 'chat', eventType = 'life') {
   const text = normalizeTitle(value);
   if (text.length < 4 || text.length > 500) return false;
-  if (sourceType === 'moment') return true;
-  return /(?:我|我的|我们|一起|喜欢|不喜欢|希望|想要|记得|约好|下次|今天|明天)/u.test(text);
+  if (sourceType === 'memory') return true;
+  if (sourceType === 'moment' || sourceType === 'comment') return false;
+  return CHAT_LIFE_EVENT_PATTERN.test(text);
 }
 
 function isMergeableEvent(row = {}) {
@@ -161,7 +164,8 @@ export async function recordLifeEventSource(db = pool, {
   const normalizedSourceType = normalizeSourceType(sourceType);
   const normalizedRelatedType = relatedSourceType ? normalizeSourceType(relatedSourceType) : null;
   const eventKey = buildLifeEventKey(normalizedTitle);
-  const trackSignal = shouldTrackTitle(normalizedTitle, normalizedSourceType);
+  const normalizedEventType = String(eventType || 'life').slice(0, 32);
+  const trackSignal = shouldTrackTitle(normalizedTitle, normalizedSourceType, normalizedEventType);
   if (!userId || !characterId || !sourceId || (!trackSignal && normalizedSourceType !== 'comment')) return null;
 
   try {
@@ -177,11 +181,12 @@ export async function recordLifeEventSource(db = pool, {
       userId,
       characterId,
       eventKey,
-      eventType: String(eventType || 'life').slice(0, 32),
+      eventType: normalizedEventType,
       relatedSourceType: normalizedRelatedType,
       relatedSourceId
     });
     if (!trackSignal && !mergeable) return null;
+    if (normalizedSourceType === 'comment' && !mergeable) return null;
 
     if (mergeable) {
       await db.query(
@@ -200,7 +205,7 @@ export async function recordLifeEventSource(db = pool, {
           (user_id, character_id, title, event_type, event_key, status, occurred_at, expires_at, created_at)
         VALUES (?, ?, ?, ?, ?, 'active', ?, ?, NOW())
       `,
-      [userId, characterId, normalizedTitle, String(eventType || 'life').slice(0, 32), eventKey, occurredAt, expiresAt]
+      [userId, characterId, normalizedTitle, normalizedEventType, eventKey, occurredAt, expiresAt]
     );
     await db.query(
       `

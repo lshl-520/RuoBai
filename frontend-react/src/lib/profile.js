@@ -56,6 +56,15 @@ export function getUsageStats() {
   });
 }
 
+export function getUsageEvents(options = {}) {
+  const query = new URLSearchParams();
+  if (options.days) query.set("days", String(options.days));
+  if (options.purpose && options.purpose !== "all") query.set("purpose", String(options.purpose));
+  if (options.limit) query.set("limit", String(options.limit));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return request(`/api/usage/events${suffix}`, { method: "GET" });
+}
+
 export function updateNickname(payload) {
   return request("/api/users/me", {
     method: "PATCH",

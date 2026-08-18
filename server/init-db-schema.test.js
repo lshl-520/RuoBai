@@ -56,3 +56,10 @@ test('characters schema stores a dedicated chat model and thinking level per rol
 test('characters schema keeps automatic moment responses disabled by default', () => {
   assert.match(initDbSource, /moment_response_enabled TINYINT\(1\) DEFAULT 0/);
 });
+
+test('init-db stores non-sensitive automatic moment attempts for cooldown and diagnosis', () => {
+  assert.match(initDbSource, /CREATE TABLE IF NOT EXISTS auto_moment_attempts/);
+  assert.match(initDbSource, /outcome VARCHAR\(32\) NOT NULL DEFAULT 'planner_started'/);
+  assert.match(initDbSource, /next_retry_at DATETIME DEFAULT NULL/);
+  assert.doesNotMatch(initDbSource, /auto_moment_attempts[\s\S]{0,1200}(?:content|prompt)\s+(?:TEXT|JSON|VARCHAR)/i);
+});
