@@ -10,14 +10,14 @@ export function isAndroidApp() {
 
 export async function checkForAndroidUpdate() {
   if (!isAndroidApp()) return null;
-  const [{ versionCode }, response] = await Promise.all([
-    AppUpdater.getVersionInfo(),
+  const [versionInfo, response] = await Promise.all([
+    AppUpdater.getVersionInfo().catch(() => ({ versionCode: 1, versionName: "1.0" })),
     fetch("/api/app-updates/android", { credentials: "same-origin", cache: "no-store" })
   ]);
   if (!response.ok) throw new Error("暂时无法检查更新");
   const payload = await response.json();
   const update = payload?.update;
-  if (!update || Number(update.versionCode) <= Number(versionCode || 0)) return null;
+  if (!update || Number(update.versionCode) <= Number(versionInfo.versionCode || 0)) return null;
 
   const snoozedUntil = Number(localStorage.getItem(SNOOZE_KEY) || 0);
   if (!update.required && snoozedUntil > Date.now()) return null;
@@ -30,8 +30,14 @@ export function snoozeAndroidUpdate() {
 
 export async function downloadAndroidUpdate(update) {
   const versionName = String(update?.versionName || update?.versionCode || "latest").replace(/[^A-Za-z0-9._-]/g, "-");
-  return AppUpdater.downloadAndInstall({
-    url: update.apkUrl,
-    filename: `ruobai-${versionName}.apk`,
-  });
+  try {
+    return await AppUpdater.downloadAndInstall({
+      url: update.apkUrl,
+      filename: `ruobai-${versionName}.apk`,
+    });
+  } catch (error) {
+    if (!/not implemented|unavailable|not available/i.test(String(error?.message || error))) throw error;
+    window.location.assign(update.apkUrl);
+    return { state: "external_download" };
+  }
 }
