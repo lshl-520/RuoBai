@@ -74,3 +74,31 @@ test('手动试发拒绝未开启主动动态的角色', async () => {
     assert.equal(payload.error, '请先保存并开启主动发动态');
   });
 });
+
+test('状态接口说明今天为什么还没有动态', async () => {
+  const pool = {
+    query: async (sql) => {
+      if (sql.includes('FROM characters')) return [[{ id: 12, auto_moments_enabled: 1, auto_moments_daily_min: 0, auto_moments_daily_max: 6 }]];
+      if (sql.includes('FROM moments')) return [[{ cnt: 0 }]];
+      if (sql.includes('FROM auto_moment_attempts')) return [[{ cnt: 6, last_outcome: 'planner_skipped' }]];
+      throw new Error(`Unexpected query: ${sql}`);
+    }
+  };
+  const router = createAutoMomentsRouter({ pool, service: { runScan: async () => [] } });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/auto-moments/characters/12/status`);
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(payload.status, {
+      enabled: true,
+      mode: 'system',
+      dailyTarget: 0,
+      dailyMax: 6,
+      postedToday: 0,
+      attemptCount: 6,
+      lastOutcome: 'planner_skipped',
+      summary: '她判断暂时不适合发'
+    });
+  });
+});

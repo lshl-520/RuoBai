@@ -12,6 +12,7 @@ import { UsageHealthScreen } from "./pages/usage.jsx";
 import { DEFAULT_USER_AVATAR } from "./lib/default-assets.js";
 import { bootNativePushIfPossible, isNativePushAvailable } from "./lib/push.js";
 import { recordDiagnostic, withDiagnosticId } from "./lib/diagnostics.js";
+import { checkForAndroidUpdate, downloadAndroidUpdate, snoozeAndroidUpdate } from "./lib/app-updater.js";
 
 const TABS = [
   { key: "chat",    path: "/chat",       label: "聊天", icon: "chat" },
@@ -34,6 +35,24 @@ function AppToast({ toast, onClose }) {
         <button className="app-toast-close" type="button" aria-label="关闭提示" onClick={onClose}>×</button>
         <span className="app-toast-progress" />
       </div>
+    </div>
+  );
+}
+
+function AppUpdateDialog({ update, onLater, onUpdate, busy, error }) {
+  if (!update) return null;
+  return (
+    <div className="update-dialog-mask" role="presentation">
+      <section className="update-dialog" role="dialog" aria-modal="true" aria-labelledby="update-title">
+        <div className="update-dialog-mark"><Icon name="download" /></div>
+        <h2 id="update-title">发现新版本 {update.versionName}</h2>
+        {update.releaseNotes && <p>{update.releaseNotes}</p>}
+        {error && <div className="update-dialog-error">{error}</div>}
+        <div className="update-dialog-actions">
+          {!update.required && <button type="button" className="pill" disabled={busy} onClick={onLater}>下次再说</button>}
+          <button type="button" className="pill pill-primary" disabled={busy} onClick={onUpdate}>{busy ? "正在开始下载…" : "更新"}</button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -206,6 +225,9 @@ export default function App() {
   const [authed, setAuthed] = useState(false);
   const [checking, setChecking] = useState(true);
   const [toast, setToast] = useState(null);
+  const [appUpdate, setAppUpdate] = useState(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const [updateError, setUpdateError] = useState("");
   const toastTimerRef = useRef(null);
 
   function showToast(nextToast) {
@@ -226,6 +248,7 @@ export default function App() {
     getSession().then((data) => {
       if (data?.loggedIn) setAuthed(true);
     }).catch(() => {}).finally(() => setChecking(false));
+    checkForAndroidUpdate().then(setAppUpdate).catch(() => {});
 
     return () => window.clearTimeout(toastTimerRef.current);
   }, []);
@@ -240,6 +263,25 @@ export default function App() {
         <Route path="/*" element={<RuobaiApp authed={authed} setAuthed={setAuthed} />} />
       </Routes>
       <AppToast toast={toast} onClose={() => setToast(null)} />
+      <AppUpdateDialog
+        update={appUpdate}
+        busy={updateBusy}
+        error={updateError}
+        onLater={() => { snoozeAndroidUpdate(); setAppUpdate(null); }}
+        onUpdate={async () => {
+          setUpdateBusy(true);
+          setUpdateError("");
+          try {
+            await downloadAndroidUpdate(appUpdate);
+            setAppUpdate(null);
+            showToast({ text: "新版本正在下载，完成后会打开系统安装页。" });
+          } catch (error) {
+            setUpdateError(error instanceof Error ? error.message : "无法开始下载");
+          } finally {
+            setUpdateBusy(false);
+          }
+        }}
+      />
     </>
   );
 }

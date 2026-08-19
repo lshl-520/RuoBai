@@ -60,6 +60,12 @@ export function testAutoMoment(roleId) {
   });
 }
 
+export function getAutoMomentStatus(roleId) {
+  return request(`/api/auto-moments/characters/${encodeURIComponent(roleId)}/status`, {
+    method: "GET",
+  });
+}
+
 export function switchRole(roleId) {
   return request(`/api/roles/${encodeURIComponent(roleId)}/switch`, {
     method: "POST",

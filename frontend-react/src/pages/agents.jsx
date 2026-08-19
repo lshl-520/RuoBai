@@ -1,6 +1,6 @@
 import React from "react";
 import { Icon } from "../store.jsx";
-import { getRoles, getRolePortraitSrc, createRole, updateRole, switchRole, buildRolePayload, restoreRole, getIdentityPack, testAutoMoment, uploadRolePortrait, uploadRoleLive2D, removeRoleLive2D } from "../lib/roles.js";
+import { getRoles, getRolePortraitSrc, createRole, updateRole, switchRole, buildRolePayload, restoreRole, getIdentityPack, getAutoMomentStatus, testAutoMoment, uploadRolePortrait, uploadRoleLive2D, removeRoleLive2D } from "../lib/roles.js";
 import { getProactiveEvents } from "../lib/proactive.js";
 import { Live2DStage } from "../components/Live2DStage.jsx";
 import { getRoleVisualFrame, getVisualFrameView, VISUAL_FRAME_OPTIONS } from "../lib/visual-frames.js";
@@ -55,6 +55,7 @@ function toAgent(role) {
     live2dManifest: role.live2d_manifest || role.live2dManifest || null,
     visualFrame: getRoleVisualFrame(role),
     momentFreq: normalizeMomentFrequency(role.auto_moments_daily_max),
+    momentSystemDecides: Number(role.auto_moments_daily_min || 0) === 0,
     handle: role.tag || "角色",
     _raw: role,
   };
@@ -592,6 +593,7 @@ function AgentEditor({ agent, onClose, onSave }) {
   const [dynamicSheet, setDynamicSheet] = useStateA(false);
   const initialFreq = normalizeMomentFrequency(agent?.momentFreq ?? 4);
   const [freq, setFreq] = useStateA(initialFreq);
+  const [systemDecides, setSystemDecides] = useStateA(agent?.momentSystemDecides ?? Number(agent?._raw?.auto_moments_daily_min || 0) === 0);
   const [customFreq, setCustomFreq] = useStateA(MOMENT_FREQ_PRESETS.includes(initialFreq) ? "" : String(initialFreq));
   const [imageResolution, setImageResolution] = useStateA(agent?._raw?.auto_moments_image_resolution || "channel");
   const isCustomFreq = !MOMENT_FREQ_PRESETS.includes(freq);
@@ -600,6 +602,16 @@ function AgentEditor({ agent, onClose, onSave }) {
   const [busy, setBusy] = useStateA(false);
   const [error, setError] = useStateA("");
   const [momentTest, setMomentTest] = useStateA(null);
+  const [momentStatus, setMomentStatus] = useStateA(null);
+
+  useEffectA(() => {
+    if (!editing || !agent?._raw?.id || !auto) return;
+    let active = true;
+    getAutoMomentStatus(agent._raw.id)
+      .then((result) => { if (active) setMomentStatus(result?.status || null); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [editing, agent?._raw?.id, auto]);
 
   const onUpload = (e) => {
     const file = e.target.files && e.target.files[0];
@@ -820,17 +832,22 @@ function AgentEditor({ agent, onClose, onSave }) {
             <div className="freq-row">
               <span className="sr-s">每天最多</span>
               {MOMENT_FREQ_PRESETS.map((f) => (
-                <button key={f} className={"freq-chip" + (freq === f ? " on" : "")} onClick={() => setFreq(f)}>{f} 条</button>
+                <button key={f} className={"freq-chip" + (!systemDecides && freq === f ? " on" : "")} onClick={() => { setSystemDecides(false); setFreq(f); }}>{f} 条</button>
               ))}
-              <button className={"freq-chip" + (isCustomFreq ? " on" : "")} onClick={() => { setFreq(8); setCustomFreq("8"); }}>自定义</button>
-              {isCustomFreq && <input className="fld freq-custom-input" type="number" min="1" max="12" step="1" value={customFreq} aria-label="每天最多发几条动态" onChange={(e) => {
+              <button className={"freq-chip" + (!systemDecides && isCustomFreq ? " on" : "")} onClick={() => { setSystemDecides(false); setFreq(8); setCustomFreq("8"); }}>自定义</button>
+              <button className={"freq-chip" + (systemDecides ? " on" : "")} onClick={() => setSystemDecides(true)}>系统决定</button>
+              {!systemDecides && isCustomFreq && <input className="fld freq-custom-input" type="number" min="1" max="12" step="1" value={customFreq} aria-label="每天发几条动态" onChange={(e) => {
                 const value = e.target.value;
                 setCustomFreq(value);
                 const number = Number(value);
                 if (Number.isFinite(number) && number >= 1 && number <= 12) setFreq(Math.round(number));
               }} />}
+              <span className="freq-mode-note">{systemDecides ? "今天由她判断，最多 6 条" : `今天目标 ${freq} 条`}</span>
             </div>
           )}
+          {auto && momentStatus && <div className="route-note moment-status-note">
+            今天已发 {momentStatus.postedToday} 条 · 已判断 {momentStatus.attemptCount} 次{momentStatus.summary ? ` · ${momentStatus.summary}` : ""}
+          </div>}
           <div className="switch-row">
             <div>
               <div className="sr-t">动态发图</div>
@@ -907,9 +924,9 @@ function AgentEditor({ agent, onClose, onSave }) {
                 auto_moments_image_resolution: auto && autoImages ? imageResolution : "channel",
                 auto_moments_image_profile: auto ? imageProfile : null,
                 auto_moments_templates: auto ? momentTemplates : null,
-                auto_moments_daily_min: auto ? freq : 0,
-                auto_moments_daily_max: auto ? freq : 0,
-                auto_moments_min_interval_hours: momentIntervalHours,
+                auto_moments_daily_min: auto && !systemDecides ? freq : 0,
+                auto_moments_daily_max: auto ? (systemDecides ? 6 : freq) : 0,
+                auto_moments_min_interval_hours: systemDecides ? 4 : momentIntervalHours,
                 speech_style: compact ? "compact" : "natural",
               };
               if (editing && agent._raw?.id) {
