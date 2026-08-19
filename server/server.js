@@ -32,6 +32,7 @@ import lifeEventRoutes from './life-events.js';
 import proactiveEventRoutes from './proactive-events.js';
 import settingsRoutes from './settings.js';
 import mediaRoutes from './media.js';
+import appUpdateRoutes from './app-updates.js';
 import { attachRealtimeCallServer } from './realtime-call.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -172,6 +173,8 @@ app.get('/healthz', async (_req, res) => {
     });
   }
 });
+
+app.use('/api/app-updates', appUpdateRoutes);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', authRoutes);

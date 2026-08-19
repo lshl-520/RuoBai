@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAutoImagePrompt, createAutoMomentsService, parseGeneratedMomentPlan, resolveDynamicImageTemplate, sanitizeGeneratedMoment, startAutoMomentsScheduler } from './auto-moments.js';
+import { buildAutoImagePrompt, createAutoMomentsService, normalizeDailyMax, normalizeDailyMin, parseGeneratedMomentPlan, resolveDynamicImageTemplate, sanitizeGeneratedMoment, startAutoMomentsScheduler } from './auto-moments.js';
 
 function jsonResponse(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -21,7 +21,9 @@ function createFixture({
   templates = null,
   roleChatEnabled = false,
   plannerAttemptCount = 0,
-  nextPlannerRetryAt = null
+  nextPlannerRetryAt = null,
+  dailyMin = 0,
+  dailyMax = 4
 } = {}) {
   const calls = [];
   const inserted = [];
@@ -32,7 +34,8 @@ function createFixture({
     persona: '温柔又有一点小傲娇',
     chat_credential_id: roleChatEnabled ? 77 : null,
     chat_model_id: roleChatEnabled ? 'deepseek-role-model' : null,
-    auto_moments_daily_max: 4,
+    auto_moments_daily_min: dailyMin,
+    auto_moments_daily_max: dailyMax,
     auto_moments_min_interval_hours: 6,
     auto_moments_last_posted_at: lastPostedAt,
     auto_moments_images_enabled: imageEnabled ? 1 : 0,
@@ -155,6 +158,39 @@ test('automatic moment planner can skip a post or keep it text-only', () => {
   assert.deepEqual(parseGeneratedMomentPlan('{"should_post":true,"content":"今天的风很轻。","image_mode":"none"}'), {
     shouldPost: true, content: '今天的风很轻。', imageMode: 'none', imageBrief: ''
   });
+});
+
+test('custom daily targets stay within one to twelve instead of falling back to four', () => {
+  assert.equal(normalizeDailyMax(1), 1);
+  assert.equal(normalizeDailyMax(8), 8);
+  assert.equal(normalizeDailyMax(12), 12);
+  assert.equal(normalizeDailyMax(99), 4);
+  assert.equal(normalizeDailyMin(8, 6), 6);
+  assert.equal(normalizeDailyMin(0, 6), 0);
+});
+
+test('fixed daily target asks for a safe ordinary post while system mode may skip', async () => {
+  const targetFixture = createFixture({ dailyMin: 2, dailyMax: 2 });
+  const targetService = createAutoMomentsService({
+    db: targetFixture.db,
+    fetchImpl: targetFixture.fetchImpl,
+    generateImageImpl: targetFixture.generateImageImpl,
+    logger: { log() {}, warn() {}, error() {} }
+  });
+  await targetService.runScan({ characterId: 61 });
+  const targetPrompt = targetFixture.getChatRequest().body.messages[0].content;
+  assert.match(targetPrompt, /每日发布目标/);
+  assert.match(targetPrompt, /改从人设和生活模板写一条普通日常/);
+
+  const systemFixture = createFixture({ dailyMin: 0, dailyMax: 6 });
+  const systemService = createAutoMomentsService({
+    db: systemFixture.db,
+    fetchImpl: systemFixture.fetchImpl,
+    generateImageImpl: systemFixture.generateImageImpl,
+    logger: { log() {}, warn() {}, error() {} }
+  });
+  await systemService.runScan({ characterId: 61 });
+  assert.doesNotMatch(systemFixture.getChatRequest().body.messages[0].content, /每日发布目标/);
 });
 
 test('automatic moment planner skips publishing and image generation when there is nothing worth posting', async () => {

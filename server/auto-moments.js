@@ -105,9 +105,16 @@ async function readGeneratedText(response) {
   }
 }
 
-function normalizeDailyMax(value) {
+export function normalizeDailyMax(value) {
   const parsed = Number(value);
-  return [2, 4, 6].includes(parsed) ? parsed : DEFAULT_DAILY_MAX;
+  if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 12) return Math.round(parsed);
+  return DEFAULT_DAILY_MAX;
+}
+
+export function normalizeDailyMin(value, dailyMax) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.min(dailyMax, Math.round(parsed)));
 }
 
 function normalizeMinInterval(value, dailyMax) {
@@ -179,7 +186,7 @@ export function resolveDynamicImageTemplate(character, plan, random = Math.rando
   };
 }
 
-function buildMomentMessages(character, context) {
+function buildMomentMessages(character, context, { mustPost = false } = {}) {
   const name = String(character?.name || '她').trim() || '她';
   const persona = String(character?.persona || '').trim();
   const profile = describeDynamicProfile(character);
@@ -204,10 +211,16 @@ function buildMomentMessages(character, context) {
     {
       role: 'system',
       content: [
-        `你现在是${name}的动态规划器，请决定她此刻是否适合发一条个人动态。`,
-        '不要照抄聊天；涉及隐私、冲突、敏感内容、只有无意义寒暄，或与最近动态明显重复时，选择不发。',
+        mustPost
+          ? `你现在是${name}的动态规划器。用户为她设置了每日发布目标，当前进度尚未完成，请规划一条安全的个人动态。`
+          : `你现在是${name}的动态规划器，请决定她此刻是否适合发一条个人动态。`,
+        mustPost
+          ? '不要照抄或泄露聊天。若聊天涉及隐私、冲突、敏感内容、无意义寒暄或与最近动态重复，就完全不用聊天内容，改从人设和生活模板写一条普通日常。'
+          : '不要照抄聊天；涉及隐私、冲突、敏感内容、只有无意义寒暄，或与最近动态明显重复时，选择不发。',
         '若发，正文写 1 到 2 句自然生活化中文，10 到 60 字，最长不超过 120 字；不解释、不加标题、不说自己是 AI。',
-        '只输出 JSON：{"should_post":true,"content":"正文","image_mode":"none|selfie|third_person","image_brief":"给图片的简短生活场景"}。不发时输出 {"should_post":false}。',
+        mustPost
+          ? '只输出 JSON：{"should_post":true,"content":"正文","image_mode":"none|selfie|third_person","image_brief":"给图片的简短生活场景"}。除非无法生成安全内容，否则不要返回 should_post=false。'
+          : '只输出 JSON：{"should_post":true,"content":"正文","image_mode":"none|selfie|third_person","image_brief":"给图片的简短生活场景"}。不发时输出 {"should_post":false}。',
         persona ? `人设参考：${persona.slice(0, 1000)}` : '',
         profile ? `固定形象：${profile}` : '',
         templates ? `可选生活模板：${templates}` : '',
@@ -460,7 +473,7 @@ export function createAutoMomentsService({
     return Number(rows[0]?.cnt || 0);
   }
 
-  async function generateMomentPlan(character, chatConfig, context) {
+  async function generateMomentPlan(character, chatConfig, context, options = {}) {
     const response = await fetchImpl(buildChatCompletionsUrl(chatConfig.api_base), {
       method: 'POST',
       headers: {
@@ -473,7 +486,7 @@ export function createAutoMomentsService({
         stream: false,
         temperature: 0.9,
         max_tokens: 180,
-        messages: buildMomentMessages(character, context)
+        messages: buildMomentMessages(character, context, options)
       })
     });
 
@@ -491,10 +504,12 @@ export function createAutoMomentsService({
     const characterId = Number(character.id);
     const userId = Number(character.user_id);
     const dailyMax = normalizeDailyMax(character.auto_moments_daily_max);
+    const dailyMin = normalizeDailyMin(character.auto_moments_daily_min, dailyMax);
     const minIntervalHours = normalizeMinInterval(character.auto_moments_min_interval_hours, dailyMax);
+    let todayCount = 0;
 
     if (!ignoreLimits) {
-      const todayCount = await countTodayMoments(userId, characterId);
+      todayCount = await countTodayMoments(userId, characterId);
       if (todayCount >= dailyMax) {
         return { characterId, status: 'skipped_daily_limit' };
       }
@@ -534,7 +549,7 @@ export function createAutoMomentsService({
       plannerAttemptId = await beginPlannerAttempt(userId, characterId, chatConfig);
       plannerStartedAt = Date.now();
       try {
-        plan = await generateMomentPlan(character, chatConfig, context);
+        plan = await generateMomentPlan(character, chatConfig, context, { mustPost: todayCount < dailyMin });
       } catch (error) {
         await finishPlannerAttempt(plannerAttemptId, {
           outcome: 'planner_failed',
@@ -677,7 +692,7 @@ export function createAutoMomentsService({
     try {
       const [characters] = await db.query(
         `
-          SELECT id, user_id, name, persona, chat_credential_id, chat_model_id, auto_moments_daily_max,
+          SELECT id, user_id, name, persona, chat_credential_id, chat_model_id, auto_moments_daily_min, auto_moments_daily_max,
                  auto_moments_min_interval_hours, auto_moments_last_posted_at,
                  auto_moments_images_enabled, auto_moments_image_resolution, auto_moments_image_profile, auto_moments_templates
           FROM characters
