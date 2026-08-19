@@ -3,7 +3,6 @@ import { supportsDynamicSingleImage } from './capabilities.js';
 import { generateImage } from './image-gen.js';
 import { buildChatCompletionsUrl } from './chat.js';
 import {
-  buildCharacterContextPrompt,
   buildCharacterContextSnapshot,
   loadRecentLifeEvents,
 } from './character-context.js';
@@ -14,10 +13,14 @@ const DEFAULT_MIN_INTERVAL_HOURS = 6;
 const FIRST_SCAN_DELAY_MS = 15 * 1000;
 const SCAN_INTERVAL_MS = 10 * 60 * 1000;
 const MAX_DAILY_PLANNER_ATTEMPTS = 6;
+const IMAGE_TARGET_RETRY_ALLOWANCE = 3;
 const AUTO_IMAGE_MAX_ROUNDS = 2;
 const AUTO_IMAGE_RETRY_DELAYS_MS = [30 * 1000];
 const MAX_MOMENT_LENGTH = 120;
+const MAX_MOMENT_SUMMARY_LENGTH = 180;
+const MAX_CONVERSATION_MESSAGES = 20;
 const MOMENT_IMAGE_MODES = new Set(['none', 'auto', 'selfie', 'third_person']);
+const UNSAFE_DAILY_VISUAL_PATTERN = /(?:裸体|裸露|内衣|情趣|床上|卧室|浴室|洗澡|私密|敏感部位|性行为|亲密接触|身体接触|湿身|撩人|性感|诱惑|自慰|亲吻|拥抱|胸|臀)/u;
 
 export function sanitizeGeneratedMoment(value) {
   const text = stripGeneratedText(value).replace(/\s*\n+\s*/g, ' ').trim();
@@ -60,6 +63,41 @@ export function parseGeneratedMomentPlan(value) {
   return content
     ? { shouldPost: true, content, imageMode: 'auto', imageBrief: '' }
     : { shouldPost: false, content: '', imageMode: 'none', imageBrief: '' };
+}
+
+export function sanitizeConversationMomentSummary(value) {
+  const text = stripGeneratedText(value).replace(/\s*\n+\s*/g, ' ').trim();
+  if (!text) return '';
+
+  const looksLikeConversation = /(?:用户|助手|assistant|system|系统|角色)\s*[:：]/i.test(text);
+  const looksLikeCode = /```|\b(?:python|import|from|def|class|function|const|let|var|console\.)\b/i.test(text);
+  const looksLikeStructuredDump = /^[{[]/.test(text) || /[{}][\s\S]*[{}]/.test(text);
+  if (text.length > MAX_MOMENT_SUMMARY_LENGTH || looksLikeConversation || looksLikeCode || looksLikeStructuredDump) {
+    return '';
+  }
+  return text;
+}
+
+export function parseConversationMomentSummary(value) {
+  const raw = stripGeneratedText(value);
+  const json = raw.replace(/^```(?:json)?\s*|\s*```$/gi, '').trim();
+  try {
+    const parsed = JSON.parse(json);
+    if (parsed && typeof parsed === 'object') {
+      if (parsed.has_moment === false) return { hasMoment: false, summary: '' };
+      const summary = sanitizeConversationMomentSummary(parsed.summary);
+      return summary
+        ? { hasMoment: true, summary }
+        : { hasMoment: false, summary: '' };
+    }
+  } catch {
+    // 兼容还不能稳定返回 JSON 的旧聊天模型。
+  }
+
+  const summary = sanitizeConversationMomentSummary(raw);
+  return summary
+    ? { hasMoment: true, summary }
+    : { hasMoment: false, summary: '' };
 }
 
 function stripGeneratedText(value) {
@@ -171,6 +209,13 @@ function chooseOne(values, random = Math.random) {
   return choices[Math.min(choices.length - 1, Math.max(0, Math.floor(random() * choices.length)))];
 }
 
+function chooseSafeDailyVisual(values, fallback, random = Math.random) {
+  const safeChoices = (Array.isArray(values) ? values : [])
+    .map(value => String(value || '').trim())
+    .filter(value => value && !UNSAFE_DAILY_VISUAL_PATTERN.test(value));
+  return chooseOne(safeChoices, random) || fallback;
+}
+
 export function resolveDynamicImageTemplate(character, plan, random = Math.random) {
   const templates = parseDynamicSetting(character?.auto_moments_templates) || {};
   const isSelfie = plan?.imageMode !== 'third_person';
@@ -179,33 +224,63 @@ export function resolveDynamicImageTemplate(character, plan, random = Math.rando
     : [...(templates.custom || []), ...(templates.categories || [])];
 
   return {
-    scene: chooseOne(sceneChoices, random) || (isSelfie ? '自然日常自拍' : '自然生活片段'),
-    pose: chooseOne(templates.poses, random) || '自然放松的姿势',
-    mood: chooseOne(templates.moods, random) || '放松',
+    scene: chooseSafeDailyVisual(sceneChoices, isSelfie ? '窗边的日常自拍' : '安静的生活片段', random),
+    pose: chooseSafeDailyVisual(templates.poses, '自然放松的姿势', random),
+    mood: chooseSafeDailyVisual(templates.moods, '放松', random),
     isSelfie
   };
 }
 
-function buildMomentMessages(character, context, { mustPost = false } = {}) {
+function buildConversationSummaryMessages(character, context) {
   const name = String(character?.name || '她').trim() || '她';
-  const persona = String(character?.persona || '').trim();
-  const profile = describeDynamicProfile(character);
-  const templates = describeDynamicTemplates(character);
   const recentLines = context.messages
     .map(item => `${item.role === 'assistant' ? name : '用户'}：${String(item.content || '').trim()}`)
     .filter(line => line.length > 4)
     .join('\n');
-  const memoryLines = context.memories
-    .map(item => `- ${String(item.tag || item.category || '记忆').trim()}：${String(item.content || '').trim()}`)
-    .filter(line => line.length > 4)
+
+  return [
+    {
+      role: 'system',
+      content: [
+        `你是${name}的聊天理解器。把最近聊天压缩成一条供她本人写动态时使用的“生活片段摘要”。`,
+        '摘要只保留今天发生了什么、情绪、互动氛围和关系感；绝不照抄对话，也不要保留姓名、账号、地址、身体或私密过程等具体细节。',
+        '任何不适合直接写入动态的细节，都改成含蓄、生活化的概括，例如“亲近”“调皮”“被安慰”“轻松聊天”。原始细节不能出现在摘要里。',
+        '只在完全没有可概括的互动时返回 has_moment=false；只要存在可用的情绪或相处氛围，就应提炼成非露骨摘要。',
+        '只输出 JSON：{"has_moment":true,"summary":"10 到 80 字的非露骨生活片段摘要"}；没有任何可概括内容时输出 {"has_moment":false}。'
+      ].join('\n')
+    },
+    {
+      role: 'user',
+      content: recentLines ? `最近聊天（只用于理解，不可复述）：\n${recentLines}` : '最近聊天：暂时没有。'
+    }
+  ];
+}
+
+function buildMomentStateContext(snapshot = {}) {
+  const state = snapshot.state || {};
+  const relationship = snapshot.relationship || {};
+  return [
+    '【角色当前状态】',
+    `心情：${String(state.modeLabel || '平静')}；温暖感 ${Number(state.warmth ?? 65)}/100，精力 ${Number(state.energy ?? 60)}/100，关心程度 ${Number(state.concern ?? 20)}/100。状态只影响语气和节奏，不代表新的事实。`,
+    `关系状态：熟悉 ${Number(relationship.familiarity ?? 50)}/100，信任 ${Number(relationship.trust ?? 50)}/100，安全感 ${Number(relationship.safety ?? 50)}/100，默契 ${Number(relationship.tacit ?? 50)}/100。关系只用于决定表达的亲近程度，不能凭空升级。`
+  ].join('\n');
+}
+
+function buildMomentMessages(character, context, { mustPost = false, forceImage = false } = {}) {
+  const name = String(character?.name || '她').trim() || '她';
+  const persona = String(character?.persona || '').trim();
+  const profile = describeDynamicProfile(character);
+  const templates = describeDynamicTemplates(character);
+  const conversationSummary = sanitizeConversationMomentSummary(context.conversationSummary);
+  const memoryTags = context.memories
+    .map(item => String(item.tag || item.category || '记忆').trim())
+    .filter(Boolean)
     .join('\n');
   const previousMomentLines = context.recentMoments
     .map(item => `- ${String(item.content || '').trim()}`)
     .filter(line => line.length > 4)
     .join('\n');
-  const characterContext = context.contextSnapshot
-    ? buildCharacterContextPrompt(context.contextSnapshot, { consumer: 'chat' })
-    : '';
+  const characterContext = buildMomentStateContext(context.contextSnapshot);
 
   return [
     {
@@ -215,8 +290,11 @@ function buildMomentMessages(character, context, { mustPost = false } = {}) {
           ? `你现在是${name}的动态规划器。用户为她设置了每日发布目标，当前进度尚未完成，请规划一条安全的个人动态。`
           : `你现在是${name}的动态规划器，请决定她此刻是否适合发一条个人动态。`,
         mustPost
-          ? '不要照抄或泄露聊天。若聊天涉及隐私、冲突、敏感内容、无意义寒暄或与最近动态重复，就完全不用聊天内容，改从人设和生活模板写一条普通日常。'
-          : '不要照抄聊天；涉及隐私、冲突、敏感内容、只有无意义寒暄，或与最近动态明显重复时，选择不发。',
+          ? '只使用已经脱敏的生活摘要，不照抄或泄露聊天。即使原聊天有不适合公开的细节，也要保留其中可用的情绪和关系氛围；无法使用摘要时，改从人设和生活模板写一条普通日常。'
+          : '只使用已经脱敏的生活摘要，不照抄或泄露聊天。原聊天是否含私密细节不是“不发”的理由：只要摘要保留了情绪、互动或生活感，就用含蓄、非露骨的方式表达；仅在没有任何可用生活片段且不适合凭人设写日常时才选择不发。',
+        forceImage
+          ? '自动动态发图已开启。若发布，image_mode 必须为 selfie 或 third_person，不能选择 none；image_brief 只能写衣着完整、单人、日常生活场景，不能描述亲密互动、身体接触或私密细节。'
+          : '',
         '若发，正文写 1 到 2 句自然生活化中文，10 到 60 字，最长不超过 120 字；不解释、不加标题、不说自己是 AI。',
         mustPost
           ? '只输出 JSON：{"should_post":true,"content":"正文","image_mode":"none|selfie|third_person","image_brief":"给图片的简短生活场景"}。除非无法生成安全内容，否则不要返回 should_post=false。'
@@ -230,8 +308,8 @@ function buildMomentMessages(character, context, { mustPost = false } = {}) {
     {
       role: 'user',
       content: [
-        recentLines ? `最近聊天：\n${recentLines}` : '最近聊天：暂时没有。',
-        memoryLines ? `长期记忆：\n${memoryLines}` : '长期记忆：暂时没有。',
+        conversationSummary ? `聊天生活摘要（已脱敏，只能依据它表达）：\n${conversationSummary}` : '聊天生活摘要：没有可用摘要；可按人设和生活模板写普通日常，不能编造具体聊天事实。',
+        memoryTags ? `已确认记忆标签（不含原文，只作为轻微连续性提醒）：\n${memoryTags}` : '已确认记忆标签：暂时没有。',
         previousMomentLines ? `最近已发动态：\n${previousMomentLines}` : '最近已发动态：暂时没有。'
       ].join('\n\n')
     }
@@ -251,12 +329,28 @@ export function buildAutoImagePrompt(character, content, plan, resolvedTemplate 
     resolvedTemplate.isSelfie === false
       ? '使用第三人称单人生活抓拍构图，只出现角色本人。'
       : '使用角色自己的第一人称手机视角或单人自拍构图。',
-    '不要出现陌生男性、男性的手或身体、男性影子、男性倒影，也不要要求用户上传自己的照片。',
+    '画面必须是衣着完整、单人、自然的日常生活照片；不表现亲密互动、身体接触或任何私密内容。不要出现陌生男性、男性的手或身体、男性影子、男性倒影，也不要要求用户上传自己的照片。',
     profile ? `角色固定形象：${profile}` : '',
-    `【本次事件】场景：${scene}；姿势：${pose}；心情：${mood}。`,
-    plan?.imageBrief ? `画面建议：${plan.imageBrief}` : '',
-    `动态内容（只用于理解今天的生活主题，不要把文字放进图片）：${content}`
+    `【本次安全生活场景】场景：${scene}；姿势：${pose}；心情：${mood}。`,
+    '不要从聊天、动态正文或其他来源补全画面；只按照以上安全生活场景构图。'
   ].join('\n');
+}
+
+function getPlannerAttemptLimit(dailyTarget) {
+  return dailyTarget > 0
+    ? Math.max(MAX_DAILY_PLANNER_ATTEMPTS, dailyTarget + IMAGE_TARGET_RETRY_ALLOWANCE)
+    : MAX_DAILY_PLANNER_ATTEMPTS;
+}
+
+function buildFallbackDailyContent(character, random = Math.random) {
+  const name = String(character?.name || '她').trim() || '她';
+  const templates = [
+    `${name}今天也在慢慢过自己的小日子，把一份安静留在这里。`,
+    `给今天留一张小小的生活切片。${name}在，好好过着自己的日子。`,
+    `窗外的光刚好，${name}想把这一点平常的温柔记下来。`,
+    `${name}今天也有认真照顾自己的片刻，想和你轻轻打个招呼。`
+  ];
+  return chooseOne(templates, random) || templates[0];
 }
 
 function getDynamicGenerationAttemptLimit(imageConfig) {
@@ -423,13 +517,14 @@ export function createAutoMomentsService({
           ORDER BY id DESC
           LIMIT ?
         `,
-        [userId, characterId, 6]
+        [userId, characterId, MAX_CONVERSATION_MESSAGES]
       ),
       db.query(
         `
           SELECT tag, category, content
           FROM memories
-          WHERE user_id = ? AND character_id = ? AND is_deleted = 0
+           WHERE user_id = ? AND character_id = ? AND is_deleted = 0
+             AND COALESCE(review_status, 'active') <> 'candidate'
           ORDER BY is_important DESC, created_at DESC, id DESC
           LIMIT ?
         `,
@@ -473,7 +568,7 @@ export function createAutoMomentsService({
     return Number(rows[0]?.cnt || 0);
   }
 
-  async function generateMomentPlan(character, chatConfig, context, options = {}) {
+  async function requestChatText(chatConfig, { messages, maxTokens }) {
     const response = await fetchImpl(buildChatCompletionsUrl(chatConfig.api_base), {
       method: 'POST',
       headers: {
@@ -485,8 +580,8 @@ export function createAutoMomentsService({
         model: chatConfig.model,
         stream: false,
         temperature: 0.9,
-        max_tokens: 180,
-        messages: buildMomentMessages(character, context, options)
+        max_tokens: maxTokens,
+        messages
       })
     });
 
@@ -497,7 +592,23 @@ export function createAutoMomentsService({
       throw error;
     }
 
-    return parseGeneratedMomentPlan(await readGeneratedText(response));
+    return readGeneratedText(response);
+  }
+
+  async function summarizeConversation(character, chatConfig, context) {
+    const raw = await requestChatText(chatConfig, {
+      maxTokens: 160,
+      messages: buildConversationSummaryMessages(character, context)
+    });
+    return parseConversationMomentSummary(raw);
+  }
+
+  async function generateMomentPlan(character, chatConfig, context, options = {}) {
+    const raw = await requestChatText(chatConfig, {
+      maxTokens: 180,
+      messages: buildMomentMessages(character, context, options)
+    });
+    return parseGeneratedMomentPlan(raw);
   }
 
   async function processCharacter(character, { ignoreLimits = false, forceChannelTest = false } = {}) {
@@ -505,6 +616,7 @@ export function createAutoMomentsService({
     const userId = Number(character.user_id);
     const dailyMax = normalizeDailyMax(character.auto_moments_daily_max);
     const dailyMin = normalizeDailyMin(character.auto_moments_daily_min, dailyMax);
+    const plannerAttemptLimit = getPlannerAttemptLimit(dailyMin);
     const minIntervalHours = normalizeMinInterval(character.auto_moments_min_interval_hours, dailyMax);
     let todayCount = 0;
 
@@ -523,7 +635,7 @@ export function createAutoMomentsService({
       }
 
       const attemptState = await loadPlannerAttemptState(userId, characterId);
-      if (attemptState.count >= MAX_DAILY_PLANNER_ATTEMPTS) {
+      if (attemptState.count >= plannerAttemptLimit) {
         return { characterId, status: 'skipped_planner_daily_limit' };
       }
       if (attemptState.nextRetryAt) {
@@ -549,7 +661,15 @@ export function createAutoMomentsService({
       plannerAttemptId = await beginPlannerAttempt(userId, characterId, chatConfig);
       plannerStartedAt = Date.now();
       try {
-        plan = await generateMomentPlan(character, chatConfig, context, { mustPost: todayCount < dailyMin });
+        const conversation = await summarizeConversation(character, chatConfig, context);
+        context.conversationSummary = conversation.summary
+          || (context.messages.length
+            ? '今天和用户有一段值得轻轻记下的互动，适合用含蓄、生活化的方式表达。'
+            : '');
+        plan = await generateMomentPlan(character, chatConfig, context, {
+          mustPost: todayCount < dailyMin,
+          forceImage: Number(character.auto_moments_images_enabled || 0) === 1
+        });
       } catch (error) {
         await finishPlannerAttempt(plannerAttemptId, {
           outcome: 'planner_failed',
@@ -559,6 +679,25 @@ export function createAutoMomentsService({
         throw error;
       }
     }
+    const imagesEnabled = Number(character.auto_moments_images_enabled || 0) === 1;
+    if (forceChannelTest && !imagesEnabled) {
+      return {
+        characterId,
+        status: 'skipped_image_disabled',
+        imageStatus: 'disabled',
+        imageError: '动态发图未开启',
+        testMode: true
+      };
+    }
+    const requiresTargetPost = todayCount < dailyMin;
+    if (!plan.shouldPost && requiresTargetPost) {
+      plan = {
+        shouldPost: true,
+        content: buildFallbackDailyContent(character, random),
+        imageMode: imagesEnabled ? 'selfie' : 'none',
+        imageBrief: ''
+      };
+    }
     if (!plan.shouldPost) {
       await finishPlannerAttempt(plannerAttemptId, {
         outcome: 'planner_skipped',
@@ -566,16 +705,17 @@ export function createAutoMomentsService({
       });
       return { characterId, status: 'skipped_planner' };
     }
+    if (imagesEnabled && plan.imageMode === 'none') {
+      plan = { ...plan, imageMode: 'selfie', imageBrief: '' };
+    }
     const content = plan.content;
 
     let images = null;
     let imageStatus = 'disabled';
     let imageError = '';
     let imageMetadata = null;
-    const imagesEnabled = Number(character.auto_moments_images_enabled || 0) === 1;
-    const imageConfig = imagesEnabled && plan.imageMode !== 'none' ? await getCapability(userId, 'dynamic') : null;
-    if (imagesEnabled && plan.imageMode === 'none') imageStatus = 'planner_text_only';
-    if (imagesEnabled && plan.imageMode !== 'none' && !imageConfig) imageStatus = 'dynamic_unconfigured';
+    const imageConfig = imagesEnabled ? await getCapability(userId, 'dynamic') : null;
+    if (imagesEnabled && !imageConfig) imageStatus = 'dynamic_unconfigured';
     if (imagesEnabled && imageConfig) {
       imageStatus = 'pending';
       const resolvedTemplate = resolveDynamicImageTemplate(character, plan, random);
@@ -606,8 +746,9 @@ export function createAutoMomentsService({
             images = JSON.stringify([imageUrl]);
             imageStatus = 'generated';
             outputHandling = typeof generated === 'object' ? generated.outputHandling || 'single' : 'single';
+            break;
           }
-          break;
+          throw new Error('图片渠道没有返回可用图片');
         } catch (error) {
           lastImageError = error;
           if (round < rounds) {
@@ -636,6 +777,25 @@ export function createAutoMomentsService({
         imageStatus,
         resolution: character.auto_moments_image_resolution || 'channel'
       });
+    }
+
+    if (imagesEnabled && !images) {
+      const failed = imageStatus !== 'dynamic_unconfigured';
+      await finishPlannerAttempt(plannerAttemptId, {
+        outcome: failed ? 'image_failed' : 'image_unconfigured',
+        imageStatus,
+        errorCategory: failed ? 'image_failed' : 'dynamic_unconfigured',
+        durationMs: plannerStartedAt ? Date.now() - plannerStartedAt : null
+      });
+      return {
+        characterId,
+        status: failed ? 'skipped_image_failed' : 'skipped_image_unconfigured',
+        content,
+        images: [],
+        imageStatus,
+        imageError,
+        testMode: forceChannelTest
+      };
     }
 
     let result;

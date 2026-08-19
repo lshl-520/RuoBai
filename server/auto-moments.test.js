@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAutoImagePrompt, createAutoMomentsService, normalizeDailyMax, normalizeDailyMin, parseGeneratedMomentPlan, resolveDynamicImageTemplate, sanitizeGeneratedMoment, startAutoMomentsScheduler } from './auto-moments.js';
+import { buildAutoImagePrompt, createAutoMomentsService, normalizeDailyMax, normalizeDailyMin, parseConversationMomentSummary, parseGeneratedMomentPlan, resolveDynamicImageTemplate, sanitizeGeneratedMoment, sanitizeConversationMomentSummary, startAutoMomentsScheduler } from './auto-moments.js';
 
 function jsonResponse(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -112,9 +112,9 @@ function createFixture({
     }
   };
 
-  let chatRequest = null;
+  const chatRequests = [];
   const fetchImpl = async (url, options) => {
-    chatRequest = { url, options, body: JSON.parse(options.body) };
+    chatRequests.push({ url, options, body: JSON.parse(options.body) });
     return jsonResponse({ choices: [{ message: { content: '下班后的风有点软，等你回来一起说说话。' } }] });
   };
 
@@ -125,7 +125,16 @@ function createFixture({
     return '/user_assets/chat/auto-moment.png';
   };
 
-  return { db, calls, inserted, fetchImpl, getChatRequest: () => chatRequest, generateImageImpl, imageCalls };
+  return {
+    db,
+    calls,
+    inserted,
+    fetchImpl,
+    getChatRequest: () => chatRequests.at(-1) || null,
+    getChatRequests: () => chatRequests,
+    generateImageImpl,
+    imageCalls
+  };
 }
 
 test('scheduler starts without legacy AGNES_AI_KEY and uses fixed scan timers', () => {
@@ -158,6 +167,15 @@ test('automatic moment planner can skip a post or keep it text-only', () => {
   assert.deepEqual(parseGeneratedMomentPlan('{"should_post":true,"content":"今天的风很轻。","image_mode":"none"}'), {
     shouldPost: true, content: '今天的风很轻。', imageMode: 'none', imageBrief: ''
   });
+});
+
+test('conversation summaries keep a usable life fragment but reject dialogue dumps', () => {
+  assert.deepEqual(parseConversationMomentSummary('{"has_moment":true,"summary":"今晚的相处有点调皮，最后在轻松的玩笑里收尾。"}'), {
+    hasMoment: true,
+    summary: '今晚的相处有点调皮，最后在轻松的玩笑里收尾。'
+  });
+  assert.deepEqual(parseConversationMomentSummary('{"has_moment":false}'), { hasMoment: false, summary: '' });
+  assert.equal(sanitizeConversationMomentSummary('用户：原始聊天\n助手：原始回复'), '');
 });
 
 test('custom daily targets stay within one to twelve instead of falling back to four', () => {
@@ -208,7 +226,7 @@ test('automatic moment planner skips publishing and image generation when there 
   assert.equal(fixture.imageCalls.length, 0);
 });
 
-test('enabled character reads selected chat capability plus recent chat and memories, then posts', async () => {
+test('automatic moments summarize recent chat first and keep raw chat out of the publication request', async () => {
   const fixture = createFixture();
   const service = createAutoMomentsService({
     db: fixture.db,
@@ -219,19 +237,59 @@ test('enabled character reads selected chat capability plus recent chat and memo
   });
 
   const [result] = await service.runScan({ characterId: 61 });
-  const request = fixture.getChatRequest();
+  const [summaryRequest, publicationRequest] = fixture.getChatRequests();
 
   assert.equal(result.status, 'posted');
-  assert.equal(request.url, 'https://chat.example.com/v1/chat/completions');
-  assert.equal(request.body.model, 'gpt-test');
-  assert.match(request.body.messages[1].content, /今天下班早点回来/);
-  assert.match(request.body.messages[1].content, /晚上一起聊天/);
+  assert.equal(summaryRequest.url, 'https://chat.example.com/v1/chat/completions');
+  assert.equal(publicationRequest.body.model, 'gpt-test');
+  assert.match(summaryRequest.body.messages[1].content, /今天下班早点回来/);
+  assert.match(publicationRequest.body.messages[1].content, /聊天生活摘要/);
+  assert.doesNotMatch(publicationRequest.body.messages[1].content, /今天下班早点回来/);
+  assert.doesNotMatch(publicationRequest.body.messages[1].content, /晚上一起聊天/);
+  assert.match(publicationRequest.body.messages[1].content, /已确认记忆标签/);
   assert.equal(fixture.inserted.length, 1);
   assert.equal(fixture.inserted[0].params[2], '下班后的风有点软，等你回来一起说说话。');
   assert.equal(fixture.inserted[0].params[3], null);
   assert.equal(fixture.inserted[0].params[4], 'disabled');
   assert.match(fixture.calls.find(call => call.sql.includes('INSERT INTO moments')).sql, /publisher/);
   assert.ok(fixture.calls.some(call => call.sql.includes('auto_moments_last_posted_at = NOW()')));
+});
+
+test('a close conversation becomes an indirect life moment instead of ending the dynamic flow', async () => {
+  const fixture = createFixture();
+  const replies = [
+    '{"has_moment":true,"summary":"今晚的相处有点调皮，最后在轻松的玩笑里收尾。"}',
+    '{"should_post":true,"content":"今晚的空气有点甜，笑着闹着就把一天收好了。","image_mode":"none"}'
+  ];
+  const requests = [];
+  const service = createAutoMomentsService({
+    db: fixture.db,
+    fetchImpl: async (url, options) => {
+      requests.push({ url, body: JSON.parse(options.body) });
+      return jsonResponse({ choices: [{ message: { content: replies.shift() } }] });
+    },
+    logger: { log() {}, warn() {}, error() {} }
+  });
+
+  const [result] = await service.runScan({ characterId: 61 });
+  const publicationInput = requests[1].body.messages[1].content;
+  assert.equal(result.status, 'posted');
+  assert.match(publicationInput, /今晚的相处有点调皮/);
+  assert.doesNotMatch(publicationInput, /今天下班早点回来/);
+  assert.equal(fixture.inserted[0].params[2], '今晚的空气有点甜，笑着闹着就把一天收好了。');
+});
+
+test('automatic moments exclude unconfirmed memory candidates from their context', async () => {
+  const fixture = createFixture();
+  const service = createAutoMomentsService({
+    db: fixture.db,
+    fetchImpl: fixture.fetchImpl,
+    logger: { log() {}, warn() {}, error() {} }
+  });
+
+  await service.runScan({ characterId: 61 });
+  const memoryQuery = fixture.calls.find(call => call.sql.includes('FROM memories'));
+  assert.match(memoryQuery.sql, /COALESCE\(review_status, 'active'\) <> 'candidate'/);
 });
 
 test('automatic moments prefer the character selected chat model over the user default', async () => {
@@ -290,6 +348,20 @@ test('automatic moments stop after six paid planner attempts in one day', async 
   assert.equal(fixture.getChatRequest(), null);
 });
 
+test('a fixed target of six reserves additional planner attempts for image retries', async () => {
+  const fixture = createFixture({ dailyMin: 6, dailyMax: 6, plannerAttemptCount: 8 });
+  const service = createAutoMomentsService({
+    db: fixture.db,
+    fetchImpl: fixture.fetchImpl,
+    generateImageImpl: fixture.generateImageImpl,
+    logger: { log() {}, warn() {}, error() {} }
+  });
+
+  const [result] = await service.runScan({ characterId: 61 });
+  assert.equal(result.status, 'posted');
+  assert.equal(fixture.getChatRequests().length, 2);
+});
+
 test('planner upstream failure is audited without storing response text', async () => {
   const fixture = createFixture();
   const service = createAutoMomentsService({
@@ -321,7 +393,22 @@ test('disabled image capability publishes text without calling image generation'
   assert.equal(fixture.imageCalls.length, 0);
 });
 
-test('manual image capability does not authorise automatic moment images', async () => {
+test('manual dynamic-channel testing never creates a text-only moment when image posting is disabled', async () => {
+  const fixture = createFixture({ imageEnabled: false });
+  const service = createAutoMomentsService({
+    db: fixture.db,
+    fetchImpl: fixture.fetchImpl,
+    generateImageImpl: fixture.generateImageImpl,
+    logger: { log() {}, warn() {}, error() {} }
+  });
+
+  const [result] = await service.runScan({ characterId: 61, ignoreLimits: true, forceChannelTest: true });
+  assert.equal(result.status, 'skipped_image_disabled');
+  assert.equal(fixture.imageCalls.length, 0);
+  assert.equal(fixture.inserted.length, 0);
+});
+
+test('automatic moments do not publish text when their dedicated dynamic image capability is unavailable', async () => {
   const fixture = createFixture({ imageEnabled: true });
   const service = createAutoMomentsService({
     db: fixture.db,
@@ -331,9 +418,10 @@ test('manual image capability does not authorise automatic moment images', async
   });
 
   const [result] = await service.runScan({ characterId: 61, ignoreLimits: true });
-  assert.equal(result.status, 'posted');
+  assert.equal(result.status, 'skipped_image_unconfigured');
   assert.equal(result.imageStatus, 'dynamic_unconfigured');
   assert.equal(fixture.imageCalls.length, 0);
+  assert.equal(fixture.inserted.length, 0);
 });
 
 test('enabled dynamic capability uses exactly the model selected for automatic moments', async () => {
@@ -358,6 +446,34 @@ test('enabled dynamic capability uses exactly the model selected for automatic m
   assert.equal(fixture.inserted[0].params[4], 'generated');
 });
 
+test('a fixed image target overrides a planner text-only choice and keeps private text out of the image request', async () => {
+  const fixture = createFixture({ imageEnabled: true, dynamicEnabled: true, dailyMin: 6, dailyMax: 6 });
+  const replies = [
+    '{"has_moment":true,"summary":"今天的相处很轻松，适合留下一点日常感。"}',
+    '{"should_post":true,"content":"今天想把这点轻松藏进晚风里。","image_mode":"none","image_brief":"来自聊天的私人细节"}'
+  ];
+  const service = createAutoMomentsService({
+    db: fixture.db,
+    fetchImpl: async (url, options) => {
+      fixture.getChatRequests().push({ url, options, body: JSON.parse(options.body) });
+      return jsonResponse({ choices: [{ message: { content: replies.shift() } }] });
+    },
+    generateImageImpl: fixture.generateImageImpl,
+    logger: { log() {}, warn() {}, error() {} }
+  });
+
+  const [result] = await service.runScan({ characterId: 61 });
+  const plannerPrompt = fixture.getChatRequest().body.messages[0].content;
+  const imagePrompt = fixture.imageCalls[0].subject;
+
+  assert.equal(result.status, 'posted');
+  assert.equal(result.imageStatus, 'generated');
+  assert.match(plannerPrompt, /image_mode 必须为 selfie 或 third_person/);
+  assert.equal(fixture.imageCalls.length, 1);
+  assert.doesNotMatch(imagePrompt, /今天想把这点轻松藏进晚风里/);
+  assert.doesNotMatch(imagePrompt, /来自聊天的私人细节/);
+});
+
 test('automatic moments pass the saved image resolution preference to the dynamic channel', async () => {
   const fixture = createFixture({ imageEnabled: true, dynamicEnabled: true, dynamicModel: 'gpt-image-2', imageResolution: '2k' });
   const service = createAutoMomentsService({
@@ -373,7 +489,7 @@ test('automatic moments pass the saved image resolution preference to the dynami
   assert.match(fixture.inserted[0].params[7], /"resolution":"2k"/);
 });
 
-test('image generation failure still publishes the text moment', async () => {
+test('image generation failure is retried but never publishes a text-only automatic moment', async () => {
   const fixture = createFixture({ imageEnabled: true, dynamicEnabled: true, imageFails: true });
   const service = createAutoMomentsService({
     db: fixture.db,
@@ -384,12 +500,10 @@ test('image generation failure still publishes the text moment', async () => {
   });
 
   const [result] = await service.runScan({ characterId: 61, ignoreLimits: true });
-  assert.equal(result.status, 'posted');
+  assert.equal(result.status, 'skipped_image_failed');
   assert.deepEqual(result.images, []);
   assert.equal(fixture.imageCalls.length, 2);
-  assert.equal(fixture.inserted[0].params[2], '下班后的风有点软，等你回来一起说说话。');
-  assert.equal(fixture.inserted[0].params[3], null);
-  assert.equal(fixture.inserted[0].params[4], 'failed');
+  assert.equal(fixture.inserted.length, 0);
   assert.equal(result.imageStatus, 'failed');
 });
 
@@ -429,7 +543,7 @@ test('image prompt keeps facial identity fixed and forbids grids while clothing 
     auto_moments_image_profile: JSON.stringify({ name: '小白', age_feel: '20岁左右', face: ['小巧鹅蛋脸'], eyes: ['眼神温柔'], hair: ['白银色'] }),
     auto_moments_templates: JSON.stringify({ selfie_scenes: ['阳台自拍', '抱猫自拍'], poses: ['回眸'], moods: ['放松'] })
   };
-  const plan = { imageMode: 'selfie', imageBrief: '' };
+  const plan = { imageMode: 'selfie', imageBrief: '来自聊天的私人细节' };
   const resolved = resolveDynamicImageTemplate(character, plan, () => 0);
   const prompt = buildAutoImagePrompt(character, '今天晒晒太阳。', plan, resolved);
 
@@ -438,6 +552,8 @@ test('image prompt keeps facial identity fixed and forbids grids while clothing 
   assert.match(prompt, /衣服只可随本次场景自然变化/);
   assert.match(prompt, /场景：阳台自拍；姿势：回眸；心情：放松/);
   assert.doesNotMatch(prompt, /抱猫自拍/);
+  assert.doesNotMatch(prompt, /今天晒晒太阳/);
+  assert.doesNotMatch(prompt, /来自聊天的私人细节/);
 });
 
 test('daily limit and minimum interval prevent duplicate automatic moments', async () => {
