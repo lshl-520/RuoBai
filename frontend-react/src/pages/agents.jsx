@@ -830,7 +830,7 @@ function AgentEditor({ agent, onClose, onSave }) {
           </div>
           {auto && (
             <div className="freq-row">
-              <span className="sr-s">每天最多</span>
+              <span className="sr-s">{systemDecides ? "每天最多" : "每天目标"}</span>
               {MOMENT_FREQ_PRESETS.map((f) => (
                 <button key={f} className={"freq-chip" + (!systemDecides && freq === f ? " on" : "")} onClick={() => { setSystemDecides(false); setFreq(f); }}>{f} 条</button>
               ))}
@@ -851,7 +851,7 @@ function AgentEditor({ agent, onClose, onSave }) {
           <div className="switch-row">
             <div>
               <div className="sr-t">动态发图</div>
-              <div className="sr-s">只控制她自己发动态时是否允许带图，不影响聊天里让她画图</div>
+              <div className="sr-s">开启后，每条自动动态都以一张安全的单人生活照为完成条件，不影响聊天里让她画图</div>
             </div>
             <button className={"toggle" + (autoImages ? " on" : "")} onClick={() => setAutoImages(!autoImages)} disabled={!auto}><i /></button>
           </div>
@@ -877,7 +877,7 @@ function AgentEditor({ agent, onClose, onSave }) {
                 setMomentTest({ loading: false, message: err instanceof Error ? err.message : "试发失败" });
               }
             }}>
-              <span className="ob-main"><span className="ob-t serif">{momentTest?.loading ? "正在测试动态发图渠道" : "现在测试动态发图"}</span><span className="ob-s">跳过聊天判断，直接生成一条测试图文动态，可能消耗一次额度</span></span>
+              <span className="ob-main"><span className="ob-t serif">{momentTest?.loading ? "正在测试动态发图渠道" : "现在测试动态发图"}</span><span className="ob-s">跳过聊天判断，只测试一张安全生活照；失败不会用文字动态顶替</span></span>
               <Icon name="chevron" className="row-chev" />
             </button>
             {momentTest?.message && !momentTest.loading && <div className="route-note" style={{ marginTop: 8 }}>{momentTest.message}</div>}

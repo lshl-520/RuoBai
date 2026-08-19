@@ -75,6 +75,48 @@ test('手动试发拒绝未开启主动动态的角色', async () => {
   });
 });
 
+test('手动试发在没有图片时明确失败，绝不把文字动态报成成功', async () => {
+  const router = createAutoMomentsRouter({
+    pool: {
+      query: async () => [[{ id: 12, name: '小白', auto_moments_enabled: 1 }]]
+    },
+    service: {
+      runScan: async () => [{
+        characterId: 12,
+        status: 'skipped_image_failed',
+        imageStatus: 'failed',
+        imageError: '上游返回空图片'
+      }]
+    }
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/auto-moments/characters/12/test`, { method: 'POST' });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(payload.success, true);
+    assert.equal(payload.message, '图片渠道没有返回图片，本次没有用文字动态顶替（上游返回空图片）');
+  });
+});
+
+test('手动试发要求先开启动态发图，不会生成文字测试动态', async () => {
+  const router = createAutoMomentsRouter({
+    pool: {
+      query: async () => [[{ id: 12, name: '小白', auto_moments_enabled: 1 }]]
+    },
+    service: {
+      runScan: async () => [{ characterId: 12, status: 'skipped_image_disabled', imageStatus: 'disabled' }]
+    }
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/auto-moments/characters/12/test`, { method: 'POST' });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(payload.message, '没有发出测试动态：请先开启动态发图，系统不会用纯文字顶替');
+  });
+});
+
 test('状态接口说明今天为什么还没有动态', async () => {
   const pool = {
     query: async (sql) => {

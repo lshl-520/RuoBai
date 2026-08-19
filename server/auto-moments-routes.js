@@ -6,10 +6,13 @@ function describeResult(result) {
   switch (result?.status) {
     case 'posted':
       if (result.imageStatus === 'generated') return '动态发图渠道正常：已发出一条测试图文动态';
-      if (result.imageStatus === 'dynamic_unconfigured') return '已发测试文字动态：动态发图还没有配置';
-      if (result.imageStatus === 'failed') return `已发测试文字动态：图片渠道调用失败${result.imageError ? `（${result.imageError}）` : ''}`;
-      if (result.imageStatus === 'planner_text_only') return '已试发文字动态：这次由她决定不配图';
       return '已试发一条文字动态';
+    case 'skipped_image_unconfigured':
+      return '没有发出测试动态：请先配置动态发图渠道，系统不会用纯文字顶替';
+    case 'skipped_image_disabled':
+      return '没有发出测试动态：请先开启动态发图，系统不会用纯文字顶替';
+    case 'skipped_image_failed':
+      return `图片渠道没有返回图片，本次没有用文字动态顶替${result.imageError ? `（${result.imageError}）` : ''}`;
     case 'skipped_planner':
       return '这次没有发：她判断当前聊天不适合变成动态';
     case 'skipped_no_chat_capability':
@@ -24,6 +27,8 @@ function describeStatus(outcome, attemptCount, postedToday) {
   if (!attemptCount) return '等待下一次判断';
   if (outcome === 'planner_skipped') return '她判断暂时不适合发';
   if (outcome === 'planner_failed') return '最近一次判断失败，稍后重试';
+  if (outcome === 'image_failed') return '最近一次配图失败，稍后重试';
+  if (outcome === 'image_unconfigured') return '动态发图渠道尚未配置';
   if (outcome === 'planner_started') return '正在判断';
   return '等待下一次判断';
 }
