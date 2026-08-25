@@ -81,12 +81,18 @@ function sourceVisibilitySql(alias = 'm') {
 }
 
 const CHAT_LIFE_EVENT_PATTERN = /(?:约好|约定|预约|约了|提醒我|周末一起|下周一起|明天一起|后天一起|完成了|做完了|修好了|终于把.+(?:做好|完成|跑通)|毕业了|搬家了|旅行回来|住院|手术|离职了|入职了|生日|纪念日)/u;
+const TECHNICAL_EVENT_NOISE_PATTERN = /(?:项目|代码|前端|后端|React|Vue|Node|JavaScript|TypeScript|数据库|服务器|部署|Docker|Qdrant|API|接口|模型|提示词|测试|编译|构建|Git|SSH|端口|网页|浏览器|应用|App|安卓|Android|npm|Vite|bug|报错|日志|上线|仓库)/iu;
+
+export function isTechnicalEventNoise(value) {
+  return TECHNICAL_EVENT_NOISE_PATTERN.test(normalizeTitle(value));
+}
 
 function shouldTrackTitle(value, sourceType = 'chat', eventType = 'life') {
   const text = normalizeTitle(value);
   if (text.length < 4 || text.length > 500) return false;
   if (sourceType === 'memory') return true;
   if (sourceType === 'moment' || sourceType === 'comment') return false;
+  if (isTechnicalEventNoise(text)) return false;
   return CHAT_LIFE_EVENT_PATTERN.test(text);
 }
 

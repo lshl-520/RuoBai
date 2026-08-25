@@ -2,6 +2,12 @@ function normalizeText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
+const TECHNICAL_MEMORY_NOISE_PATTERN = /(?:项目|代码|编程|前端|后端|React|Vue|Node|JavaScript|TypeScript|数据库|服务器|部署|Docker|Qdrant|API|接口|模型|提示词|测试|编译|构建|Git|SSH|端口|网页|浏览器|应用|App|安卓|Android|npm|Vite|bug|报错|日志|上线|发布|仓库)/iu;
+
+export function isLikelyTechnicalChat(value) {
+  return TECHNICAL_MEMORY_NOISE_PATTERN.test(normalizeText(value));
+}
+
 function parseAppointmentDate(text, now = new Date()) {
   const match = text.match(/(?:(20\d{2})年)?\s*(\d{1,2})月(\d{1,2})[日号]/);
   if (!match) return null;
@@ -66,6 +72,9 @@ function extractCandidate(content) {
   const text = normalizeText(content);
   if (!text || text.length < 4 || text.length > 240) return null;
   if (/(?:记得|约好|约定)/u.test(text)) return null;
+
+  // 技术协作中的“我想要/我在做/我希望”是当前任务，不是角色长期记忆。
+  if (isLikelyTechnicalChat(text)) return null;
 
   const looksPersonal = /(?:我|我的|本人)(?:喜欢|爱|不喜欢|讨厌|习惯|怕|害怕|不想|想要|希望|是|叫|住|来自|在.{0,12}(?:上班|工作|值班))/u.test(text);
   if (!looksPersonal) return null;

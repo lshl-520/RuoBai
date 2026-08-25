@@ -4,6 +4,7 @@ import express from 'express';
 import {
   buildLifeEventKey,
   createLifeEventsRouter,
+  isTechnicalEventNoise,
   normalizeLifeEventStatus,
   parseLifeEventSourceRef,
   recordLifeEventSource
@@ -174,6 +175,20 @@ test('life event source ignores ordinary personal chat even when it has common m
     title: '我今天有点累，但还是想和你聊一会儿。'
   });
 
+  assert.equal(result, null);
+  assert.equal(called, false);
+});
+
+test('technical completion chat is not indexed as a life event', async () => {
+  assert.equal(isTechnicalEventNoise('项目终于部署跑通了'), true);
+  let called = false;
+  const result = await recordLifeEventSource({ query: async () => { called = true; } }, {
+    userId: 1,
+    characterId: 6,
+    sourceType: 'chat',
+    sourceId: 36,
+    title: '项目终于部署跑通了'
+  });
   assert.equal(result, null);
   assert.equal(called, false);
 });

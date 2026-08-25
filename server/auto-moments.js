@@ -19,6 +19,9 @@ const AUTO_IMAGE_RETRY_DELAYS_MS = [30 * 1000];
 const MAX_MOMENT_LENGTH = 120;
 const MAX_MOMENT_SUMMARY_LENGTH = 180;
 const MAX_CONVERSATION_MESSAGES = 20;
+const MAX_RECENT_MOMENTS_FOR_DEDUP = 12;
+const RECENT_MOMENT_DEDUP_DAYS = 7;
+const RECENT_MOMENT_SIMILARITY_THRESHOLD = 0.72;
 const MOMENT_IMAGE_MODES = new Set(['none', 'auto', 'selfie', 'third_person']);
 const UNSAFE_DAILY_VISUAL_PATTERN = /(?:裸体|裸露|内衣|情趣|床上|卧室|浴室|洗澡|私密|敏感部位|性行为|亲密接触|身体接触|湿身|撩人|性感|诱惑|自慰|亲吻|拥抱|胸|臀)/u;
 
@@ -209,6 +212,46 @@ function chooseOne(values, random = Math.random) {
   return choices[Math.min(choices.length - 1, Math.max(0, Math.floor(random() * choices.length)))];
 }
 
+function momentTokens(value) {
+  const text = String(value || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+  if (!text) return [];
+  const chars = [...text];
+  if (chars.length <= 2) return chars;
+  return chars.map((_char, index) => chars.slice(index, index + 2).join('')).slice(0, 160);
+}
+
+export function calculateMomentSimilarity(left, right) {
+  const leftText = String(left || '').toLowerCase().replace(/\s+/g, '').trim();
+  const rightText = String(right || '').toLowerCase().replace(/\s+/g, '').trim();
+  if (!leftText || !rightText) return 0;
+  if (leftText === rightText) return 1;
+  const leftTokens = new Set(momentTokens(leftText));
+  const rightTokens = new Set(momentTokens(rightText));
+  if (!leftTokens.size || !rightTokens.size) return 0;
+  let intersection = 0;
+  for (const token of leftTokens) if (rightTokens.has(token)) intersection += 1;
+  const jaccard = intersection / (leftTokens.size + rightTokens.size - intersection);
+  const containment = intersection / Math.min(leftTokens.size, rightTokens.size);
+  return Math.max(jaccard, containment);
+}
+
+export function hasRecentSimilarMoment(content, recentMoments = [], {
+  now = new Date(),
+  windowDays = RECENT_MOMENT_DEDUP_DAYS,
+  threshold = RECENT_MOMENT_SIMILARITY_THRESHOLD
+} = {}) {
+  const currentTime = new Date(now).getTime();
+  const windowMs = Number(windowDays) * 24 * 60 * 60 * 1000;
+  return (Array.isArray(recentMoments) ? recentMoments : []).some(item => {
+    const createdAt = item?.created_at || item?.createdAt;
+    if (createdAt) {
+      const timestamp = new Date(String(createdAt).replace(' ', 'T')).getTime();
+      if (Number.isFinite(timestamp) && Number.isFinite(currentTime) && currentTime - timestamp > windowMs) return false;
+    }
+    return calculateMomentSimilarity(content, item?.content) >= threshold;
+  });
+}
+
 function chooseSafeDailyVisual(values, fallback, random = Math.random) {
   const safeChoices = (Array.isArray(values) ? values : [])
     .map(value => String(value || '').trim())
@@ -277,6 +320,7 @@ function buildMomentMessages(character, context, { mustPost = false, forceImage 
     .filter(Boolean)
     .join('\n');
   const previousMomentLines = context.recentMoments
+    .slice(0, 4)
     .map(item => `- ${String(item.content || '').trim()}`)
     .filter(line => line.length > 4)
     .join('\n');
@@ -342,7 +386,7 @@ function getPlannerAttemptLimit(dailyTarget) {
     : MAX_DAILY_PLANNER_ATTEMPTS;
 }
 
-function buildFallbackDailyContent(character, random = Math.random) {
+function buildFallbackDailyContent(character, recentMoments = [], random = Math.random) {
   const name = String(character?.name || '她').trim() || '她';
   const templates = [
     `${name}今天也在慢慢过自己的小日子，把一份安静留在这里。`,
@@ -350,7 +394,8 @@ function buildFallbackDailyContent(character, random = Math.random) {
     `窗外的光刚好，${name}想把这一点平常的温柔记下来。`,
     `${name}今天也有认真照顾自己的片刻，想和你轻轻打个招呼。`
   ];
-  return chooseOne(templates, random) || templates[0];
+  const available = templates.filter(content => !hasRecentSimilarMoment(content, recentMoments));
+  return chooseOne(available.length ? available : templates, random) || templates[0];
 }
 
 function getDynamicGenerationAttemptLimit(imageConfig) {
@@ -532,13 +577,13 @@ export function createAutoMomentsService({
       ),
       db.query(
         `
-          SELECT content
+          SELECT content, created_at
           FROM moments
           WHERE user_id = ? AND character_id = ? AND is_deleted = 0
           ORDER BY created_at DESC, id DESC
           LIMIT ?
         `,
-        [userId, characterId, 4]
+        [userId, characterId, MAX_RECENT_MOMENTS_FOR_DEDUP]
       )
     ]);
     const [personaRuntime, recentLifeEvents] = await Promise.all([
@@ -647,6 +692,7 @@ export function createAutoMomentsService({
     }
 
     let plan;
+    let context = null;
     let plannerAttemptId = 0;
     let plannerStartedAt = 0;
     if (forceChannelTest) {
@@ -657,7 +703,7 @@ export function createAutoMomentsService({
         logger.warn?.(`[auto-moments] ${character.name} 未启用聊天能力，跳过本次动态`);
         return { characterId, status: 'skipped_no_chat_capability' };
       }
-      const context = await loadContext(userId, characterId, character);
+      context = await loadContext(userId, characterId, character);
       plannerAttemptId = await beginPlannerAttempt(userId, characterId, chatConfig);
       plannerStartedAt = Date.now();
       try {
@@ -693,7 +739,7 @@ export function createAutoMomentsService({
     if (!plan.shouldPost && requiresTargetPost) {
       plan = {
         shouldPost: true,
-        content: buildFallbackDailyContent(character, random),
+        content: buildFallbackDailyContent(character, context?.recentMoments || [], random),
         imageMode: imagesEnabled ? 'selfie' : 'none',
         imageBrief: ''
       };
@@ -704,6 +750,22 @@ export function createAutoMomentsService({
         durationMs: plannerStartedAt ? Date.now() - plannerStartedAt : null
       });
       return { characterId, status: 'skipped_planner' };
+    }
+    if (hasRecentSimilarMoment(plan.content, context?.recentMoments || [], { now: now() })) {
+      if (requiresTargetPost) {
+        plan = {
+          ...plan,
+          content: buildFallbackDailyContent(character, context?.recentMoments || [], random),
+          imageBrief: ''
+        };
+      }
+      if (hasRecentSimilarMoment(plan.content, context?.recentMoments || [], { now: now() })) {
+        await finishPlannerAttempt(plannerAttemptId, {
+          outcome: 'duplicate_skipped',
+          durationMs: plannerStartedAt ? Date.now() - plannerStartedAt : null
+        });
+        return { characterId, status: 'skipped_duplicate' };
+      }
     }
     if (imagesEnabled && plan.imageMode === 'none') {
       plan = { ...plan, imageMode: 'selfie', imageBrief: '' };
