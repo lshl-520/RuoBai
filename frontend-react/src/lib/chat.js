@@ -55,6 +55,7 @@ export function saveUserMessage(roleId, payload) {
     method: "POST",
     body: JSON.stringify({
       character_id: roleId,
+      defer_side_effects: true,
       ...payload,
     }),
   });

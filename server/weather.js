@@ -74,3 +74,9 @@ export async function getCityWeatherText(city) {
     return null;
   }
 }
+
+export function getCachedCityWeatherText(city) {
+  const key = String(city || '').trim().toLowerCase();
+  const cached = key ? cache.get(key) : null;
+  return cached && Date.now() - cached.ts < CACHE_TTL ? cached.text : null;
+}
