@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAutoImagePrompt, createAutoMomentsService, normalizeDailyMax, normalizeDailyMin, parseConversationMomentSummary, parseGeneratedMomentPlan, resolveDynamicImageTemplate, sanitizeGeneratedMoment, sanitizeConversationMomentSummary, startAutoMomentsScheduler } from './auto-moments.js';
+import { buildAutoImagePrompt, calculateMomentSimilarity, createAutoMomentsService, hasRecentSimilarMoment, normalizeDailyMax, normalizeDailyMin, parseConversationMomentSummary, parseGeneratedMomentPlan, resolveDynamicImageTemplate, sanitizeGeneratedMoment, sanitizeConversationMomentSummary, startAutoMomentsScheduler } from './auto-moments.js';
 
 function jsonResponse(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -23,7 +23,8 @@ function createFixture({
   plannerAttemptCount = 0,
   nextPlannerRetryAt = null,
   dailyMin = 0,
-  dailyMax = 4
+  dailyMax = 4,
+  recentMoments = []
 } = {}) {
   const calls = [];
   const inserted = [];
@@ -102,7 +103,7 @@ function createFixture({
         ]];
       }
       if (sql.includes('FROM memories')) return [[{ tag: '约定', category: 'relationship', content: '晚上一起聊天' }]];
-      if (sql.includes('FROM moments') && sql.includes('ORDER BY created_at DESC')) return [[]];
+      if (sql.includes('FROM moments') && sql.includes('ORDER BY created_at DESC')) return [recentMoments];
       if (sql.includes('INSERT INTO moments')) {
         inserted.push({ params });
         return [{ insertId: 9001 }];
@@ -176,6 +177,12 @@ test('conversation summaries keep a usable life fragment but reject dialogue dum
   });
   assert.deepEqual(parseConversationMomentSummary('{"has_moment":false}'), { hasMoment: false, summary: '' });
   assert.equal(sanitizeConversationMomentSummary('用户：原始聊天\n助手：原始回复'), '');
+});
+
+test('moment similarity blocks punctuation-only and lightly rephrased repeats', () => {
+  assert.equal(calculateMomentSimilarity('窗外的光刚好，想把这一点温柔记下来。', '窗外的光刚好 想把这一点温柔记下来。'), 1);
+  assert.ok(calculateMomentSimilarity('今天也在慢慢过自己的小日子。', '今天也在慢慢过自己的小日子，留一点安静。') >= 0.72);
+  assert.equal(hasRecentSimilarMoment('给今天留一张小小的生活切片。', [{ content: '给今天留一张小小的生活切片。', created_at: '2026-08-25 09:00:00' }], { now: new Date('2026-08-25T12:00:00+08:00') }), true);
 });
 
 test('custom daily targets stay within one to twelve instead of falling back to four', () => {
@@ -290,6 +297,24 @@ test('automatic moments exclude unconfirmed memory candidates from their context
   await service.runScan({ characterId: 61 });
   const memoryQuery = fixture.calls.find(call => call.sql.includes('FROM memories'));
   assert.match(memoryQuery.sql, /COALESCE\(review_status, 'active'\) <> 'candidate'/);
+});
+
+test('automatic moments skip a repeated post before image generation or publishing', async () => {
+  const repeated = '窗外的光刚好，想把这一点温柔记下来。';
+  const fixture = createFixture({ recentMoments: [{ content: repeated, created_at: '2026-07-21 11:00:00' }] });
+  const service = createAutoMomentsService({
+    db: fixture.db,
+    fetchImpl: async () => jsonResponse({ choices: [{ message: { content: JSON.stringify({ should_post: true, content: repeated, image_mode: 'none' }) } }] }),
+    generateImageImpl: fixture.generateImageImpl,
+    now: () => new Date('2026-07-21T12:00:00+08:00'),
+    logger: { log() {}, warn() {}, error() {} }
+  });
+  const [result] = await service.runScan({ characterId: 61 });
+  assert.equal(result.status, 'skipped_duplicate');
+  assert.equal(fixture.inserted.length, 0);
+  assert.equal(fixture.imageCalls.length, 0);
+  const auditUpdate = fixture.calls.find(call => call.sql.includes('UPDATE auto_moment_attempts'));
+  assert.equal(auditUpdate.params[0], 'duplicate_skipped');
 });
 
 test('automatic moments prefer the character selected chat model over the user default', async () => {

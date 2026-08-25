@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractExplicitMemory, recordAutoMemoryCandidate, recordExplicitChatMemory } from './memory-extractor.js';
+import { extractExplicitMemory, isLikelyTechnicalChat, recordAutoMemoryCandidate, recordExplicitChatMemory } from './memory-extractor.js';
 
 test('only extracts an explicit remember request', () => {
   assert.equal(extractExplicitMemory('今天吃了西瓜，真甜'), null);
@@ -54,4 +54,19 @@ test('records personal statements as low-priority candidates without treating li
     userId: 1, characterId: 2, messageId: 5, content: '这条动态我点了赞。'
   }), null);
   assert.ok(calls.some(call => call.sql.includes('review_status')));
+});
+
+test('technical project chat is not promoted to a candidate memory', async () => {
+  assert.equal(isLikelyTechnicalChat('我希望把 React 前端部署到服务器上'), true);
+  let called = false;
+  const candidate = await recordAutoMemoryCandidate({
+    query: async () => { called = true; return [[]]; }
+  }, {
+    userId: 1,
+    characterId: 2,
+    messageId: 33,
+    content: '我希望把 React 前端部署到服务器上'
+  });
+  assert.equal(candidate, null);
+  assert.equal(called, false);
 });
