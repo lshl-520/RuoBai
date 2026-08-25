@@ -741,6 +741,16 @@ function Bubble({ m, agent, tts, voice, myAvatar, onDelete, onOpenImage, onRetry
   );
 }
 
+// Streaming changes only the active bubble. Keep the rest of a long chat
+// list out of React's render work, while still updating changed message data.
+const MemoBubble = React.memo(Bubble, (prev, next) => (
+  prev.m === next.m
+  && prev.agent === next.agent
+  && prev.tts === next.tts
+  && prev.voice === next.voice
+  && prev.myAvatar === next.myAvatar
+));
+
 function Typing({ agent }) {
   return (
     <div className="row her">
@@ -972,6 +982,8 @@ function ChatRoom({ agent, onBack }) {
   const [myAvatar, setMyAvatar] = useStateC(DEFAULT_USER_AVATAR);
   const [draft, setDraft] = useStateC("");
   const [typing, setTyping] = useStateC(false);
+  const [live2dScene, setLive2dScene] = useStateC("idle");
+  const [live2dActive, setLive2dActive] = useStateC(false);
   const [showFig, setShowFig] = useStateC(true);
   const [big, setBig] = useStateC(false);
   const [stickerOpen, setStickerOpen] = useStateC(false);
@@ -1045,6 +1057,9 @@ function ChatRoom({ agent, onBack }) {
   const fileRef = useRefC(null);
   const draftRef = useRefC(null);
   const bigHistoryRef = useRefC(false);
+  const sendRef = useRefC(null);
+  const failedSendRef = useRefC(failedSend);
+  failedSendRef.current = failedSend;
 
   const resizeDraft = (node) => {
     if (!node) return;
@@ -1094,8 +1109,8 @@ function ChatRoom({ agent, onBack }) {
 
   const figSrc = hasEmo ? (EMO_SET[emo] || agent.cover) : agent.cover;
   const live2dState = React.useMemo(
-    () => getChatLive2DState(msgs, { isResponding: typing }),
-    [msgs, typing],
+    () => ({ scene: live2dActive ? live2dScene : "idle" }),
+    [live2dActive, live2dScene],
   );
 
   useEffectC(() => {
@@ -1222,6 +1237,8 @@ function ChatRoom({ agent, onBack }) {
       : [...p, { who: "me", type: images.length > 0 ? "image" : "text", text: t, images, time: tm, _clientId: clientId }]);
     setDraft(""); setAtts([]);
     setTyping(true);
+    setLive2dScene(getChatLive2DState([{ who: "me", text: t }], { isResponding: true }).scene);
+    setLive2dActive(true);
 
     try {
       // 1) 存用户消息到数据库（多图：每张存一条，最后一条带文字）
@@ -1376,6 +1393,7 @@ function ChatRoom({ agent, onBack }) {
       setMsgs((p) => p.map((m) => m._clientId === clientId ? { ...m, failed: true } : m));
     } finally {
       setTyping(false);
+      setLive2dActive(false);
     }
   };
 
@@ -1390,13 +1408,19 @@ function ChatRoom({ agent, onBack }) {
   };
 
   /* 删除单条消息 */
-  const deleteMsg = async (msgId) => {
+  const deleteMsg = React.useCallback(async (msgId) => {
     if (!msgId) return;
     try {
       await deleteMessage(msgId);
       setMsgs((p) => p.filter((m) => m.id !== msgId));
     } catch (e) { setChatError("删除失败：" + String(e)); }
-  };
+  }, []);
+
+  sendRef.current = send;
+  const retryMessage = React.useCallback((clientId) => {
+    const failed = failedSendRef.current;
+    if (failed?.clientId === clientId) sendRef.current?.(failed);
+  }, []);
 
   const sendSticker = (s) => {
     setStickerOpen(false);
@@ -1416,6 +1440,8 @@ function ChatRoom({ agent, onBack }) {
       transcript: transcript || "", recognitionError: recognitionError || "", time: now()
     }]);
     setTyping(true);
+    setLive2dScene(getChatLive2DState([{ who: "me", text: transcript || "" }], { isResponding: true }).scene);
+    setLive2dActive(true);
 
     // 无论识别成功与否都发送；无识别时用自然中文告知AI
     const textForAI = transcript || "（发了语音）";
@@ -1551,6 +1577,8 @@ function ChatRoom({ agent, onBack }) {
     } catch (err) {
       setTyping(false);
       setChatError(withDiagnosticId("语音消息发送失败，请重试。", recordDiagnostic({ area: "voice", action: "send-voice-message", error: err })));
+    } finally {
+      setLive2dActive(false);
     }
   };
 
@@ -1598,7 +1626,7 @@ function ChatRoom({ agent, onBack }) {
 
       <div className="msg-area" ref={areaRef}>
         {q.trim() && <div className="search-note">找到 {shown.filter((m) => m.type !== "time").length} 条包含"{q.trim()}"的记录</div>}
-        {shown.map((m, i) => (m.type === "time" && q.trim()) ? null : <Bubble key={i} m={m} agent={agent} tts={voiceSettings.enabled && !q.trim()} voice={voiceSettings} myAvatar={myAvatar} onDelete={deleteMsg} onOpenImage={setPreviewImage} onRetry={(clientId) => { if (failedSend?.clientId === clientId) send(failedSend); }} />)}
+        {shown.map((m, i) => (m.type === "time" && q.trim()) ? null : <MemoBubble key={i} m={m} agent={agent} tts={voiceSettings.enabled && !q.trim()} voice={voiceSettings} myAvatar={myAvatar} onDelete={deleteMsg} onOpenImage={setPreviewImage} onRetry={retryMessage} />)}
         {typing && !q.trim() && <Typing agent={agent} />}
         {momentNotice && <div className="chat-notice" onClick={() => setMomentNotice("")}>{momentNotice}<span style={{marginLeft:8,opacity:0.6}}>点击关闭</span></div>}
         {chatError && <div className="chat-error" onClick={() => setChatError("")}>{chatError}<span style={{marginLeft:8,opacity:0.6}}>点击关闭</span></div>}

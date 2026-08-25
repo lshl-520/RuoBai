@@ -19,6 +19,8 @@ const TOP_K = 12;          // 初始检索数量
 const MAX_RESULTS = 6;     // 最终注入数量
 const SCORE_THRESHOLD = 0.35;  // 最低相关分数
 const MAX_INJECT_CHARS = 1800; // 注入总字数上限
+const CACHE_TTL = 2 * 60 * 1000;
+const resultCache = new Map();
 
 /**
  * 把最近几条消息拼成检索查询
@@ -134,6 +136,9 @@ export async function getVectorMemoryBlock({ userId, characterId, recentMessages
   try {
     const query = buildQueryFromRecent(recentMessages, currentContent);
     if (!query.trim()) return '';
+    const cacheKey = `${Number(userId)}:${Number(characterId)}:${query}`;
+    const cached = resultCache.get(cacheKey);
+    if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.value;
 
     const vector = await getQueryVector(query);
     if (!vector) return '';
@@ -142,10 +147,19 @@ export async function getVectorMemoryBlock({ userId, characterId, recentMessages
     if (!results.length) return '';
 
     const picked = formatResults(results);
-    return buildVectorMemoryBlock(picked);
+    const value = buildVectorMemoryBlock(picked);
+    resultCache.set(cacheKey, { value, ts: Date.now() });
+    return value;
   } catch (err) {
     // 向量记忆失败不影响聊天，只在日志里记一下
     console.warn('[向量记忆] 检索失败，跳过:', err.message);
     return '';
   }
+}
+
+export function getCachedVectorMemoryBlock({ userId, characterId, currentContent }) {
+  const query = buildQueryFromRecent([], currentContent);
+  const key = `${Number(userId)}:${Number(characterId)}:${query}`;
+  const cached = resultCache.get(key);
+  return cached && Date.now() - cached.ts < CACHE_TTL ? cached.value : '';
 }

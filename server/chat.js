@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getVectorMemoryBlock } from './vector-memory/retriever.js';
+import { getCachedVectorMemoryBlock, getVectorMemoryBlock } from './vector-memory/retriever.js';
 import { pool as defaultPool } from './db.js';
 import { getRequestCharacterId } from './middleware.js';
 import {
@@ -12,7 +12,7 @@ import {
   requireCharacterForUser as defaultRequireCharacterForUser
 } from './helpers.js';
 import { extractVideoShareContext, buildVideoShareHint } from './link-parser.js';
-import { getCityWeatherText } from './weather.js';
+import { getCachedCityWeatherText, getCityWeatherText } from './weather.js';
 import { detectDrawIntent, generateImage } from './image-gen.js';
 import { guessModelCapabilities } from './model-capabilities.js';
 import { buildPersonaRuntimePrompt, loadPersonaRuntime, recordPersonaRuntimeTurn } from './persona-runtime.js';
@@ -285,6 +285,7 @@ function sendSyntheticStream(res, text) {
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders?.();
   res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`);
   res.write('data: [DONE]\n\n');
@@ -691,6 +692,12 @@ export function createChatRouter({
         eventType: /(?:约好|约定|下次|明天)/u.test(content) ? 'appointment' : 'life'
       })
     ]);
+  }
+
+  function scheduleChatTask(label, task) {
+    Promise.resolve()
+      .then(task)
+      .catch((error) => console.error(`[chat-async] ${label} 失败:`, error?.message || error));
   }
 
   async function getActiveModelConfig(userId) {
@@ -1265,6 +1272,23 @@ export function createChatRouter({
   });
 
   router.post('/', async (req, res) => {
+    const requestStartedAt = Date.now();
+    let contextReadyAt = null;
+    let upstreamResponseAt = null;
+    let firstUpstreamChunkAt = null;
+    let firstClientChunkAt = null;
+    let timingLogged = false;
+    const logChatTiming = (extra = {}) => {
+      timingLogged = true;
+      console.info('[chat-timing]', JSON.stringify({
+        totalMs: Date.now() - requestStartedAt,
+        contextMs: contextReadyAt ? contextReadyAt - requestStartedAt : null,
+        upstreamTtfbMs: upstreamResponseAt ? upstreamResponseAt - requestStartedAt : null,
+        firstUpstreamChunkMs: firstUpstreamChunkAt ? firstUpstreamChunkAt - requestStartedAt : null,
+        firstClientChunkMs: firstClientChunkAt ? firstClientChunkAt - requestStartedAt : null,
+        ...extra,
+      }));
+    };
     let primaryUsageContext = null;
     let primaryUsageRecorded = false;
     const recordPrimaryUsage = async ({ status, usage = {}, error = null, errorCategory = null }) => {
@@ -1320,13 +1344,18 @@ export function createChatRouter({
         });
 
         if (role === 'user') {
-          await recordUserMessageSideEffects({
+          const sideEffectArgs = {
             userId: req.userId,
             characterId,
             messageId: saved.id,
             content,
             messageType
-          });
+          };
+          if (req.body?.defer_side_effects) {
+            scheduleChatTask('用户消息副作用', () => recordUserMessageSideEffects(sideEffectArgs));
+          } else {
+            await recordUserMessageSideEffects(sideEffectArgs);
+          }
         }
 
         return res.status(201).json({
@@ -1352,6 +1381,7 @@ export function createChatRouter({
       }
       if (!modelConfig) {
         if (wantsEventStream(req)) {
+          logChatTiming({ status: 'no-model', stream: true });
           sendSyntheticStream(res, NO_MODEL_MESSAGE);
           return;
         }
@@ -1365,23 +1395,33 @@ export function createChatRouter({
         });
       }
 
-      const [[userRow], [recent, activeMemories, vectorMemoryBlock, personaRuntime, recentLifeEvents]] = await Promise.all([
+      const [[userRow], [recent, activeMemories, personaRuntime, recentLifeEvents]] = await Promise.all([
         pool.query('SELECT city FROM users WHERE id = ? LIMIT 1', [req.userId]),
         Promise.all([
           loadRecentMessages(req.userId, characterId, 20),
           loadActiveMemories(req.userId, characterId),
-          getVectorMemoryBlock({
-            userId: req.userId,
-            characterId,
-            recentMessages: [],
-            currentContent: content
-          }).catch(() => ''),
           loadPersonaRuntime(pool, { userId: req.userId, characterId }),
           loadRecentLifeEvents(pool, { userId: req.userId, characterId, limit: 8 })
         ])
       ]);
-      const weatherText = await getCityWeatherText(userRow?.[0]?.city || '').catch(() => null);
-      const weatherBlock = weatherText ? `\n\n${weatherText}` : '';
+      contextReadyAt = Date.now();
+      // These enrichments are optional. Warm them in the background so a
+      // slow weather provider, embedding service, or Qdrant cannot delay TTFB.
+      const city = userRow?.[0]?.city || '';
+      scheduleChatTask('天气预热', () => getCityWeatherText(city));
+      scheduleChatTask('向量记忆预热', () => getVectorMemoryBlock({
+        userId: req.userId,
+        characterId,
+        recentMessages: [],
+        currentContent: content
+      }));
+      const cachedWeather = getCachedCityWeatherText(city);
+      const weatherBlock = cachedWeather ? `\n\n${cachedWeather}` : '';
+      const vectorMemoryBlock = getCachedVectorMemoryBlock({
+        userId: req.userId,
+        characterId,
+        currentContent: content
+      });
       const contextSnapshot = buildCharacterContextSnapshot({
         character,
         personaRuntime,
@@ -1457,7 +1497,7 @@ export function createChatRouter({
       primaryUsageContext = {
         userId: req.userId,
         characterId,
-        startedAt: Date.now(),
+        startedAt: requestStartedAt,
         purpose: 'chat',
         providerName: modelConfig.name,
         providerType: modelConfig.provider_type,
@@ -1466,6 +1506,11 @@ export function createChatRouter({
 
       let upstream;
       try {
+        const originalWrite = res.write.bind(res);
+        res.write = (...args) => {
+          if (firstClientChunkAt === null) firstClientChunkAt = Date.now();
+          return originalWrite(...args);
+        };
         upstream = await fetchImpl(
           useResponsesApi
             ? buildResponsesUrl(modelConfig.api_base)
@@ -1485,6 +1530,7 @@ export function createChatRouter({
             body: JSON.stringify(requestBody)
           }
         );
+        upstreamResponseAt = Date.now();
       } catch (error) {
         await recordPrimaryUsage({ status: 'failure', error });
         throw error;
@@ -1510,6 +1556,7 @@ export function createChatRouter({
         res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
         res.setHeader('Cache-Control', 'no-cache, no-transform');
         res.setHeader('Connection', 'keep-alive');
+        res.setHeader('X-Accel-Buffering', 'no');
         res.flushHeaders?.();
 
         const shouldStrip = String(character?.speech_style || 'natural') !== 'roleplay';
@@ -1523,6 +1570,7 @@ export function createChatRouter({
         try {
           let buffer = '';
           for await (const chunk of upstream.body) {
+            if (firstUpstreamChunkAt === null) firstUpstreamChunkAt = Date.now();
             buffer += Buffer.from(chunk).toString('utf-8');
             const lines = buffer.split('\n');
             buffer = lines.pop() || '';
@@ -1649,6 +1697,7 @@ export function createChatRouter({
           await recordPrimaryUsage({ status: 'success', usage: upstreamUsage || {} });
           res.write('data: [DONE]\n\n');
           res.end();
+          logChatTiming({ status: 'success', stream: true });
         } catch (streamError) {
           console.error('AI 流中断', streamError.message);
           await recordPrimaryUsage({ status: 'failure', error: streamError });
@@ -1656,6 +1705,7 @@ export function createChatRouter({
             res.write(`data: ${JSON.stringify({ type: 'error', message: STREAM_INTERRUPTED_MESSAGE })}\n\n`);
             res.end();
           }
+          logChatTiming({ status: 'failure', stream: true });
         }
         return;
       }
@@ -1689,6 +1739,7 @@ export function createChatRouter({
         }
       }
       await recordPrimaryUsage({ status: 'success', usage: upstreamUsage });
+      logChatTiming({ status: 'success', stream: false });
       return res.json({
         success: true,
         item: {
@@ -1701,6 +1752,7 @@ export function createChatRouter({
       });
     } catch (error) {
       await recordPrimaryUsage({ status: 'failure', error });
+      if (!timingLogged) logChatTiming({ status: 'failure', stream: wantsEventStream(req) });
       if (wantsEventStream(req)) {
         sendSyntheticStream(res, `模型暂时不可用：${error.message}`);
         return;
@@ -1760,13 +1812,18 @@ export function createChatRouter({
       });
 
       if (role === 'user') {
-        await recordUserMessageSideEffects({
+        const sideEffectArgs = {
           userId: req.userId,
           characterId,
           messageId: saved.id,
           content,
           messageType
-        });
+        };
+        if (req.body?.defer_side_effects) {
+          scheduleChatTask('用户消息副作用', () => recordUserMessageSideEffects(sideEffectArgs));
+        } else {
+          await recordUserMessageSideEffects(sideEffectArgs);
+        }
       }
 
       return res.status(201).json({

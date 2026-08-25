@@ -126,6 +126,11 @@ app.use((req, res, next) => {
 
 app.use(compression({
   filter: (req, res) => {
+    // SSE must reach the browser as individual chunks. Compression buffers
+    // small writes and can add seconds to the first visible token.
+    if (String(req.headers.accept || '').includes('text/event-stream')) {
+      return false;
+    }
     if (SKIP_COMPRESSION_EXTENSIONS.test(req.path)) {
       return false;
     }
