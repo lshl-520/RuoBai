@@ -379,3 +379,18 @@ test('stored proactive messages carry a dedicated message type', async () => {
   assert.match(insert.sql, /'proactive'/);
   assert.deepEqual(insert.params, [7, 12, '我在这儿。']);
 });
+
+test('due appointment lookup accepts only confirmed memory sources', async () => {
+  let lookup;
+  const repository = createMysqlProactiveRepository({
+    async query(sql, params) {
+      lookup = { sql, params };
+      return [[]];
+    },
+  });
+
+  const appointment = await repository.findDueAppointment({ userId: 7, characterId: 12 });
+  assert.equal(appointment, null);
+  assert.match(lookup.sql, /COALESCE\(m\.review_status, 'active'\) IN \('active', 'important'\)/);
+  assert.match(lookup.sql, /COALESCE\(m\.source_type, 'manual'\) <> 'chat_candidate'/);
+});

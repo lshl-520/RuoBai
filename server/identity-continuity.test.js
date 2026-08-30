@@ -41,6 +41,18 @@ const memories = [{
   weight: 90,
   is_important: 1,
   appointment_status: 'pending'
+}, {
+  id: 8,
+  content: '历史自动识别的偏好',
+  tag: '可能记忆',
+  category: '聊天自动识别',
+  memory_type: 'life',
+  source_type: 'chat_candidate',
+  source_id: 32,
+  review_status: 'active',
+  confidence: 0.55,
+  weight: 35,
+  is_important: 0,
 }];
 
 test('identity pack preserves identity, relationship, state and memories across model changes', () => {
@@ -59,6 +71,7 @@ test('identity pack preserves identity, relationship, state and memories across 
   assert.deepEqual(stable(packFromModelA), stable(packFromModelB));
   assert.equal(packFromModelB.memories[0].content, memories[0].content);
   assert.equal(packFromModelB.memories[0].appointment_status, 'pending');
+  assert.equal(packFromModelB.memories.length, 1);
   assert.equal(packFromModelB.dynamic_life.response_enabled, true);
 });
 

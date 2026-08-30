@@ -3,6 +3,7 @@ import {
   deriveNextPersonaRuntime,
   normalizePersonaRuntime,
 } from './persona-runtime.js';
+import { isConfirmedMemory } from './memory-review.js';
 
 const MODE_LABELS = Object.freeze({
   calm: '平静',
@@ -53,11 +54,6 @@ function normalizeText(value, maxLength = 240) {
 function parseSourceRefs(value) {
   if (Array.isArray(value)) return value.map(item => String(item || '').trim()).filter(Boolean);
   return String(value || '').split(',').map(item => item.trim()).filter(Boolean);
-}
-
-function isConfirmedMemory(memory = {}) {
-  return String(memory.review_status || 'active').trim().toLowerCase() !== 'candidate'
-    && Number(memory.is_deleted || 0) !== 1;
 }
 
 function formatMessage(message = {}) {
@@ -312,6 +308,13 @@ export async function loadRecentLifeEvents(db, { userId, characterId, limit = 8 
                     AND msg.user_id = s.user_id
                     AND msg.character_id = e2.character_id
                     AND msg.is_active = 1
+                ) AND NOT EXISTS (
+                  SELECT 1
+                  FROM memories candidate_mem
+                  WHERE candidate_mem.user_id = s.user_id
+                    AND candidate_mem.character_id = e2.character_id
+                    AND candidate_mem.source_type = 'chat_candidate'
+                    AND candidate_mem.source_id = s.source_id
                 ) THEN CONCAT(s.source_type, ':', s.source_id)
                 WHEN s.source_type = 'moment' AND EXISTS (
                   SELECT 1
@@ -357,7 +360,8 @@ export async function loadRecentLifeEvents(db, { userId, characterId, limit = 8 
                     AND mem.user_id = s.user_id
                     AND mem.character_id = e2.character_id
                     AND mem.is_deleted = 0
-                    AND COALESCE(mem.review_status, 'active') <> 'candidate'
+                    AND COALESCE(mem.review_status, 'active') IN ('active', 'important')
+                    AND COALESCE(mem.source_type, 'manual') <> 'chat_candidate'
                 ) THEN CONCAT(s.source_type, ':', s.source_id)
               END
               ORDER BY s.id SEPARATOR ','

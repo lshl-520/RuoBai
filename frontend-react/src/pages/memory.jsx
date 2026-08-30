@@ -18,7 +18,8 @@ function fromApiMemory(m) {
     id: m.id, content: m.content || "", tag: m.tag || "", category: m.category || "",
     memoryType: m.memory_type || "life", memoryTypeLabel: m.memory_type_label || "普通生活",
     weight: Number(m.weight ?? 50), appointmentAt: m.appointment_at || "", appointmentStatus: m.appointment_status || "pending",
-    isImportant: !!m.is_important, reviewStatus: m.review_status || "active", detectedReason: m.detected_reason || "",
+    isImportant: !!m.is_important, reviewStatus: m.review_status || "active", requiresConfirmation: !!m.requires_confirmation,
+    candidateOrigin: m.candidate_origin || "", detectedReason: m.detected_reason || "",
     sourceType: m.source_type || "manual", sourceId: m.source_id || "",
     dateText: m.created_at ? new Date(m.created_at).toLocaleDateString("zh-CN") : "",
   };
@@ -117,12 +118,12 @@ function MemoryCard({ m, onPin, onEdit, onDelete, onConfirmCandidate, onViewCand
       <div className="mem-top">
         <span className="mem-tag serif">{m.tag || m.memoryTypeLabel}</span>
         {m.isImportant && <span className="mem-pin"><Icon name="flame" /></span>}
-        {m.reviewStatus === "candidate" && <span className="mem-candidate">💡 新候选</span>}
+        {m.reviewStatus === "candidate" && <span className="mem-candidate">💡 {m.candidateOrigin === "legacy_auto_detected" ? "历史待确认" : "待确认"}</span>}
       </div>
       <div className="mem-content">{m.content}</div>
       {m.reviewStatus === "candidate" && (
         <>
-          <div className="mem-source">来源：{m.sourceType === "chat_candidate" ? "聊天" : m.sourceType} · {m.detectedReason || "系统暂存为低优先级参考"}</div>
+          <div className="mem-source">来源：{m.sourceType === "chat_candidate" ? "聊天" : m.sourceType} · {m.candidateOrigin === "legacy_auto_detected" ? "历史自动识别记录，需由你确认后才会作为正式记忆使用" : (m.detectedReason || "系统暂存为低优先级参考")}</div>
           <div className="mem-candidate-actions">
             <button type="button" onClick={() => onViewCandidateSource(m)}>查看聊天</button>
             <button type="button" className="keep" onClick={() => onConfirmCandidate(m)}>记住它</button>

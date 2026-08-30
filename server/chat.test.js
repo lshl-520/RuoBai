@@ -102,6 +102,58 @@ test('DELETE /api/chat requires authentication', async () => {
   });
 });
 
+test('GET /api/chat returns an older page with a stable before_id cursor', async () => {
+  const calls = [];
+  const router = createChatRouter({
+    requireCharacterForUser: async () => ({ id: 7 }),
+    pool: {
+      query: async (sql, params = []) => {
+        calls.push({ sql, params });
+        if (sql.includes('INFORMATION_SCHEMA.COLUMNS')) return [[]];
+        if (sql.includes('FROM messages')) {
+          if (params.length === 3) {
+            assert.deepEqual(params, [1, 7, 3]);
+            return [[{ id: 5 }, { id: 4 }, { id: 3 }]];
+          }
+          assert.deepEqual(params, [1, 7, 4, 3]);
+          assert.match(sql, /AND id < \?/);
+          return [[{ id: 3 }, { id: 2 }, { id: 1 }]];
+        }
+        throw new Error(`Unexpected query: ${sql}`);
+      }
+    }
+  });
+
+  await withServer(createApp({ router }), async baseUrl => {
+    const firstResponse = await fetch(`${baseUrl}/api/chat?character_id=7&limit=2`);
+    const first = await firstResponse.json();
+    assert.equal(firstResponse.status, 200);
+    assert.deepEqual(first, {
+      success: true,
+      items: [{ id: 4 }, { id: 5 }],
+      has_more: true,
+      next_before_id: 4
+    });
+
+    const olderResponse = await fetch(`${baseUrl}/api/chat?character_id=7&limit=2&before_id=4`);
+    const older = await olderResponse.json();
+    assert.equal(olderResponse.status, 200);
+    assert.deepEqual(older, {
+      success: true,
+      items: [{ id: 2 }, { id: 3 }],
+      has_more: true,
+      next_before_id: 2
+    });
+
+    const invalidResponse = await fetch(`${baseUrl}/api/chat?character_id=7&before_id=bad`);
+    const invalid = await invalidResponse.json();
+    assert.equal(invalidResponse.status, 400);
+    assert.deepEqual(invalid, { success: false, error: 'before_id 无效' });
+  });
+
+  assert.equal(calls.filter(call => call.sql.includes('FROM messages')).length, 2);
+});
+
 test('GET /api/chat/export returns every current-user message grouped by role instead of browser history', async () => {
   const calls = [];
   const router = createChatRouter({
@@ -726,7 +778,10 @@ test('POST /api/chat includes active memories and anti-roleplay rules in the sys
     assert.equal(response.status, 200);
     assert.equal(payload.success, true);
     assert.equal(upstreamCalls.length, 1);
-    assert.ok(queries.some(sql => sql.includes('FROM memories')));
+    const memoryQuery = queries.find(sql => sql.includes('FROM memories'));
+    assert.ok(memoryQuery);
+    assert.match(memoryQuery, /COALESCE\(review_status, 'active'\) IN \('active', 'important'\)/);
+    assert.match(memoryQuery, /COALESCE\(source_type, 'manual'\) <> 'chat_candidate'/);
 
     const requestBody = JSON.parse(upstreamCalls[0].options.body);
     const systemPrompt = requestBody.messages[0].content;

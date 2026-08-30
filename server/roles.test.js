@@ -172,7 +172,12 @@ test('GET /api/roles/:id/identity-pack exports role identity without credentials
         }
         if (sql.includes('FROM memories')) {
           assert.deepEqual(params, [1, 6]);
-          return [[{ id: 9, content: '喜欢安静', tag: '偏好', category: '生活', memory_type: 'life', source_type: 'chat', source_id: 33, review_status: 'active', confidence: 1, weight: 60, is_important: 0, appointment_at: null, appointment_status: null }]];
+          assert.match(sql, /COALESCE\(review_status, 'active'\) IN \('active', 'important'\)/);
+          assert.match(sql, /COALESCE\(source_type, 'manual'\) <> 'chat_candidate'/);
+          return [[
+            { id: 9, content: '喜欢安静', tag: '偏好', category: '生活', memory_type: 'life', source_type: 'chat', source_id: 33, review_status: 'active', confidence: 1, weight: 60, is_important: 0, appointment_at: null, appointment_status: null },
+            { id: 10, content: '历史自动识别的偏好', tag: '可能记忆', category: '聊天自动识别', memory_type: 'life', source_type: 'chat_candidate', source_id: 34, review_status: 'active', confidence: 0.55, weight: 35, is_important: 0, appointment_at: null, appointment_status: null }
+          ]];
         }
         throw new Error(`Unexpected query: ${sql}`);
       }
@@ -195,6 +200,7 @@ test('GET /api/roles/:id/identity-pack exports role identity without credentials
     assert.deepEqual(payload.item.dynamic_life.templates, [{ category: '日常', scene: '窗边' }]);
     assert.equal(payload.item.dynamic_life.min_interval_hours, 6);
     assert.equal(payload.item.memories[0].source_id, 33);
+    assert.equal(payload.item.memories.length, 1);
     assert.equal(Object.prototype.hasOwnProperty.call(payload.item, 'api_key'), false);
     assert.equal(Object.prototype.hasOwnProperty.call(payload.item, 'chat_credential_id'), false);
   });

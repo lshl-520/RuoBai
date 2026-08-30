@@ -28,6 +28,13 @@ test('character context separates immediate, recent, and confirmed long-term mem
         content: '用户可能喜欢深夜散步',
         memory_type: 'life',
         review_status: 'candidate'
+      },
+      {
+        id: 3,
+        content: '历史自动识别的偏好',
+        memory_type: 'life',
+        review_status: 'active',
+        source_type: 'chat_candidate'
       }
     ],
     recentLifeEvents: [{
@@ -43,6 +50,7 @@ test('character context separates immediate, recent, and confirmed long-term mem
   assert.equal(layers.longTerm.length, 1);
   assert.equal(layers.longTerm[0].content, '用户喜欢猫');
   assert.equal(layers.recentLife.some(item => item.content === '用户可能喜欢深夜散步'), false);
+  assert.equal(layers.recentLife.some(item => item.content === '历史自动识别的偏好'), false);
   assert.equal(layers.recentLife.some(item => item.title === '和小师约好下周看电影'), true);
 });
 
@@ -157,9 +165,13 @@ test('recent life event loading requires live source records and returns role mo
   assert.equal(events[0].character_moment_refs, 'moment:91');
   assert.equal(calls.length, 1);
   assert.match(calls[0].sql, /msg\.is_active = 1/);
+  assert.match(calls[0].sql, /candidate_mem\.source_type = 'chat_candidate'/);
+  assert.match(calls[0].sql, /candidate_mem\.source_id = s\.source_id/);
   assert.match(calls[0].sql, /m\.is_deleted = 0/);
   assert.match(calls[0].sql, /moment_audiences/);
   assert.match(calls[0].sql, /mem\.is_deleted = 0/);
+  assert.match(calls[0].sql, /COALESCE\(mem\.review_status, 'active'\) IN \('active', 'important'\)/);
+  assert.match(calls[0].sql, /COALESCE\(mem\.source_type, 'manual'\) <> 'chat_candidate'/);
   assert.deepEqual(calls[0].params, [19, 19, 53, 8]);
 });
 

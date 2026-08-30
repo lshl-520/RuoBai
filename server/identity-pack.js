@@ -1,3 +1,5 @@
+import { isConfirmedMemory } from './memory-review.js';
+
 const IDENTITY_PACK_VERSION = '1.1.0';
 
 function parseJson(value, fallback = {}) {
@@ -47,7 +49,7 @@ export function buildIdentityPack({ character = {}, runtime = {}, memories = [] 
     },
     relationship: parseJson(runtime.relationship_json || runtime.relationship, {}),
     state: parseJson(runtime.state_json || runtime.state, {}),
-    memories: memories.map(memory => ({
+    memories: memories.filter(isConfirmedMemory).map(memory => ({
       id: memory.id,
       content: memory.content,
       tag: memory.tag,

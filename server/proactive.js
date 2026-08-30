@@ -549,7 +549,8 @@ export function createMysqlProactiveRepository(pool) {
             AND m.appointment_at <= NOW()
             AND (m.created_at IS NULL OR m.created_at <= DATE_SUB(NOW(), INTERVAL ${APPOINTMENT_SOURCE_COOLDOWN_MINUTES} MINUTE))
             AND m.is_deleted = 0
-            AND COALESCE(m.review_status, 'active') <> 'candidate'
+            AND COALESCE(m.review_status, 'active') IN ('active', 'important')
+            AND COALESCE(m.source_type, 'manual') <> 'chat_candidate'
             AND NOT EXISTS (
               SELECT 1
               FROM proactive_events e

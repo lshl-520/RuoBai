@@ -296,7 +296,8 @@ test('automatic moments exclude unconfirmed memory candidates from their context
 
   await service.runScan({ characterId: 61 });
   const memoryQuery = fixture.calls.find(call => call.sql.includes('FROM memories'));
-  assert.match(memoryQuery.sql, /COALESCE\(review_status, 'active'\) <> 'candidate'/);
+  assert.match(memoryQuery.sql, /COALESCE\(review_status, 'active'\) IN \('active', 'important'\)/);
+  assert.match(memoryQuery.sql, /COALESCE\(source_type, 'manual'\) <> 'chat_candidate'/);
 });
 
 test('automatic moments skip a repeated post before image generation or publishing', async () => {

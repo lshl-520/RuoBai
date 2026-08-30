@@ -713,6 +713,8 @@ router.get('/:id/identity-pack', asyncHandler(async (req, res) => {
                review_status, confidence, weight, is_important, appointment_at, appointment_status
         FROM memories
         WHERE user_id = ? AND character_id = ? AND is_deleted = 0
+          AND COALESCE(review_status, 'active') IN ('active', 'important')
+          AND COALESCE(source_type, 'manual') <> 'chat_candidate'
         ORDER BY is_important DESC, weight DESC, created_at DESC, id DESC
       `,
       [req.userId, characterId]

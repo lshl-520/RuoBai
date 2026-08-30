@@ -4,6 +4,13 @@ import { getRequestCharacterId } from './middleware.js';
 import { normalizeLimit, requireCharacterForUser, toBoolean } from './helpers.js';
 import { memoryTypeLabel, normalizeMemoryFields } from './memory-fields.js';
 import { recordLifeEventSource } from './life-events.js';
+import {
+  CHAT_CANDIDATE_SOURCE_TYPE,
+  CHAT_CONFIRMED_SOURCE_TYPE,
+  getEffectiveMemoryReviewStatus,
+  isUnconfirmedChatCandidate,
+  resolveMemoryReviewUpdate,
+} from './memory-review.js';
 
 const router = express.Router();
 
@@ -11,21 +18,26 @@ function getUserId(req) {
   return req.user?.id ?? req.userId ?? null;
 }
 
-function mapMemory(row) {
+export function mapMemory(row) {
   if (!row) {
     return null;
   }
+
+  const requiresConfirmation = isUnconfirmedChatCandidate(row);
+  const rawReviewStatus = String(row.review_status || '').trim().toLowerCase();
 
   return {
     ...row,
     memory_type: row.memory_type || 'life',
     memory_type_label: memoryTypeLabel(row.memory_type || 'life'),
     source_type: row.source_type || 'manual',
-    review_status: row.review_status || 'active',
+    review_status: getEffectiveMemoryReviewStatus(row),
+    requires_confirmation: requiresConfirmation,
+    candidate_origin: requiresConfirmation && rawReviewStatus !== 'candidate' ? 'legacy_auto_detected' : null,
     detected_reason: row.detected_reason || '',
     confidence: Number(row.confidence ?? 1),
     weight: Number(row.weight ?? 50),
-    is_important: Boolean(row.is_important),
+    is_important: requiresConfirmation ? false : Boolean(row.is_important),
     is_deleted: Boolean(row.is_deleted)
   };
 }
@@ -33,14 +45,16 @@ function mapMemory(row) {
 export async function recordConfirmedCandidateLifeEvent(db = pool, {
   userId,
   previousReviewStatus,
+  previousSourceType,
   memory
 } = {}) {
   const sourceId = Number(memory?.source_id);
-  const sourceType = String(memory?.source_type || '').trim();
+  const sourceType = String(previousSourceType || memory?.source_type || '').trim();
   const nextReviewStatus = String(memory?.review_status || '').trim();
   if (previousReviewStatus !== 'candidate'
     || !['active', 'important'].includes(nextReviewStatus)
-    || sourceType !== 'chat_candidate'
+    || sourceType !== CHAT_CANDIDATE_SOURCE_TYPE
+    || String(memory?.source_type || '').trim() !== CHAT_CONFIRMED_SOURCE_TYPE
     || !Number.isFinite(sourceId)
     || sourceId <= 0) {
     return null;
@@ -182,9 +196,7 @@ router.patch('/:id', async (req, res) => {
     const tag = hasTag ? String(req.body.tag || '').trim() : memory.tag;
     const category = hasCategory ? String(req.body.category || '').trim() : memory.category;
     const fields = normalizeMemoryFields(req.body, memory);
-    const reviewStatus = Object.prototype.hasOwnProperty.call(req.body || {}, 'review_status')
-      ? (['candidate', 'active', 'important'].includes(String(req.body.review_status)) ? String(req.body.review_status) : memory.review_status)
-      : (fields.is_important ? 'important' : memory.review_status);
+    const review = resolveMemoryReviewUpdate(memory, req.body || {}, fields);
     const detectedReason = Object.prototype.hasOwnProperty.call(req.body || {}, 'detected_reason')
       ? String(req.body.detected_reason || '').trim().slice(0, 255)
       : memory.detected_reason;
@@ -197,17 +209,19 @@ router.patch('/:id', async (req, res) => {
       `
         UPDATE memories
         SET character_id = ?, content = ?, tag = ?, category = ?, memory_type = ?, occurred_at = ?, weight = ?,
-            appointment_at = ?, appointment_status = ?, is_important = ?, review_status = ?, detected_reason = ?
+            appointment_at = ?, appointment_status = ?, is_important = ?, review_status = ?, source_type = ?, detected_reason = ?
         WHERE id = ? AND user_id = ? AND is_deleted = 0
       `,
       [nextCharacterId, content, tag, category, fields.memory_type, fields.occurred_at, fields.weight,
-        fields.appointment_at, fields.appointment_status, fields.is_important, reviewStatus, detectedReason, memoryId, userId]
+        fields.appointment_at, fields.appointment_status, review.is_important, review.review_status, review.source_type,
+        detectedReason, memoryId, userId]
     );
 
     const updated = await getOwnedMemory(memoryId, userId);
     await recordConfirmedCandidateLifeEvent(pool, {
       userId,
-      previousReviewStatus: memory.review_status,
+      previousReviewStatus: getEffectiveMemoryReviewStatus(memory),
+      previousSourceType: memory.source_type,
       memory: updated
     });
     return res.json({ success: true, data: mapMemory(updated) });
