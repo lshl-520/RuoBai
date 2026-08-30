@@ -558,19 +558,20 @@ export function createChatRouter({
     return supportsMessageInnerOs;
   }
 
-  async function loadRecentMessages(userId, characterId, limit = 20) {
+  async function loadRecentMessages(userId, characterId, limit = 20, beforeId = null) {
     const useIsDeleted = await messagesSupportIsDeleted();
     const useReasoningSummary = await messagesSupportReasoningSummary();
     const useInnerOs = await messagesSupportInnerOs();
+    const useCursor = Number.isInteger(beforeId) && beforeId > 0;
     const [rows] = await pool.query(
       `
         SELECT id, user_id, character_id, role, content${useReasoningSummary ? ', reasoning_summary' : ''}${useInnerOs ? ', inner_os_content, inner_os_source' : ''}, message_type, media_url, is_active, created_at
         FROM messages
-        WHERE user_id = ? AND character_id = ? AND is_active = 1 ${useIsDeleted ? 'AND is_deleted = 0' : ''}
+        WHERE user_id = ? AND character_id = ? AND is_active = 1 ${useIsDeleted ? 'AND is_deleted = 0' : ''} ${useCursor ? 'AND id < ?' : ''}
         ORDER BY id DESC
         LIMIT ?
       `,
-      [userId, characterId, limit]
+      useCursor ? [userId, characterId, beforeId, limit] : [userId, characterId, limit]
     );
 
     return rows.reverse();
@@ -584,7 +585,8 @@ export function createChatRouter({
                occurred_at, appointment_status, weight, created_at
         FROM memories
         WHERE user_id = ? AND character_id = ? AND is_deleted = 0
-          AND COALESCE(review_status, 'active') <> 'candidate'
+          AND COALESCE(review_status, 'active') IN ('active', 'important')
+          AND COALESCE(source_type, 'manual') <> 'chat_candidate'
         ORDER BY is_important DESC, weight DESC, created_at DESC, id DESC
         LIMIT ?
       `,
@@ -976,11 +978,25 @@ export function createChatRouter({
 
       await requireCharacterForUser(req.userId, characterId, pool);
       const limit = normalizeLimit(req.query?.limit, 50, 5000);
-      const messages = await loadRecentMessages(req.userId, characterId, limit);
+      const beforeParam = req.query?.before_id;
+      const beforeId = beforeParam === undefined || beforeParam === ''
+        ? null
+        : parseInteger(beforeParam, null);
+      if (beforeParam !== undefined && beforeParam !== '' && (!Number.isInteger(beforeId) || beforeId < 1)) {
+        return res.status(400).json({ success: false, error: 'before_id 无效' });
+      }
+
+      // Ask for one extra row so the response can tell a chat room whether an
+      // older page exists without a separate count query.
+      const messages = await loadRecentMessages(req.userId, characterId, limit + 1, beforeId);
+      const hasMore = messages.length > limit;
+      const items = hasMore ? messages.slice(1) : messages;
 
       return res.json({
         success: true,
-        items: messages
+        items,
+        has_more: hasMore,
+        next_before_id: hasMore ? items[0]?.id || null : null
       });
     } catch (error) {
       return res.status(mapChatErrorStatus(error)).json({

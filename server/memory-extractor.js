@@ -99,7 +99,7 @@ export async function recordAutoMemoryCandidate(pool, { userId, characterId, mes
 
   try {
     const [existing] = await pool.query(
-      `SELECT id FROM memories WHERE user_id = ? AND character_id = ? AND source_type = 'chat_candidate' AND source_id = ? LIMIT 1`,
+      `SELECT id FROM memories WHERE user_id = ? AND character_id = ? AND source_type IN ('chat_candidate', 'chat_confirmed') AND source_id = ? LIMIT 1`,
       [userId, characterId, messageId],
     );
     if (existing[0]) return null;

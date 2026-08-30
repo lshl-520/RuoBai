@@ -30,12 +30,13 @@ test('confirming a chat candidate adds its memory to the existing chat life even
   const result = await recordConfirmedCandidateLifeEvent(db, {
     userId: 1,
     previousReviewStatus: 'candidate',
+    previousSourceType: 'chat_candidate',
     memory: {
       id: 9,
       character_id: 6,
       content: '我喜欢下班后安静地听歌。',
       memory_type: 'life',
-      source_type: 'chat_candidate',
+      source_type: 'chat_confirmed',
       source_id: 33,
       review_status: 'active'
     }

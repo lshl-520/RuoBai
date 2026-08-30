@@ -23,5 +23,7 @@ test("candidate memories require an explicit confirmation and retain a path to c
   assert.match(memoryScreen, /await refreshEvents\(\);/);
   assert.match(history, /initialQuery = ""/);
   assert.match(history, /useStateH\(Boolean\(initialQuery\)\)/);
-  assert.match(chat, /COALESCE\(review_status, 'active'\) <> 'candidate'/);
+  assert.match(chat, /COALESCE\(review_status, 'active'\) IN \('active', 'important'\)/);
+  assert.match(chat, /COALESCE\(source_type, 'manual'\) <> 'chat_candidate'/);
+  assert.match(memoryScreen, /历史待确认/);
 });

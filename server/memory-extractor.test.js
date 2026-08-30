@@ -54,6 +54,7 @@ test('records personal statements as low-priority candidates without treating li
     userId: 1, characterId: 2, messageId: 5, content: '这条动态我点了赞。'
   }), null);
   assert.ok(calls.some(call => call.sql.includes('review_status')));
+  assert.ok(calls.some(call => call.sql.includes("source_type IN ('chat_candidate', 'chat_confirmed')")));
 });
 
 test('technical project chat is not promoted to a candidate memory', async () => {

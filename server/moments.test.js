@@ -456,6 +456,8 @@ test('POST /api/moments/draft generates a character moment draft without saving 
 
         if (sql.includes('FROM memories')) {
           assert.deepEqual(params, [1, 6, 4]);
+          assert.match(sql, /COALESCE\(review_status, 'active'\) IN \('active', 'important'\)/);
+          assert.match(sql, /COALESCE\(source_type, 'manual'\) <> 'chat_candidate'/);
           return [[
             { tag: 'preference', content: 'She likes tea.' }
           ]];

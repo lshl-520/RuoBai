@@ -1,5 +1,6 @@
 import React from "react";
 import { detectLive2DMode, getLive2DRuntime } from "../lib/live2d.js";
+import { loadLive2DRuntime } from "../lib/live2d-loader.js";
 
 /*
  * The project does not bundle Cubism/Pixi yet. A runtime adapter can be
@@ -7,7 +8,8 @@ import { detectLive2DMode, getLive2DRuntime } from "../lib/live2d.js";
  * exposes mount(container, options), which may resolve to a cleanup function.
  */
 export function Live2DStage({ modelUrl = "", staticSrc = "", fallbackSrc = "", manifest = null, framing = "default", state = null, alt = "角色", runtime = null, className = "" }) {
-  const resolvedRuntime = runtime || getLive2DRuntime();
+  const [lazyRuntime, setLazyRuntime] = React.useState(() => runtime || getLive2DRuntime());
+  const resolvedRuntime = runtime || lazyRuntime || getLive2DRuntime();
   const mode = detectLive2DMode({ modelUrl, staticSrc, runtime: resolvedRuntime });
   const framingKey = typeof framing === "string" ? framing : JSON.stringify(framing || {});
   const [runtimeFailed, setRuntimeFailed] = React.useState(false);
@@ -16,6 +18,19 @@ export function Live2DStage({ modelUrl = "", staticSrc = "", fallbackSrc = "", m
   const stageRef = React.useRef(null);
   const controllerRef = React.useRef(null);
   const stateKey = JSON.stringify(state || {});
+
+  React.useEffect(() => {
+    if (runtime || resolvedRuntime || !modelUrl) return undefined;
+    let active = true;
+    loadLive2DRuntime()
+      .then((nextRuntime) => {
+        if (active) setLazyRuntime(nextRuntime);
+      })
+      .catch(() => {
+        // The static preview remains available when the optional runtime fails.
+      });
+    return () => { active = false; };
+  }, [modelUrl, resolvedRuntime, runtime]);
 
   React.useEffect(() => {
     setRuntimeFailed(false);

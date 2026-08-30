@@ -36,9 +36,16 @@ async function request(path, options = {}) {
   }
 }
 
-export function getMessages(roleId, limit = 50) {
+export function getMessages(roleId, limit = 50, { beforeId = null } = {}) {
+  const query = new URLSearchParams({
+    character_id: String(roleId),
+    limit: String(limit),
+  });
+  if (beforeId !== null && beforeId !== undefined && beforeId !== "") {
+    query.set("before_id", String(beforeId));
+  }
   return request(
-    `/api/chat?character_id=${encodeURIComponent(roleId)}&limit=${encodeURIComponent(limit)}`,
+    `/api/chat?${query.toString()}`,
     { method: "GET" },
   );
 }

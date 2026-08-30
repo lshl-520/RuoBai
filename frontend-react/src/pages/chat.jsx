@@ -18,8 +18,9 @@ import { getProactiveEvents, markProactiveEventRead } from "../lib/proactive.js"
 import { Live2DStage } from "../components/Live2DStage.jsx";
 import { getChatLive2DState } from "../lib/live2d-state.js";
 import { getRoleVisualFrame, getVisualFrameView } from "../lib/visual-frames.js";
+import { CHAT_HISTORY_INITIAL, CHAT_HISTORY_PAGE, getChatHistoryMessageCount, getChatHistoryWindow, getChatRenderKey } from "../lib/chat-history-window.js";
 /* 聊天列表 + 聊天室(沉浸: 常驻立绘随情绪变化 / 全屏立绘 / 语音 / 表情包 / 思考过程 / 搜索) */
-const { useState: useStateC, useRef: useRefC, useEffect: useEffectC } = React;
+const { useState: useStateC, useRef: useRefC, useEffect: useEffectC, useLayoutEffect: useLayoutEffectC } = React;
 
 /* ====== 模型 + 心情展示面板 ====== */
 const THINK_LEVELS = [
@@ -764,7 +765,7 @@ function Typing({ agent }) {
 }
 
 /* ---------------- 聊天陪伴立绘：同一舞台切换半身/全屏 ---------------- */
-function ChatFigure({ agent, figSrc, expanded, live2dState, onOpen, onClose }) {
+function ChatFigure({ agent, figSrc, expanded, live2dState, live2dReady = true, onOpen, onClose }) {
   const viewFrame = getVisualFrameView(agent.visualFrame, expanded ? "fullscreen" : "chat");
   const figureFrameStyle = {
     "--chat-figure-scale": String(viewFrame.zoom),
@@ -793,9 +794,10 @@ function ChatFigure({ agent, figSrc, expanded, live2dState, onOpen, onClose }) {
           }
         }}
       >
+        {/* 历史消息回来前先保留静态预览，避免 Live2D 初始化阻塞聊天室首屏。 */}
         <Live2DStage
           className="chat-live2d-stage"
-          modelUrl={agent.live2dModelUrl}
+          modelUrl={live2dReady ? agent.live2dModelUrl : ""}
           manifest={agent.live2dManifest}
           framing={viewFrame}
           state={live2dState}
@@ -979,6 +981,10 @@ function ChatRoom({ agent, onBack }) {
   const hasEmo = false; // 统一用 portrait_id 那套逻辑，所有角色一视同仁
   const roleId = agent._raw?.id || agent.id;
   const [msgs, setMsgs] = useStateC([]);
+  const [historyWindow, setHistoryWindow] = useStateC(CHAT_HISTORY_INITIAL);
+  const [historyCursor, setHistoryCursor] = useStateC(null);
+  const [historyHasMore, setHistoryHasMore] = useStateC(false);
+  const [historyReady, setHistoryReady] = useStateC(false);
   const [myAvatar, setMyAvatar] = useStateC(DEFAULT_USER_AVATAR);
   const [draft, setDraft] = useStateC("");
   const [typing, setTyping] = useStateC(false);
@@ -1059,6 +1065,11 @@ function ChatRoom({ agent, onBack }) {
   const bigHistoryRef = useRefC(false);
   const sendRef = useRefC(null);
   const failedSendRef = useRefC(failedSend);
+  const olderLoadRef = useRefC(null);
+  const olderLoadingRef = useRefC(false);
+  const skipNextHistoryAutoScrollRef = useRefC(false);
+  const historyRequestTokenRef = useRefC(0);
+  const historyMessageCount = getChatHistoryMessageCount(msgs);
   failedSendRef.current = failedSend;
 
   const resizeDraft = (node) => {
@@ -1081,30 +1092,54 @@ function ChatRoom({ agent, onBack }) {
   /* 加载历史消息 */
   useEffectC(() => {
     let cancelled = false;
+    const requestToken = ++historyRequestTokenRef.current;
+    setHistoryReady(false);
     async function load() {
+      olderLoadingRef.current = false;
+      olderLoadRef.current = null;
+      setHistoryWindow(CHAT_HISTORY_INITIAL);
+      setHistoryCursor(null);
+      setHistoryHasMore(false);
       try {
-        const [data, proactive] = await Promise.all([
-          getMessages(roleId, 80),
+        let [data, proactive] = await Promise.all([
+          getMessages(roleId, CHAT_HISTORY_INITIAL),
           getProactiveEvents({ characterId: roleId, limit: 100 }).catch(() => null),
         ]);
         if (cancelled) return;
+        // A hot-reloaded frontend can briefly meet an older local backend. Keep
+        // its existing 80-message behavior until that backend is restarted.
+        if (!data || Array.isArray(data) || !Object.prototype.hasOwnProperty.call(data, "has_more")) {
+          data = await getMessages(roleId, 80);
+          if (cancelled) return;
+        }
         const items = Array.isArray(data) ? data : (data?.items || []);
+        const nextCursor = Number(data?.next_before_id || items[0]?.id || 0);
+        const hasMore = Boolean(data?.has_more) && Number.isInteger(nextCursor) && nextCursor > 0;
         if (items.length > 0) {
           const converted = items.map(toMsg);
           setMsgs(withTimeDividers(converted));
         } else {
           setMsgs([{ type: "time", text: "今天" }, { who: "her", type: "text", time: "刚刚", text: `你好，我是${agent.name}。` }]);
         }
+        setHistoryCursor(hasMore ? nextCursor : null);
+        setHistoryHasMore(hasMore);
+        setHistoryReady(true);
         const pendingEvents = (proactive?.items || []).filter((item) => item["un" + "read"] && item.id);
         await Promise.all(pendingEvents.map((item) => markProactiveEventRead(item.id).catch(() => null)));
       } catch {
         if (!cancelled) {
           setMsgs([{ type: "time", text: "今天" }, { who: "her", type: "text", time: "刚刚", text: `你好，我是${agent.name}。` }]);
+          setHistoryCursor(null);
+          setHistoryHasMore(false);
+          setHistoryReady(true);
         }
       }
     }
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      if (historyRequestTokenRef.current === requestToken) historyRequestTokenRef.current += 1;
+    };
   }, [roleId]);
 
   const figSrc = hasEmo ? (EMO_SET[emo] || agent.cover) : agent.cover;
@@ -1135,7 +1170,76 @@ function ChatRoom({ agent, onBack }) {
   };
 
   const scroll = () => requestAnimationFrame(() => { const el = areaRef.current; if (el) el.scrollTop = el.scrollHeight; });
-  useEffectC(() => { scroll(); }, [msgs, typing]);
+  useEffectC(() => {
+    if (skipNextHistoryAutoScrollRef.current) {
+      skipNextHistoryAutoScrollRef.current = false;
+      return;
+    }
+    scroll();
+  }, [msgs, typing]);
+
+  useLayoutEffectC(() => {
+    const previous = olderLoadRef.current;
+    if (!previous) return;
+    const el = areaRef.current;
+    if (el) el.scrollTop = el.scrollHeight - previous.scrollHeight + previous.scrollTop;
+    olderLoadRef.current = null;
+    olderLoadingRef.current = false;
+  }, [historyWindow]);
+
+  const loadOlderMessages = async () => {
+    const el = areaRef.current;
+    if (!el || q.trim() || el.scrollTop >= 64 || olderLoadingRef.current) return;
+    olderLoadingRef.current = true;
+    olderLoadRef.current = { scrollHeight: el.scrollHeight, scrollTop: el.scrollTop };
+    if (historyWindow < historyMessageCount) {
+      setHistoryWindow((current) => Math.min(historyMessageCount, current + CHAT_HISTORY_PAGE));
+      return;
+    }
+    if (!historyHasMore || !historyCursor) {
+      olderLoadRef.current = null;
+      olderLoadingRef.current = false;
+      return;
+    }
+
+    const requestToken = historyRequestTokenRef.current;
+    let scheduledRender = false;
+    try {
+      const data = await getMessages(roleId, CHAT_HISTORY_PAGE, { beforeId: historyCursor });
+      if (requestToken !== historyRequestTokenRef.current) return;
+
+      const items = Array.isArray(data) ? data : (data?.items || []);
+      const knownIds = new Set(msgs.filter((message) => message.type !== "time" && message.id).map((message) => message.id));
+      const olderItems = items.map(toMsg).filter((message) => !message.id || !knownIds.has(message.id));
+      const nextCursor = Number(data?.next_before_id || items[0]?.id || 0);
+      const hasMore = Boolean(data?.has_more) && Number.isInteger(nextCursor) && nextCursor > 0;
+      setHistoryCursor(hasMore ? nextCursor : null);
+      setHistoryHasMore(hasMore);
+
+      if (!olderItems.length) return;
+
+      skipNextHistoryAutoScrollRef.current = true;
+      setMsgs((current) => {
+        const currentItems = current.filter((message) => message.type !== "time");
+        const currentIds = new Set(currentItems.filter((message) => message.id).map((message) => message.id));
+        return withTimeDividers([
+          ...olderItems.filter((message) => !message.id || !currentIds.has(message.id)),
+          ...currentItems,
+        ]);
+      });
+      setHistoryWindow((current) => current + olderItems.length);
+      scheduledRender = true;
+    } catch (error) {
+      if (requestToken === historyRequestTokenRef.current) {
+        setChatError(withDiagnosticId("加载更早的聊天记录失败，请稍后再试。", recordDiagnostic({ area: "chat", action: "load-older-history", error })));
+      }
+    } finally {
+      if (!scheduledRender && requestToken === historyRequestTokenRef.current) {
+        olderLoadRef.current = null;
+        olderLoadingRef.current = false;
+      }
+    }
+  };
 
   const now = () => { const n = new Date(); return n.getHours() + ":" + String(n.getMinutes()).padStart(2, "0"); };
 
@@ -1582,13 +1686,15 @@ function ChatRoom({ agent, onBack }) {
     }
   };
 
-  const shown = q.trim() ? msgs.filter((m) => (m.text || "").includes(q.trim())) : msgs;
+  const searched = q.trim() ? msgs.filter((m) => (m.text || "").includes(q.trim())) : null;
+  const shown = q.trim() ? searched : getChatHistoryWindow(msgs, historyWindow);
+  const hasMoreHistory = historyWindow < historyMessageCount || historyHasMore;
   const canSend = Boolean(draft.trim() || atts.length > 0);
 
   return (
     <div className="screen chat-screen anim-screen">
       {/* 常驻立绘 — 当前角色只保留一个舞台，点击后切换为全屏陪伴视图 */}
-      {(showFig || big) && <ChatFigure agent={agent} figSrc={figSrc} expanded={big} live2dState={live2dState} onOpen={() => setBig(true)} onClose={closeBig} />}
+      {(showFig || big) && <ChatFigure agent={agent} figSrc={figSrc} expanded={big} live2dState={live2dState} live2dReady={historyReady} onOpen={() => setBig(true)} onClose={closeBig} />}
 
       <header className="chat-top">
         <button className="ct-back" onClick={onBack} aria-label="返回聊天列表" title="返回聊天列表"><Icon name="back" /></button>
@@ -1624,9 +1730,10 @@ function ChatRoom({ agent, onBack }) {
         </div>
       )}
 
-      <div className="msg-area" ref={areaRef}>
-        {q.trim() && <div className="search-note">找到 {shown.filter((m) => m.type !== "time").length} 条包含"{q.trim()}"的记录</div>}
-        {shown.map((m, i) => (m.type === "time" && q.trim()) ? null : <MemoBubble key={i} m={m} agent={agent} tts={voiceSettings.enabled && !q.trim()} voice={voiceSettings} myAvatar={myAvatar} onDelete={deleteMsg} onOpenImage={setPreviewImage} onRetry={retryMessage} />)}
+      <div className="msg-area" ref={areaRef} onScroll={loadOlderMessages}>
+        {q.trim() && <div className="search-note">找到 {searched.filter((m) => m.type !== "time").length} 条包含"{q.trim()}"的记录</div>}
+        {!q.trim() && hasMoreHistory && <div className="hist-more" role="status">↑ 上滑加载更早的消息<span className="hist-more-s">已显示最近 {Math.min(historyWindow, historyMessageCount)} 条</span></div>}
+        {shown.map((m) => (m.type === "time" && q.trim()) ? null : <MemoBubble key={getChatRenderKey(m)} m={m} agent={agent} tts={voiceSettings.enabled && !q.trim()} voice={voiceSettings} myAvatar={myAvatar} onDelete={deleteMsg} onOpenImage={setPreviewImage} onRetry={retryMessage} />)}
         {typing && !q.trim() && <Typing agent={agent} />}
         {momentNotice && <div className="chat-notice" onClick={() => setMomentNotice("")}>{momentNotice}<span style={{marginLeft:8,opacity:0.6}}>点击关闭</span></div>}
         {chatError && <div className="chat-error" onClick={() => setChatError("")}>{chatError}<span style={{marginLeft:8,opacity:0.6}}>点击关闭</span></div>}
