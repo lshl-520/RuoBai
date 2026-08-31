@@ -1,6 +1,8 @@
 import React from "react";
-import { detectLive2DMode, getLive2DRuntime } from "../lib/live2d.js";
+import { detectLive2DMode, getLive2DRuntime, runWithTimeout } from "../lib/live2d.js";
 import { loadLive2DRuntime } from "../lib/live2d-loader.js";
+
+const LIVE2D_MOUNT_TIMEOUT_MS = 12000;
 
 /*
  * The project does not bundle Cubism/Pixi yet. A runtime adapter can be
@@ -42,8 +44,10 @@ export function Live2DStage({ modelUrl = "", staticSrc = "", fallbackSrc = "", m
     if (mode !== "live2d" || runtimeFailed || !resolvedRuntime || !stageRef.current) return undefined;
     let active = true;
     let cleanup = null;
-    Promise.resolve()
-      .then(() => resolvedRuntime.mount(stageRef.current, { modelUrl, manifest, framing, state, alt }))
+    runWithTimeout(
+      () => resolvedRuntime.mount(stageRef.current, { modelUrl, manifest, framing, state, alt }),
+      LIVE2D_MOUNT_TIMEOUT_MS,
+    )
       .then((result) => {
         if (!active) {
           if (typeof result === "function") result();
