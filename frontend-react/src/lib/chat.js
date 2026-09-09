@@ -10,6 +10,25 @@ async function parseJson(response) {
 
 import { recordDiagnostic } from "./diagnostics.js";
 
+// 网络半断时浏览器不会自动结束 fetch，手机端就会一直显示“正在回复”。
+// 给普通请求和流式回复设上限，确保 UI 能回到可重试状态。
+const CHAT_REQUEST_TIMEOUT_MS = 45_000;
+const CHAT_STREAM_IDLE_TIMEOUT_MS = 45_000;
+
+function requestTimeoutError(stream = false) {
+  return new Error(stream
+    ? "聊天渠道等待太久没有回应，已自动结束这轮，请稍后重试。"
+    : "聊天服务等待太久没有回应，请稍后重试。");
+}
+
+export function friendlyChatNetworkError(error) {
+  const message = String(error instanceof Error ? error.message : error || "").trim();
+  if (/failed to fetch|networkerror|load failed|network request failed/i.test(message)) {
+    return "网络连接刚刚断开，消息没有发完。请检查网络后重新发送。";
+  }
+  return message || "发送失败，请检查后端和模型配置。";
+}
+
 function diagnosticAction(path) {
   if (path.includes("upload-image")) return "upload-image";
   if (path.includes("upload-voice")) return "upload-voice";
@@ -19,10 +38,13 @@ function diagnosticAction(path) {
 }
 
 async function request(path, options = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), CHAT_REQUEST_TIMEOUT_MS);
   try {
     const response = await fetch(path, {
       credentials: "same-origin",
       ...options,
+      signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
         ...(options.headers ?? {}),
@@ -32,7 +54,10 @@ async function request(path, options = {}) {
     return parseJson(response);
   } catch (error) {
     recordDiagnostic({ area: "chat", action: diagnosticAction(path), error });
+    if (error?.name === "AbortError") throw requestTimeoutError();
     throw error;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -181,6 +206,13 @@ export function friendlyStreamHttpError(status) {
 
 export async function streamAssistantReply(roleId, payload, handlers = {}) {
   let response;
+  const controller = new AbortController();
+  let idleTimeout;
+  const armIdleTimeout = () => {
+    clearTimeout(idleTimeout);
+    idleTimeout = setTimeout(() => controller.abort(), CHAT_STREAM_IDLE_TIMEOUT_MS);
+  };
+  armIdleTimeout();
   try {
     response = await fetch("/api/chat", {
     method: "POST",
@@ -189,6 +221,7 @@ export async function streamAssistantReply(roleId, payload, handlers = {}) {
       "Content-Type": "application/json",
       Accept: "text/event-stream",
     },
+    signal: controller.signal,
     body: JSON.stringify({
       character_id: roleId,
       skip_server_persistence: true,
@@ -197,10 +230,13 @@ export async function streamAssistantReply(roleId, payload, handlers = {}) {
     });
   } catch (error) {
     recordDiagnostic({ area: "chat", action: "stream-reply", error });
+    clearTimeout(idleTimeout);
+    if (error?.name === "AbortError") throw requestTimeoutError(true);
     throw error;
   }
 
   if (!response.ok || !response.body) {
+    clearTimeout(idleTimeout);
     recordDiagnostic({ area: "chat", action: "stream-reply", status: response.status, error: `HTTP ${response.status}` });
     const data = await parseJson(response).catch(() => null);
     throw new Error(
@@ -213,7 +249,17 @@ export async function streamAssistantReply(roleId, payload, handlers = {}) {
   let buffer = "";
 
   while (true) {
-    const { value, done } = await reader.read();
+    let result;
+    try {
+      result = await reader.read();
+    } catch (error) {
+      clearTimeout(idleTimeout);
+      recordDiagnostic({ area: "chat", action: "stream-reply", error });
+      if (error?.name === "AbortError") throw requestTimeoutError(true);
+      throw error;
+    }
+    armIdleTimeout();
+    const { value, done } = result;
     if (done) {
       break;
     }
@@ -271,4 +317,5 @@ export async function streamAssistantReply(roleId, payload, handlers = {}) {
       markerIndex = buffer.indexOf("\n\n");
     }
   }
+  clearTimeout(idleTimeout);
 }

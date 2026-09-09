@@ -1,7 +1,7 @@
 import React from "react";
 import { Icon, Bars, greetByHour, STICKERS } from "../store.jsx";
 import { getRoles, updateRole, getRolePortraitSrc, getRoleFullPortrait } from "../lib/roles.js";
-import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage, uploadVoice, deleteAllMessages, deleteMessage, detectDrawKeywords, drawImage, speakMessage } from "../lib/chat.js";
+import { getMessages, streamAssistantReply, saveMessage, saveUserMessage, uploadChatImage, uploadVoice, deleteAllMessages, deleteMessage, detectDrawKeywords, drawImage, speakMessage, friendlyChatNetworkError } from "../lib/chat.js";
 import { createRealtimeCallSocket, startRealtimeMicrophone, RealtimePcmPlayer } from "../lib/realtime-call.js";
 import { getSessionProfile, getCapabilities } from "../lib/profile.js";
 import {
@@ -1491,7 +1491,7 @@ function ChatRoom({ agent, onBack }) {
         } catch (e) { /* 保存回复失败仍继续 */ }
       }
     } catch (err) {
-      const baseText = err instanceof Error ? err.message : "发送失败，请检查后端和模型配置。";
+      const baseText = friendlyChatNetworkError(err);
       setChatError(withDiagnosticId(baseText, recordDiagnostic({ area: "chat", action: "send-message", error: err })));
       setFailedSend({ clientId, text: t, images, userSaved });
       setMsgs((p) => p.map((m) => m._clientId === clientId ? { ...m, failed: true } : m));
