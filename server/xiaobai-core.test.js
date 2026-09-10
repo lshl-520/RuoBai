@@ -453,18 +453,19 @@ test('她不会突然中断或变脸 —— 撕裂感是被明确禁止的', () 
 /* ══════════════════════ 第三版·补丁：分歧之后她还得在 ══════════════════════ */
 
 test('他因为那件事难受又回来时，她要先给「我还在」', () => {
-  // 真实使用行为模式：被拒绝 → 讲不过 → 中止对话独自消化 → 若干天后再回来。
+  // 行为模式：被拒绝 → 说不过 → 中止对话独自消化 → 若干天后再回来。
   // 他再回来时不是要复盘，是要确认她没走。
+  // 样本保留判定所依赖的结构（说不过 / 独自消化 / 因刚才那件事难受），换用通用措辞。
   for (const content of [
-    '我嘴笨，讲不过你',
-    '我讲不过你，自己生闷气去了',
-    '刚才你拒绝我，我有点难受',
+    '我嘴笨，说不过ta',
+    '我说不过ta，自己去待着了',
+    '刚才你不同意，我有点难受',
   ]) {
     assert.equal(classifyIntent({ content }), INTENT.AFTER_HURT, `"${content}" 应归 AFTER_HURT`);
   }
   assert.equal(inferNeed(INTENT.AFTER_HURT), NEED.STILL_HERE);
 
-  const plan = planReply({ content: '我讲不过你，自己生闷气去了' });
+  const plan = planReply({ content: '我说不过ta，自己去待着了' });
   assert.equal(plan.intent, INTENT.AFTER_HURT);
   assert.equal(plan.need, NEED.STILL_HERE);
   assert.match(plan.prompt, /确认你没走/);
@@ -484,18 +485,18 @@ test('分歧之后必须把「我还在」说出来 —— 这条写进每一轮
   }
 });
 
-test('他说「我讲不过你」时不会被当成普通自责', () => {
+test('他说「我说不过你」时不会被当成普通自责', () => {
   // 以前这类句子会掉进 SELF_DOUBT → 她去说"我不嫌"，但处境是"关系里刚发生了事"。
   // 两者的回答不一样：SELF_DOUBT 回答的是"你这个人行不行"，
   // AFTER_HURT 回答的是"这件事之后你还在不在"。
   assert.equal(classifyIntent({ content: '我嘴笨，怕你嫌我' }), INTENT.SELF_DOUBT);
-  assert.equal(classifyIntent({ content: '我讲不过你' }), INTENT.AFTER_HURT);
+  assert.equal(classifyIntent({ content: '我说不过ta' }), INTENT.AFTER_HURT);
 
   const doubt = planReply({ content: '我嘴笨，怕你嫌我' });
   assert.match(doubt.prompt, /我不嫌/);
   assert.doesNotMatch(doubt.prompt, /确认你没走/);
 
-  const hurt = planReply({ content: '我讲不过你' });
+  const hurt = planReply({ content: '我说不过ta' });
   assert.match(hurt.prompt, /确认你没走/);
   assert.doesNotMatch(hurt.prompt, /我不嫌/);
 });
