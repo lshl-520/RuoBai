@@ -15,7 +15,8 @@ import { extractVideoShareContext, buildVideoShareHint } from './link-parser.js'
 import { getCachedCityWeatherText, getCityWeatherText } from './weather.js';
 import { detectDrawIntent, generateImage } from './image-gen.js';
 import { guessModelCapabilities } from './model-capabilities.js';
-import { buildPersonaRuntimePrompt, loadPersonaRuntime, recordPersonaRuntimeTurn } from './persona-runtime.js';
+import { buildPersonaRuntimePrompt, loadPersonaRuntime, recordPersonaRuntimeTurn, loadXiaobaiState, recordXiaobaiState } from './persona-runtime.js';
+import { buildXiaobaiCorePrompt, deriveNextXiaobaiState } from './xiaobai-core.js';
 import {
   buildCharacterContextPrompt,
   buildCharacterContextSnapshot,
@@ -364,6 +365,39 @@ export function buildMemoryPromptBlock(memories = []) {
   return `\n\nLong-term memories about this character:\n${lines.join('\n')}`;
 }
 
+/**
+ * 从角色运行态里提炼一份「用户当下状态」提示，供小白 Core 决定语气。
+ *
+ * 只读取已经算好的状态，不额外查询数据库；拿不到就返回 null，
+ * 让 Core 走默认分支，保证聊天路径永不因它失败。
+ */
+export function buildUserStateHint(personaRuntime, content = '') {
+  try {
+    const state = personaRuntime?.state || {};
+    const mood = String(state.mode || '').trim();
+    const energy = Number(state.energy);
+    const concern = Number(state.concern);
+    const text = String(content || '');
+
+    // 只做轻量的语义映射：把运行态模式翻译成 Core 能理解的中文情绪
+    const moodMap = {
+      concerned: '低落、需要被照顾',
+      sleepy: '疲惫、可能又失眠了',
+      gentle: '想被温柔对待',
+      playful: '想玩闹一下',
+      bright: '心情不错',
+      calm: '平稳',
+    };
+    const hint = { mood: moodMap[mood] || '', energy: Number.isFinite(energy) ? energy : undefined };
+    if (Number.isFinite(concern) && concern >= 60) hint.mood = hint.mood || '情绪需要关注';
+    if (!hint.mood && !Number.isFinite(hint.energy)) return null;
+    void text;
+    return hint;
+  } catch {
+    return null;
+  }
+}
+
 async function hasMessageIsDeletedColumn(queryable) {
   const [rows] = await queryable.query(
     `
@@ -671,6 +705,16 @@ export function createChatRouter({
       characterId,
       content,
       messageType
+    });
+    // 小白自己的状态（心情 / 惦记的事 / 上一轮话题）另存一处，
+    // 与上面的语气参数各走各的，互不覆盖。
+    await recordXiaobaiState(pool, {
+      userId,
+      characterId,
+      xiaobaiState: deriveNextXiaobaiState(
+        await loadXiaobaiState(pool, { userId, characterId }),
+        { content, messageType }
+      )
     });
     await recordExplicitChatMemory(pool, {
       userId,
@@ -1411,13 +1455,14 @@ export function createChatRouter({
         });
       }
 
-      const [[userRow], [recent, activeMemories, personaRuntime, recentLifeEvents]] = await Promise.all([
+      const [[userRow], [recent, activeMemories, personaRuntime, recentLifeEvents, xiaobaiState]] = await Promise.all([
         pool.query('SELECT city FROM users WHERE id = ? LIMIT 1', [req.userId]),
         Promise.all([
           loadRecentMessages(req.userId, characterId, 20),
           loadActiveMemories(req.userId, characterId),
           loadPersonaRuntime(pool, { userId: req.userId, characterId }),
-          loadRecentLifeEvents(pool, { userId: req.userId, characterId, limit: 8 })
+          loadRecentLifeEvents(pool, { userId: req.userId, characterId, limit: 8 }),
+          loadXiaobaiState(pool, { userId: req.userId, characterId })
         ])
       ]);
       contextReadyAt = Date.now();
@@ -1455,8 +1500,14 @@ export function createChatRouter({
         : '';
 
       const personaRuntimeBlock = `\n\n${buildPersonaRuntimePrompt(personaRuntime, { content, messageType })}`;
+      const xiaobaiCoreBlock = `\n\n${buildXiaobaiCorePrompt({
+        content,
+        messageType,
+        userState: buildUserStateHint(personaRuntime, content),
+        xiaobaiState,
+      })}`;
       const characterContextBlock = `\n\n${buildCharacterContextPrompt(contextSnapshot, { consumer: 'chat' })}`;
-      messages.push({ role: 'system', content: buildSystemPrompt(character) + personaRuntimeBlock + characterContextBlock + buildMemoryPromptBlock(activeMemories) + vectorMemoryBlock + weatherBlock + downgradeHint });
+      messages.push({ role: 'system', content: buildSystemPrompt(character) + personaRuntimeBlock + xiaobaiCoreBlock + characterContextBlock + buildMemoryPromptBlock(activeMemories) + vectorMemoryBlock + weatherBlock + downgradeHint });
 
       messages.push(
         ...recent
