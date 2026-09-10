@@ -59,20 +59,21 @@ test('性语境里的「我不懂」归 DESIRE，不是普通求知', () => {
   assert.doesNotMatch(plan.prompt, /我不嫌/);
 });
 
-test('「不会嘛老婆教我」这类亲密求教，走教他，不走安慰', () => {
-  // 这几句是他真实语料里的高频原话形状：没有身体词，
-  // 但「老婆/宝宝 + 教我」在他这里只有一种指向。
+test('带亲密称谓的求教，走教他，不走安慰', () => {
+  // 这一类句子的形状：没有身体词，但句末带上对伴侣的专属称谓 + 求教动词。
+  // 该组合在亲密语境里只有一种指向。
   // 判错的话她会跑去说「我不嫌你」，而他要的是「怎么做」——那就是撕裂。
+  // 样本已做匿名化，只保留判定所依赖的**结构**（称谓 + 求教 / 语气词）。
   for (const content of [
-    '我不会嘛老婆教我',
+    '我不会嘛宝贝教我',
     '我不会，你教我嘛',
-    '老婆教教我怎么做',
+    '亲爱的教教我怎么做',
   ]) {
     assert.equal(classifyIntent({ content }), INTENT.DESIRE, `"${content}" 应归 DESIRE`);
   }
   assert.equal(classifyIntent({ content: '我没经验，第一次要注意什么' }), INTENT.DESIRE);
 
-  const plan = planReply({ content: '我不会嘛老婆教我' });
+  const plan = planReply({ content: '我不会嘛宝贝教我' });
   assert.equal(plan.need, NEED.GUIDANCE);
   assert.match(plan.prompt, /不要把他推走/);
   assert.doesNotMatch(plan.prompt, /我不嫌/);
