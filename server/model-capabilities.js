@@ -1,3 +1,11 @@
+function isDeepSeekFlashVision(name) {
+  // DeepSeek V4.1 Flash (2026-09-10) has native multimodal vision.
+  // Official id is deepseek-flash; older flash aliases may still be routed there.
+  return name === 'deepseek-flash'
+    || name.startsWith('deepseek-flash-')
+    || /^deepseek-v4(?:\.1)?-flash(?:$|[-._])/i.test(name);
+}
+
 export function guessModelCapabilities(modelId) {
   const name = String(modelId || '').trim().toLowerCase();
   const result = new Set();
@@ -27,7 +35,8 @@ export function guessModelCapabilities(modelId) {
     name.includes('claude-opus') ||
     name.includes('claude-sonnet') ||
     name.includes('claude-haiku') ||
-    /^grok-4\.5(?:$|[-.])/i.test(name)
+    /^grok-4\.5(?:$|[-.])/i.test(name) ||
+    isDeepSeekFlashVision(name)
   ) {
     result.add('vision');
   }

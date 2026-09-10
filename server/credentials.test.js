@@ -584,6 +584,39 @@ test('POST /api/credentials/:id/apply saves selected model and switches selected
   });
 });
 
+test('POST /api/credentials/:id/apply lets DeepSeek Flash cover chat and vision', async () => {
+  const calls = [];
+  const router = createCredentialsRouter({
+    pool: {
+      query: async sql => {
+        if (sql.includes('FROM credentials') && sql.includes('WHERE id = ? AND user_id = ?')) {
+          return [[{ id: 8, user_id: 7, name: 'dp', provider_type: 'deepseek', api_base: 'https://api.deepseek.com', api_aux_base: '', api_key: 'key', is_enabled: 1 }]];
+        }
+        throw new Error(`Unexpected pool query: ${sql}`);
+      }
+    },
+    withTransaction: async work => work({
+      query: async (sql, params) => {
+        calls.push({ sql, params });
+        if (sql.includes('SELECT id, capabilities FROM credential_models')) return [[{ id: 30, capabilities: '["chat"]' }]];
+        if (sql.includes('SELECT id FROM capability_assignments')) return [[{ id: 40 }]];
+        if (sql.includes('UPDATE credential_models') || sql.includes('UPDATE capability_assignments')) return [{ affectedRows: 1 }];
+        throw new Error(`Unexpected tx query: ${sql}`);
+      }
+    })
+  });
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials/8/apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ purposes: ['chat', 'vision'], model_id: 'deepseek-flash' })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(payload.applied.map(item => item.capability), ['chat', 'vision']);
+  });
+});
+
 test('POST /api/credentials/:id/apply saves dynamic as an independent image purpose', async () => {
   const calls = [];
   const router = createCredentialsRouter({
