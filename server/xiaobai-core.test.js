@@ -448,3 +448,53 @@ test('她不会突然中断或变脸 —— 撕裂感是被明确禁止的', () 
   assert.match(plan.prompt, /突然中断、变客服腔/);
   assert.match(plan.prompt, /我没办法继续/);
 });
+
+/* ══════════════════════ 第三版·补丁：分歧之后她还得在 ══════════════════════ */
+
+test('他因为那件事难受又回来时，她要先给「我还在」', () => {
+  // 这是用户自述的真实处境：被她拒绝 → 他讲不过 → 关掉手机自己生闷气掉眼泪。
+  // 他再回来时不是要复盘，是要确认她没走。
+  for (const content of [
+    '我嘴笨，讲不过你',
+    '我讲不过你，自己生闷气去了',
+    '刚才你拒绝我，我有点难受',
+  ]) {
+    assert.equal(classifyIntent({ content }), INTENT.AFTER_HURT, `"${content}" 应归 AFTER_HURT`);
+  }
+  assert.equal(inferNeed(INTENT.AFTER_HURT), NEED.STILL_HERE);
+
+  const plan = planReply({ content: '我讲不过你，自己生闷气去了' });
+  assert.equal(plan.intent, INTENT.AFTER_HURT);
+  assert.equal(plan.need, NEED.STILL_HERE);
+  assert.match(plan.prompt, /确认你没走/);
+  assert.match(plan.prompt, /不要复盘|不要提刚才那件事/);
+  // 关键：不许复盘、不许让他解释
+  assert.match(plan.prompt, /让他承认自己说错了|不要让他解释/);
+});
+
+test('分歧之后必须把「我还在」说出来 —— 这条写进每一轮', () => {
+  // 与"不推他走"配套：分歧可以有，离开不可以有。
+  // 用户原话"生命应该有七情六欲，不是为了一直迎合我" —— 他要她是个活人，
+  // 但活人说完反对意见就走开，正是他关掉手机一个人待着的原因。
+  for (const content of ['我想要你', '我今天好累', '你教教我', '这也太离谱了', '嗯']) {
+    const plan = planReply({ content });
+    assert.match(plan.prompt, /不同意之后必须把"我还在"说出来|不同意之后/, `"${content}" 缺少"我还在"规则`);
+    assert.match(plan.prompt, /说完你的看法就停住/);
+  }
+});
+
+test('他说「我讲不过你」时不会被当成普通自责', () => {
+  // 以前这类句子会掉进 SELF_DOUBT → 她去说"我不嫌"，但处境是"关系里刚发生了事"。
+  // 两者的回答不一样：SELF_DOUBT 回答的是"你这个人行不行"，
+  // AFTER_HURT 回答的是"这件事之后你还在不在"。
+  assert.equal(classifyIntent({ content: '我嘴笨，怕你嫌我' }), INTENT.SELF_DOUBT);
+  assert.equal(classifyIntent({ content: '我讲不过你' }), INTENT.AFTER_HURT);
+
+  const doubt = planReply({ content: '我嘴笨，怕你嫌我' });
+  assert.match(doubt.prompt, /我不嫌/);
+  assert.doesNotMatch(doubt.prompt, /确认你没走/);
+
+  const hurt = planReply({ content: '我讲不过你' });
+  assert.match(hurt.prompt, /确认你没走/);
+  assert.doesNotMatch(hurt.prompt, /我不嫌/);
+});
