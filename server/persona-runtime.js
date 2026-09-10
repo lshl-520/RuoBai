@@ -132,6 +132,61 @@ export async function loadPersonaRuntime(pool, { userId, characterId } = {}) {
   }
 }
 
+/**
+ * 读取「小白自己的状态」（心情 / 惦记的事 / 上一轮话题）。
+ *
+ * 复用同一张 character_runtime_states 表，存在 state_json 的 `xiaobai` 键下，
+ * 不新增数据库字段 —— 老库不需要迁移也能跑。
+ * 拿不到就返回默认状态，聊天路径永不因它失败。
+ */
+export async function loadXiaobaiState(pool, { userId, characterId } = {}) {
+  try {
+    const [rows] = await pool.query(
+      `SELECT state_json FROM character_runtime_states WHERE user_id = ? AND character_id = ? LIMIT 1`,
+      [userId, characterId],
+    );
+    const parsed = parseJson(rows[0]?.state_json);
+    return parsed && typeof parsed.xiaobai === 'object' && parsed.xiaobai !== null ? parsed.xiaobai : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 把小白的新状态写回去。
+ *
+ * 用 JSON_SET 只改 `$.xiaobai` 这一个键，绝不覆盖 personaRuntime 自己的
+ * mode/warmth/energy/concern —— 两套状态各自演化，互不踩踏。
+ */
+export async function recordXiaobaiState(pool, { userId, characterId, xiaobaiState } = {}) {
+  if (!xiaobaiState || typeof xiaobaiState !== 'object') return null;
+  try {
+    await pool.query(
+      `
+        INSERT INTO character_runtime_states (user_id, character_id, state_json, relationship_json, updated_at)
+        VALUES (?, ?, JSON_OBJECT('xiaobai', CAST(? AS JSON)), JSON_OBJECT(), NOW())
+        ON DUPLICATE KEY UPDATE
+          state_json = JSON_SET(
+            CASE WHEN JSON_TYPE(JSON_EXTRACT(state_json, '$.xiaobai')) = 'OBJECT'
+                 THEN state_json ELSE JSON_SET(state_json, '$.xiaobai', JSON_OBJECT()) END,
+            '$.xiaobai',
+            CAST(? AS JSON)
+          ),
+          updated_at = NOW()
+      `,
+      [
+        userId,
+        characterId,
+        JSON.stringify(xiaobaiState),
+        JSON.stringify(xiaobaiState),
+      ],
+    );
+  } catch {
+    // 老库或权限不足时静默跳过：状态记不住，但聊天必须还能用。
+  }
+  return xiaobaiState;
+}
+
 export async function recordPersonaRuntimeTurn(pool, { userId, characterId, content, messageType } = {}) {
   const current = await loadPersonaRuntime(pool, { userId, characterId });
   const next = deriveNextPersonaRuntime(current, { content, messageType });

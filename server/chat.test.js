@@ -390,7 +390,15 @@ test('POST /api/chat synchronizes runtime, memory, and life event for a user mes
 
     assert.equal(response.status, 201);
     assert.equal(payload.success, true);
-    assert.deepEqual(sideEffects.sort(), ['life_event', 'life_event_source', 'memory', 'runtime']);
+    // runtime 出现两次是预期行为：一次写语气参数（persona runtime），
+    // 一次写小白自己的状态（心情 / 惦记的事，存在 state_json.xiaobai 下）。
+    // 两者各自演化，互不覆盖。
+    const runtimeWrites = sideEffects.filter(item => item === 'runtime').length;
+    assert.equal(runtimeWrites, 2);
+    assert.deepEqual(
+      [...new Set(sideEffects)].sort(),
+      ['life_event', 'life_event_source', 'memory', 'runtime']
+    );
   });
 });
 
