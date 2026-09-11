@@ -1,0 +1,28 @@
+root = true
+
+# 统一缩进与换行，避免不同工具/系统把同一文件改成"全文修改"
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# 需要保留行尾空白的文件
+[*.md]
+trim_trailing_whitespace = false
+
+# Windows 脚本保持 CRLF（否则 .bat 可能无法执行）
+[*.{bat,cmd}]
+end_of_line = crlf
+
+[*.{yml,yaml}]
+indent_size = 2
+
+[*.py]
+indent_size = 4
+
+# 依赖锁文件与快照不做格式改动
+[package-lock.json]
+insert_final_newline = false

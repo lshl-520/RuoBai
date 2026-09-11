@@ -107,6 +107,12 @@ server/user_assets/
 # 手动备份只保留在本地磁盘，不进入公开仓库
 _manual_backups/
 
+# 运行日志与临时验证脚本不进仓库（本地保留即可）
+logs/*
+!logs/.gitkeep
+verify_*.js
+verify_*.mjs
+
 # 内部接手文档、旧工单、体检报告和私人项目手记只留本地
 CLAUDE.md
 AGENTS.md
