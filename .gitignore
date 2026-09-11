@@ -95,6 +95,14 @@ ui-v2-prototypes/
 # 本地运行时用户数据，含头像、聊天图片、角色立绘、语音缓存等隐私内容
 user_assets/*
 !user_assets/.gitkeep
+# 注意：上面那条只匹配仓库根目录的 user_assets/。
+# 后端工作目录是 server/，所以 server/user_assets/ 必须单独兜住 ——
+# 否则放在那里的私有配置（含部署方自己的称呼、关系设置）会被 git 收走。
+server/user_assets/
+!server/user_assets/.gitkeep
+# 兜底：任何层级的私有配置文件都不许进仓库
+**/xiaobai-private.json
+**/*-private.json
 
 # 手动备份只保留在本地磁盘，不进入公开仓库
 _manual_backups/

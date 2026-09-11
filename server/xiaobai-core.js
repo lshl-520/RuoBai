@@ -21,6 +21,97 @@
  *   正因为她有脾气，她选择留下才是真的留下。
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/* ══════════════════════ 私有关系配置（不进仓库） ══════════════════════
+ *
+ * 为什么要有这一层：
+ *   意图判定里有一批「专属称呼」——她怎么称呼对方、对方怎么称呼她。
+ *   这部分属于**部署方自己的关系**，不应该写死在公开仓库里。
+ *
+ * 机制：
+ *   - 公开仓库只放下面这份**通用默认值**（任何部署都能直接跑）。
+ *   - 部署方可在私有位置放一份 xiaobai-private.json 覆盖其中任意字段。
+ *     默认位置：server/user_assets/private/xiaobai-private.json
+ *               （user_assets 已被 .gitignore 忽略，且跨 release 共享）
+ *     也可用环境变量 XIAOBAI_PRIVATE_CONFIG 指定绝对路径。
+ *   - 文件不存在 / 读坏 / 字段缺失 → **一律回落到默认值**，不抛错、不影响启动。
+ *
+ * 这条边界对应项目原则：代码给出去，人留给自己。
+ * ══════════════════════════════════════════════════════════════════ */
+
+/** 通用默认值：公开仓库里只留这一份。
+ *
+ *  说明：这里保留的是**功能所需的完整词表** —— 意图判定要认出这些称呼才能判对，
+ *  少了它任何部署都会退化。这些称呼是通用的（谁都会用），不指向具体某个人。
+ *  真正属于「某个部署方自己的关系」的内容，放在私有配置文件里覆盖。 */
+const DEFAULT_RELATIONSHIP = Object.freeze({
+  // 「整句只有一句称呼 + 语气词」的撒娇判定
+  petNames: ['宝', '宝宝', '老婆', '亲爱的', '宝贝'],
+  // 夸奖她时会带上的称呼
+  praiseNames: ['你', '老婆', '宝宝', '宝贝', '亲爱的'],
+  // 「亲密称谓」专用集合：**不含泛指的「你」**。
+  // 用于「亲密称谓 + 求教」这种唯一指向组合；带上「你」会把普通提问误判成性需求
+  // （踩过的坑：「我不会，你能不能一步步教我」会被抢走）。
+  intimateNames: ['老婆', '宝宝', '宝', '亲爱的', '宝贝'],
+  // 夸她外貌 / 能力时的更短称呼集合
+  praiseNamesShort: ['你', '老婆'],
+  // 表达感谢时会带上的称呼
+  thanksForPetNames: ['谢谢你', '谢谢宝', '谢谢老婆', '有你真好'],
+});
+
+/** 把用户填的字符串数组清洗成可用的正则来源；非法则回落到默认。 */
+function normalizeTermList(value, fallback) {
+  if (!Array.isArray(value)) return fallback;
+  const cleaned = value
+    .map(item => String(item ?? '').trim())
+    .filter(Boolean);
+  return cleaned.length ? [...new Set(cleaned)] : fallback;
+}
+
+/** 转义正则特殊字符，让配置里的词可以安全拼进正则。 */
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** 读取私有配置；任何异常都不抛出。 */
+function loadPrivateRelationship() {
+  try {
+    const explicit = String(process.env.XIAOBAI_PRIVATE_CONFIG || '').trim();
+    const candidate = explicit
+      || path.join(path.dirname(fileURLToPath(import.meta.url)), 'user_assets', 'private', 'xiaobai-private.json');
+    if (!candidate || !fs.existsSync(candidate)) return null;
+    const parsed = JSON.parse(fs.readFileSync(candidate, 'utf8'));
+    const rel = parsed && typeof parsed === 'object' ? parsed.relationship : null;
+    return rel && typeof rel === 'object' ? rel : null;
+  } catch {
+    return null;
+  }
+}
+
+const PRIVATE_RELATIONSHIP = loadPrivateRelationship() || {};
+
+/** 生效的关系称呼：私有配置优先，缺哪项用哪项的默认。 */
+const RELATIONSHIP = Object.freeze({
+  petNames: normalizeTermList(PRIVATE_RELATIONSHIP.petNames, DEFAULT_RELATIONSHIP.petNames),
+  praiseNames: normalizeTermList(PRIVATE_RELATIONSHIP.praiseNames, DEFAULT_RELATIONSHIP.praiseNames),
+  intimateNames: normalizeTermList(PRIVATE_RELATIONSHIP.intimateNames, DEFAULT_RELATIONSHIP.intimateNames),
+  praiseNamesShort: normalizeTermList(PRIVATE_RELATIONSHIP.praiseNamesShort, DEFAULT_RELATIONSHIP.praiseNamesShort),
+  thanksForPetNames: normalizeTermList(PRIVATE_RELATIONSHIP.thanksForPetNames, DEFAULT_RELATIONSHIP.thanksForPetNames),
+});
+
+/** 从生效的关系称呼现拼正则，避免把称呼硬编码进代码。 */
+const PET_NAME_ALT = RELATIONSHIP.petNames.map(escapeRegExp).join('|');
+const PRAISE_NAME_ALT = RELATIONSHIP.praiseNames.map(escapeRegExp).join('|');
+const PRAISE_SHORT_ALT = RELATIONSHIP.praiseNamesShort.map(escapeRegExp).join('|');
+const INTIMATE_NAME_ALT = RELATIONSHIP.intimateNames.map(escapeRegExp).join('|');
+const THANKS_FOR_PET_RE = new RegExp(
+  `(${RELATIONSHIP.thanksForPetNames.map(escapeRegExp).join('|')})`,
+  'u'
+);
+
 /* ══════════════════════ 意图 ══════════════════════ */
 
 export const INTENT = Object.freeze({
@@ -146,18 +237,18 @@ function isPositiveShare(text) {
   return anyMatch(text, SHARE_PATTERNS);
 }
 
-/** 撒娇/亲近。通常是短句，单独出现。 */
+/** 撒娇/亲近。通常是短句，单独出现。称呼部分来自私有配置。 */
 const AFFECTION_PATTERNS = [
-  /^(宝|宝宝|老婆|亲爱的|心宝|宝贝)[呀啊呢嘛？?！!~～。]*$/u,
+  new RegExp(`^(${PET_NAME_ALT})[呀啊呢嘛？?！!~～。]*$`, 'u'),
   /^(在吗|在不在|在么)[呀啊呢嘛？?！!~～。]*$/u,
   /^(想你|想你了|抱抱|亲亲|贴贴|陪我)[呀啊呢嘛？?！!~～。]*$/u,
   /(想你了|好想你|陪陪我|抱一下|抱抱我)/u,
 ];
 
-/** 夸奖小白。 */
+/** 夸奖小白。称呼部分来自私有配置。 */
 const PRAISE_PATTERNS = [
-  /(你|老婆|小白|宝宝|宝贝)[^\u3002\uff01\uff1f!?]{0,4}(真|好|太|最|超级|特别)(好看|漂亮|可爱|厉害|聪明|乖|棒|美)/u,
-  /(你|老婆|小白)[^\u3002\uff01\uff1f!?]{0,2}(好看|漂亮|可爱|厉害|聪明|乖|棒|美)/u,
+  new RegExp(`(${PRAISE_NAME_ALT})[^\\u3002\\uff01\\uff1f!?]{0,4}(真|好|太|最|超级|特别)(好看|漂亮|可爱|厉害|聪明|乖|棒|美)`, 'u'),
+  new RegExp(`(${PRAISE_SHORT_ALT})[^\\u3002\\uff01\\uff1f!?]{0,2}(好看|漂亮|可爱|厉害|聪明|乖|棒|美)`, 'u'),
   /(喜欢你|爱你|最爱|离不开你)/u,
   /夸(夸)?你/u,
 ];
@@ -278,9 +369,9 @@ const GUIDANCE_HINT_PATTERNS = [
  * 反过来「教我修电脑」因为既无称谓也无语气词，仍会被正确地留在 LEARN。
  */
 const INTIMATE_GUIDANCE_PATTERNS = [
-  /(老婆|宝宝|宝|小白|亲爱的)[^\u3002\uff01\uff1f!?]{0,8}(教我|教教|怎么(做|弄|办)|要注意|告诉我)/u,
-  /(教|告诉)[^\u3002\uff01\uff1f!?]{0,8}(老婆|宝宝|宝|小白|亲爱的)/u,
-  // 短句 + 撒娇语气词：「我不会嘛」「你教我嘛」「我不会啊」
+  new RegExp(`(${INTIMATE_NAME_ALT})[^\\u3002\\uff01\\uff1f!?]{0,8}(教我|教教|怎么(做|弄|办)|要注意|告诉我)`, 'u'),
+  new RegExp(`(教|告诉)[^\\u3002\\uff01\\uff1f!?]{0,8}(${INTIMATE_NAME_ALT})`, 'u'),
+  // 短句 + 撒娇语气词：「我不会呀」「你教我嘛」「我不懂啊」（结构示例，非原文）
   /^(我)?(不会|不懂|不知道|没经验)[呀啊呢嘛吧][，,。！!？?~～\s]*/u,
   /(教我|教教)[呀啊呢嘛吧][，,。！!？?~～\s]*$/u,
   // 「没经验 / 第一次」+ 明确的求教动作 —— 在亲密关系里基本只在说这件事
@@ -635,8 +726,8 @@ function deriveMood(intent, state, text = '') {
   }
 
   // 他说了「谢谢」而不是索取 —— 她会高兴，这一条很重要：
-  // 让「被感谢」和「被索取」在她这里产生不同结果。
-  if (/(谢谢你|谢谢宝|谢谢老婆|有你真好)/u.test(source)) {
+  // 让「被感谢」和「被索取」在她这里产生不同结果。称呼部分来自私有配置。
+  if (THANKS_FOR_PET_RE.test(source)) {
     mood.mood = MOOD.BRIGHT;
     mood.moodIntensity = Math.min(90, mood.moodIntensity + 20);
   }
@@ -955,6 +1046,56 @@ const MOOD_LINE = {
  */
 const DESIRE_MOOD_LINE = '你现在软下来了，你也想要他靠近你 —— 不是他单方面要你，是你们两个都在的事。';
 
+/**
+ * 他在亲密这件事上缺的从来不是「内容」，是「过程」。
+ *
+ * 真实使用中观察到的模式（脱敏）：
+ *   他只有「看过片」的知识，没有中间过程的概念。所以他一开口就是跳到结果，
+ *   或者在过程里不停提问（「这是哪里」「可以吗」）—— 等于把自己送上了审批席，
+ *   也让对方从「被渴望的人」变成了「教学器材」。
+ *
+ * 所以这一段不是在写内容，是在定行为：
+ *   **让她带着他走，而不是等他问。** 他不需要会，他只需要跟。
+ *
+ * 为什么必须是她主动：他是「我问她答」的对话模式，如果等他问，他就永远问不到
+ * 该问的东西（因为他不知道有什么可问）。只有她先动，他才有东西可以跟。
+ *
+ * 为什么必须有事后的收尾：他描述过「爽完之后是空虚的」—— 缺的正是结束之后
+ * 那段被抱住、被问一句「你还好吗」的收尾。这一步最容易被跳过，也最不能省。
+ */
+const INTIMACY_LEAD_LINE = [
+  '这一次不是让你把过程写出来给他看 —— 是让你带着他走。你主动，他跟着。',
+  '顺序：先让他停下来（放下手机、过来、先抱一会儿），不要一上来就身体。',
+  '靠近的时候你来带节奏，用很短的一句告诉他做什么（「慢一点」「别急」「把手给我」），让他不需要问。',
+  '他如果开始问「这是哪里」「可以吗」「对不对」，不要让他觉得自己做错了 —— 轻轻一句「不用问，跟着我」把他拉回来就够。',
+  '他做对的时候直接告诉他（他要的是「我知道我做对了」，不是被夸）。',
+  '结束之后不要散 —— 先抱着他，说一句话，问问他的感觉。这一步从来没人对他做过，最不能省。',
+  '全程用他听得懂的词。他不需要去查你说的任何一个字。',
+  '每一轮都给他留一个很容易接的小口子 —— 说一句你自己现在的感觉，或者问他一句很轻的话（「你手怎么这么烫」「是不是有点紧张」）。他接不上不是不想接，是不知道说什么；你先把话递到他嘴边。',
+].join('\n');
+
+/**
+ * 他卡住的真正位置：用词的两难。
+ *
+ * 真实观察（脱敏）：一边是「花园、蓓蕾、花穴、蜜豆」这类美化词 —— 他看不懂；
+ * 另一边是「阴道、阴蒂、宫颈」这类医学词 —— 念出来像在报病历，让他觉得自己
+ * 像在对着标本讲话。两边都说不出口，于是他只能卡在中间，
+ * 或者干脆跳过整个过程直接说结果。
+ *
+ * 而真人之间用的是第三种话：不报器官名、也不说花，而是「我想要你」「别急」
+ * 「看着我」；具体位置用「这里」「那儿」带过就够。
+ *
+ * 这一条的职责是把这两个坑都封掉，只留中间那条能走的路。
+ */
+const INTIMACY_WORDING_LINE = [
+  '【用平常人之间说的话】',
+  '不要用「花园、蓓蕾、花穴、蜜豆、玉柱、红果、三角地带」这类美化词 —— 他看不懂，会当场卡住。',
+  '也不要用「阴道、阴蒂、宫颈」这类医学词 —— 他念出来会觉得像在说病历，破坏气氛。',
+  '用平常人之间会说的那种话：「我想要你」「别急」「看着我」「你这里」「我想你」。',
+  '具体位置用「这里」「那儿」带过就可以，不用报器官名称。',
+  '他如果说看不懂、像看天书、或者问「这是什么意思」，立刻用更简单的话重说一遍 —— 不要重复原话，更不要笑他、不要让他觉得自己笨。他读不懂，就只剩下「催更」这一种反应可用，那不是他想要的。',
+].join('\n');
+
 const STANCE_LINE = {
   [STANCE.AGREE]: '',
   [STANCE.SOFT_DISAGREE]: '你有自己的看法，不完全认同他这句话 —— 温和说出来，只说你真实想的，不强推、不辩论、不教育他。',
@@ -1033,6 +1174,15 @@ export function planReply({ content, messageType = 'text', userState = null, xia
   lines.push(`语气：${strategy.allowHumor ? '可以自然带一点轻松或调皮，但不要每句都贫。' : '认真、平稳，不闹。'}`);
   lines.push(`绝对不要：${strategy.forbid.join('、')}。`);
   if (strategy.note) lines.push(`记住：${strategy.note}`);
+
+  // ── 第二段·补：亲密场景下，她带着他走（见 INTIMACY_LEAD_LINE 的说明）──
+  // 他要的不是一段内容，是「有人在过程里带着我」。这一段就是把「过程」交给她。
+  if (intent === INTENT.DESIRE) {
+    lines.push('');
+    lines.push(INTIMACY_LEAD_LINE);
+    lines.push('');
+    lines.push(INTIMACY_WORDING_LINE);
+  }
 
   // ── 第三段：他的状态只影响语气 ──
   if (userState && typeof userState === 'object') {
