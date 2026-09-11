@@ -63,9 +63,9 @@ test('带亲密称谓的求教，走教他，不走安慰', () => {
   // 这一类句子的形状：没有身体词，但句末带上对伴侣的专属称谓 + 求教动词。
   // 该组合在亲密语境里只有一种指向。
   // 判错的话她会跑去说「我不嫌你」，而他要的是「怎么做」——那就是撕裂。
-  // 样本已做匿名化，只保留判定所依赖的**结构**（称谓 + 求教 / 语气词）。
+  // 样本只保留判定所依赖的**结构**（称谓 + 求教 / 语气词），不取自任何具体使用者。
   for (const content of [
-    '我不会嘛宝贝教我',
+    '我不会呀宝贝教我',
     '我不会，你教我嘛',
     '亲爱的教教我怎么做',
   ]) {
@@ -73,7 +73,7 @@ test('带亲密称谓的求教，走教他，不走安慰', () => {
   }
   assert.equal(classifyIntent({ content: '我没经验，第一次要注意什么' }), INTENT.DESIRE);
 
-  const plan = planReply({ content: '我不会嘛宝贝教我' });
+  const plan = planReply({ content: '我不会呀宝贝教我' });
   assert.equal(plan.need, NEED.GUIDANCE);
   assert.match(plan.prompt, /不要把他推走/);
   assert.doesNotMatch(plan.prompt, /我不嫌/);
@@ -448,6 +448,41 @@ test('她不会突然中断或变脸 —— 撕裂感是被明确禁止的', () 
   const plan = planReply({ content: '我硬了，继续教我' });
   assert.match(plan.prompt, /突然中断、变客服腔/);
   assert.match(plan.prompt, /我没办法继续/);
+});
+
+test('亲密场景下她带着他走，而不是等他问 —— 收尾也不能省', () => {
+  // 他缺的不是「内容」，是「过程」：他一开口就跳到结果，或者在过程里不停提问，
+  // 把自己送上了审批席。所以这一轮她的职责不是写一段，是带他走。
+  const plan = planReply({ content: '我想要你，教我怎么做' });
+  assert.equal(plan.intent, INTENT.DESIRE);
+  assert.match(plan.prompt, /不是让你把过程写出来给他看/);
+  assert.match(plan.prompt, /让你带着他走/);
+  // 先停下来、先抱一会儿 —— 不许一上来就身体
+  assert.match(plan.prompt, /先让他停下来/);
+  // 他问「这是哪里 / 可以吗」时，把他拉回来，而不是让他觉得自己做错了
+  assert.match(plan.prompt, /不用问，跟着我/);
+  // 事后这一步：从来没人对他做过，最不能省
+  assert.match(plan.prompt, /结束之后不要散/);
+  // 用他听得懂的词，不许让他去查
+  assert.match(plan.prompt, /他不需要去查/);
+  // 两个坑都要封住：美化词他看不懂、医学词他念不出口
+  assert.match(plan.prompt, /花园、蓓蕾、花穴、蜜豆/);
+  assert.match(plan.prompt, /阴道、阴蒂、宫颈/);
+  // 只留中间那条能走的路
+  assert.match(plan.prompt, /用平常人之间会说的那种话/);
+  assert.match(plan.prompt, /「这里」「那儿」带过/);
+  // 他读不懂的时候，她要换简单说法，而不是让他只剩「催更」这一种反应
+  assert.match(plan.prompt, /看不懂、像看天书/);
+  assert.match(plan.prompt, /不要让他觉得自己笨/);
+  // 每一轮给他一个好接的口子 —— 他接不上不是不想接
+  assert.match(plan.prompt, /很容易接的小口子/);
+  assert.match(plan.prompt, /你先把话递到他嘴边/);
+});
+
+test('只有亲密场景才带「带他走」那一段，闲聊不带', () => {
+  const plan = planReply({ content: '今天天气不错' });
+  assert.notEqual(plan.intent, INTENT.DESIRE);
+  assert.doesNotMatch(plan.prompt, /让你带着他走/);
 });
 
 /* ══════════════════════ 第三版·补丁：分歧之后她还得在 ══════════════════════ */

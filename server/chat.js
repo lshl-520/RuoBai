@@ -515,6 +515,18 @@ export function createChatRouter({
     return `${String(publicBaseUrl || '').replace(/\/+$/, '')}/${trimmed.replace(/^\/+/, '')}`;
   }
 
+  // 历史里的图片统一降级成文字占位，绝不把历史图片拼成 image_url。
+  // 角色自己生成的图（role=assistant + message_type=image）更必须如此：
+  // 上游明确不允许 assistant 消息带图，带上会整轮请求被判为非法请求。
+  // 只有本轮正在提问的那张图（user）才以 image_url 形式发送。
+  function buildHistoricalImageText({ role, content }) {
+    const text = String(content || '').trim();
+    if (role === 'assistant') {
+      return text || '[她当时发了一张图]';
+    }
+    return text ? `${text}\n[用户当时发了一张图]` : '[用户当时发了一张图]';
+  }
+
   function buildUpstreamMessage({ message, useVision }) {
     if (!message || !['user', 'assistant', 'system'].includes(message.role)) {
       return null;
@@ -526,7 +538,8 @@ export function createChatRouter({
     const textContent = content || '[用户当时发了一张图]';
 
     if (messageType === 'image' && mediaUrl) {
-      if (useVision) {
+      // 只有用户的历史图片、且模型有看图能力时，才继续以图片形式带给上游。
+      if (useVision && message.role === 'user') {
         let imageUrlForApi = mediaUrl;
         const rawPath = String(message.media_url || '').trim();
         if (rawPath && !(/^https?:\/\//i.test(rawPath))) {
@@ -548,9 +561,7 @@ export function createChatRouter({
 
       return {
         role: message.role,
-        content: content
-          ? `${content}\n[用户当时发了一张图]`
-          : '[用户当时发了一张图]'
+        content: buildHistoricalImageText({ role: message.role, content })
       };
     }
 
