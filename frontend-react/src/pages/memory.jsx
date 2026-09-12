@@ -21,6 +21,10 @@ function fromApiMemory(m) {
     isImportant: !!m.is_important, reviewStatus: m.review_status || "active", requiresConfirmation: !!m.requires_confirmation,
     candidateOrigin: m.candidate_origin || "", detectedReason: m.detected_reason || "",
     sourceType: m.source_type || "manual", sourceId: m.source_id || "",
+    // 「每日纸条」的详细版（只有 memory_type='daily_digest' 才有）
+    digestDetail: m.digest_detail || "",
+    // 时间轴要用：原始时间字段都留着，别只留一个本地化字符串
+    createdAt: m.created_at || "", occurredAt: m.occurred_at || "",
     dateText: m.created_at ? new Date(m.created_at).toLocaleDateString("zh-CN") : "",
   };
 }
@@ -143,8 +147,164 @@ function MemoryCard({ m, onPin, onEdit, onDelete, onConfirmCandidate, onViewCand
   );
 }
 
-function LifeEventCard({ event, onStatusChange, onCorrect, onOpenSource, onDelete }) {
+/* ══════════════ 时间轴（记忆 + 生活事件按时间聚合）══════════════
+ *
+ * 设计要点：
+ *   · 五个层级（日/周/月/季/年）横滑切换，和"选角色"一样是现成的做法。
+ *   · 每张卡显示"摘要"，点开才看详细 —— 摘要省空间，详细给你自己看。
+ *   · 专属回忆（约定/第一次）用金色标出来。
+ *   · 长记忆默认只显示两行，点开才展开全文（避免"一堵墙"）。
+ */
+const TIMELINE_LEVELS = [["day", "日"], ["week", "周"], ["month", "月"], ["quarter", "季"], ["year", "年"]];
+
+/** 把后端的时间字符串转成 YYYY-MM-DD。不依赖时区，直接取日期部分，避免跨天错位。 */
+function timelineDateKey(value) {
+  if (!value) return "";
+  const raw = String(value).trim().replace("T", " ");
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return "";
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/** 按层级算分组键。 */
+function timelineLevelKey(dateKey, level) {
+  if (!dateKey) return "";
+  const [y, mo, da] = dateKey.split("-").map(Number);
+  if (level === "year") return String(y);
+  if (level === "quarter") return `${y}-Q${Math.floor((mo - 1) / 3) + 1}`;
+  if (level === "month") return `${y}-${String(mo).padStart(2, "0")}`;
+  if (level === "week") {
+    // ISO 周号
+    const dt = new Date(Date.UTC(y, mo - 1, da));
+    const dayNum = dt.getUTCDay() || 7;
+    dt.setUTCDate(dt.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
+    const week = Math.ceil((((dt - yearStart) / 86400000) + 1) / 7);
+    return `${dt.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+  }
+  return dateKey;
+}
+
+/** ISO 周号 → 那一周的真实日期范围（周一到周日）。否则"第 33 周"这种没人看得懂。 */
+function isoWeekDateRange(year, week) {
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const jan4Day = jan4.getUTCDay() || 7;
+  const week1Mon = new Date(jan4);
+  week1Mon.setUTCDate(jan4.getUTCDate() - jan4Day + 1);
+  const mon = new Date(week1Mon);
+  mon.setUTCDate(week1Mon.getUTCDate() + (week - 1) * 7);
+  const sun = new Date(mon);
+  sun.setUTCDate(mon.getUTCDate() + 6);
+  const fmt = (d) => `${d.getUTCMonth() + 1} 月 ${d.getUTCDate()} 日`;
+  return `${fmt(mon)} — ${fmt(sun)}`;
+}
+
+/** 分组键 → 给人看的标题（**一定带上能认出来的日期**）。 */
+function timelineLevelLabel(key, level) {
+  if (!key) return "时间未记录";
+  if (level === "year") return `${key} 年`;
+  if (level === "quarter") {
+    const [y, q] = key.split("-Q");
+    const n = Number(q);
+    return `${y} 年第 ${n} 季 · ${(n - 1) * 3 + 1}—${n * 3} 月`;
+  }
+  if (level === "month") { const [y, m] = key.split("-"); return `${y} 年 ${Number(m)} 月`; }
+  if (level === "week") {
+    const [y, w] = key.split("-W");
+    return `${y} 年第 ${Number(w)} 周 · ${isoWeekDateRange(Number(y), Number(w))}`;
+  }
+  const [y, m, d] = key.split("-");
+  return `${y} 年 ${Number(m)} 月 ${Number(d)} 日`;
+}
+
+/** 把记忆和生活事件合成一个按时间倒序的分组列表。 */
+function buildTimeline(memories, events, level) {
+  const groups = new Map();
+  const push = (key, kind, item, dateKey) => {
+    if (!key) return;
+    if (!groups.has(key)) groups.set(key, { key, dateKey, memories: [], events: [] });
+    groups.get(key)[kind].push(item);
+    const g = groups.get(key);
+    if (dateKey && (!g.dateKey || dateKey > g.dateKey)) g.dateKey = dateKey;
+  };
+  for (const m of memories) {
+    // ★ 优先级很重要：occurred_at 是"这件事发生在哪一天"，
+    //   created_at 只是"这行记录什么时候写进来的"。
+    //   每日纸条就是典型 —— 它今天生成，但讲的是**昨天**；用 created_at 会把日期全弄错。
+    const dk = timelineDateKey(m.occurredAt || m.appointmentAt || m.createdAt || m.dateText);
+    push(timelineLevelKey(dk, level), "memories", m, dk);
+  }
+  for (const e of events) {
+    const dk = timelineDateKey(e.occurredAt || e.createdAt);
+    push(timelineLevelKey(dk, level), "events", e, dk);
+  }
+  return [...groups.values()].sort((a, b) => String(b.key).localeCompare(String(a.key)));
+}
+
+/** 一张时间轴卡片：默认摘要，点开详细。 */
+function TimelineCard({ group, level, agent, onPin, onEdit, onDelete, onConfirmCandidate, onViewCandidateSource, onEventStatus, onEventCorrect, onEventSource, onEventDelete }) {
+  const [open, setOpen] = React.useState(false);
+  // 「每日纸条」是一天的主干：它自带短摘要（content）和详细版（digestDetail）
+  const digest = group.memories.find((m) => m.memoryType === "daily_digest");
+  const others = group.memories.filter((m) => m.memoryType !== "daily_digest");
+  const total = group.memories.length + group.events.length;
+
+  // 摘要：优先纸条的短摘要，其次生活事件标题（本身就是一句话总结），最后才是记忆正文
+  const lead = digest?.content
+    || group.events[0]?.title
+    || [...others].sort((a, b) => Number(b.isImportant) - Number(a.isImportant))[0]?.content
+    || "（这一天有新的事）";
+
+  const milestones = others.filter((m) => m.memoryType === "appointment" || m.memoryType === "shared_experience" || m.memoryType === "core");
+  const isMilestone = milestones.length > 0;
+
   return (
+    <div className={"tl-item" + (isMilestone ? " milestone" : "")}>
+      <div className={"tl-card" + (open ? " open" : "")} onClick={() => setOpen(!open)}>
+        <div className="tl-head">
+          <span className="tl-date">{timelineLevelLabel(group.key, level)}</span>
+          {isMilestone && <span className="tl-badge">💛 专属回忆</span>}
+          {total > 1 && <span className="tl-count">{total} 件</span>}
+        </div>
+        <div className="tl-sum">{lead}</div>
+        <div className="tl-more">展开详细 <span className="tl-ar">▾</span></div>
+
+        <div className="tl-detail" onClick={(e) => e.stopPropagation()}>
+          <div className="tl-detail-inner">
+            {/* 纸条的详细版：这是"你自己看的"那份 */}
+            {digest?.digestDetail && (
+              <div className="tl-digest">
+                <div className="tl-digest-mark">📝 这一天</div>
+                <div className="tl-digest-text">{digest.digestDetail}</div>
+              </div>
+            )}
+            {group.events.map((event) => (
+              <div className="tl-ev" key={`e-${event.id}`}>
+                <LifeEventCard event={event} onStatusChange={onEventStatus} onCorrect={onEventCorrect} onOpenSource={onEventSource} onDelete={onEventDelete} />
+              </div>
+            ))}
+            {others.length > 0 && (
+              <div className="mem-list tl-mem-list">
+                {others.map((m) => (
+                  <MemoryCard key={m.id} m={m}
+                    onPin={onPin} onEdit={onEdit} onDelete={onDelete}
+                    onConfirmCandidate={onConfirmCandidate}
+                    onViewCandidateSource={onViewCandidateSource} />
+                ))}
+              </div>
+            )}
+            {total === 0 && <div className="life-event-empty">这一天还没有记下什么。</div>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LifeEventCard({ event, onStatusChange, onCorrect, onOpenSource, onDelete }) {  return (
     <div className="life-event-card">
       <div className="life-event-main">
         <div className="life-event-title">{event.title}</div>
@@ -243,6 +403,7 @@ function MemoryScreen() {
   const [sourceLoading, setSourceLoading] = useStateMem(false);
   const [sourceError, setSourceError] = useStateMem("");
   const [actionError, setActionError] = useStateMem("");
+  const [timelineLevel, setTimelineLevel] = useStateMem("day");
 
   /* 拉真实角色列表 */
   useEffectMem(() => {
@@ -316,6 +477,8 @@ function MemoryScreen() {
 
   const agent = agents.find((a) => a.id === activeId) || agents[0] || null;
   const sorted = [...list].sort((a, b) => (b.isImportant ? 1 : 0) - (a.isImportant ? 1 : 0));
+  // 时间轴分组：记忆 + 生活事件按当前层级（日/周/月/季/年）聚合
+  const timelineGroups = buildTimeline(list, events, timelineLevel);
 
   /* 操作：调后端 API 后刷新列表 */
   const refreshList = async () => {
@@ -505,26 +668,22 @@ function MemoryScreen() {
             <Icon name="chevron" className="row-chev" />
           </button>
 
-          <div className="section-label life-event-section-label" style={{ margin: "20px 0 12px" }}>
-            <span>生活事件 · {eventsLoading ? "加载中" : events.length}</span>
-            {events.length > 0 && <span className="memory-lightbulb" title="这些是从聊天、动态和评论建立的可追溯索引">💡</span>}
-            <span className="sl-line" />
-          </div>
-          {events.length > 0 ? (
-            <div className="life-event-list">
-              {events.map((event) => <LifeEventCard key={event.id} event={event} onStatusChange={handleEventStatus} onCorrect={handleEventCorrection} onOpenSource={openEventSource} onDelete={handleEventDelete} />)}
-            </div>
-          ) : (
-            <div className="life-event-empty">还没有可回顾的生活事件。原始聊天、动态和评论会继续保留。</div>
-          )}
-
-          <div className="section-label" style={{ margin: "20px 0 12px" }}>
-            <span>{agent.name}记得的事 · {list.length}</span>
+          <div className="section-label" style={{ margin: "20px 0 10px" }}>
+            <span>我们的回忆 · {timelineGroups.length} 段</span>
             {list.some((item) => item.reviewStatus === "candidate") && <span className="memory-lightbulb" title="这里有系统新发现的低优先级记忆">💡</span>}
             <span className="sl-line" />
           </div>
 
-          {sorted.length === 0 ? (
+          {/* 层级切换：日 / 周 / 月 / 季 / 年（横滑，和"选角色"一个做法） */}
+          <div className="tl-levels" role="tablist" aria-label="切换时间粒度">
+            {TIMELINE_LEVELS.map(([value, label]) => (
+              <button key={value} type="button" role="tab" aria-selected={timelineLevel === value}
+                className={"tl-lv" + (timelineLevel === value ? " on" : "")}
+                onClick={() => setTimelineLevel(value)}>{label}</button>
+            ))}
+          </div>
+
+          {sorted.length === 0 && events.length === 0 ? (
           <div className="empty-immersive memory-empty-full">
             <picture>
               <source srcSet="/assets/empty-memory.webp" type="image/webp" />
@@ -537,15 +696,20 @@ function MemoryScreen() {
             </div>
           </div>
         ) : (
-          <div className="mem-list">
-            {sorted.map((m) => (
-              <MemoryCard key={m.id} m={m}
+          <div className="tl-wrap">
+            {timelineGroups.map((group) => (
+              <TimelineCard key={group.key} group={group} level={timelineLevel} agent={agent}
                 onPin={(x) => handlePin(x)}
                 onEdit={(x) => setEditor(x)}
                 onDelete={(x) => handleDelete(x)}
                 onConfirmCandidate={(x) => handleConfirmCandidate(x)}
-                onViewCandidateSource={(x) => handleViewCandidateSource(x)} />
+                onViewCandidateSource={(x) => handleViewCandidateSource(x)}
+                onEventStatus={handleEventStatus}
+                onEventCorrect={handleEventCorrection}
+                onEventSource={openEventSource}
+                onEventDelete={handleEventDelete} />
             ))}
+            {eventsLoading && <div className="date-hint tl-loading">正在加载生活事件…</div>}
           </div>
           )}
         </>)}

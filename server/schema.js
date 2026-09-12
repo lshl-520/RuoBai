@@ -135,6 +135,8 @@ const MEMORY_RUNTIME_COLUMNS = [
   { name: 'source_id', definition: 'BIGINT DEFAULT NULL', after: 'source_type' },
   { name: 'review_status', definition: "VARCHAR(20) DEFAULT 'active'", after: 'source_id' },
   { name: 'detected_reason', definition: "VARCHAR(255) DEFAULT ''", after: 'review_status' },
+  // 每日纸条的"详细版"：content 存短摘要（喂给她的），这里存长的那份（给用户自己看的）
+  { name: 'digest_detail', definition: 'TEXT DEFAULT NULL', after: 'detected_reason' },
   { name: 'occurred_at', definition: 'DATETIME DEFAULT NULL', after: 'source_id' },
   { name: 'confidence', definition: 'DECIMAL(4,3) DEFAULT 1.000', after: 'occurred_at' },
   { name: 'weight', definition: 'INT DEFAULT 50', after: 'confidence' },
