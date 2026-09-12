@@ -17,6 +17,7 @@ import { createFcmSender, startProactiveScheduler } from './proactive.js';
 import { startMomentResponseScheduler } from './moment-responses.js';
 import { createPushRouter } from './push.js';
 import { createAutoMomentsService, startAutoMomentsScheduler } from './auto-moments.js';
+import { startDailyDigestScheduler } from './daily-digest.js';
 import { createAutoMomentsRouter } from './auto-moments-routes.js';
 import authRoutes from './auth.js';
 import chatRoutes from './chat.js';
@@ -263,6 +264,8 @@ async function start() {
         startProactiveScheduler({ pool, sendPush: fcmSender });
         startAutoMomentsScheduler({ service: autoMomentsService });
         startMomentResponseScheduler({ pool });
+        // 每天把当天对话压成一张纸条（让她"记得住"，见 daily-digest.js 顶部说明）
+        startDailyDigestScheduler({ db: pool });
         return;
       } catch (error) {
         lastError = error;

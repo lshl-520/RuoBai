@@ -76,7 +76,7 @@ async function getOwnedMemory(memoryId, userId) {
   const [rows] = await pool.query(
     `
       SELECT id, user_id, character_id, content, tag, category, memory_type, source_type, source_id,
-             review_status, detected_reason,
+             review_status, detected_reason, digest_detail,
              occurred_at, confidence, weight, appointment_at, appointment_status, is_important, is_deleted, created_at, updated_at
       FROM memories
       WHERE id = ? AND user_id = ?
@@ -110,7 +110,7 @@ router.get('/', async (req, res) => {
     const [rows] = await pool.query(
       `
         SELECT id, user_id, character_id, content, tag, category, memory_type, source_type, source_id,
-               review_status, detected_reason,
+               review_status, detected_reason, digest_detail,
                occurred_at, confidence, weight, appointment_at, appointment_status, is_important, is_deleted, created_at, updated_at
         FROM memories
         WHERE user_id = ? AND character_id = ? ${whereDeletedClause}

@@ -1495,6 +1495,9 @@ function ChatRoom({ agent, onBack }) {
       setChatError(withDiagnosticId(baseText, recordDiagnostic({ area: "chat", action: "send-message", error: err })));
       setFailedSend({ clientId, text: t, images, userSaved });
       setMsgs((p) => p.map((m) => m._clientId === clientId ? { ...m, failed: true } : m));
+      // 发送失败时把你刚打的字还回输入框：不用再复制一次。
+      // 只在输入框为空时回填，避免覆盖你在这期间新打的字。
+      if (t) setDraft((cur) => (cur && cur.trim() ? cur : t));
     } finally {
       setTyping(false);
       setLive2dActive(false);

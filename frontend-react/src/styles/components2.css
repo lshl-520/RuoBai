@@ -254,6 +254,83 @@
 .life-event-delete:hover { text-decoration: underline; }
 .life-event-empty { padding: 12px 14px; border-radius: var(--r); background: var(--paper-2); color: var(--ink-faint); font-size: 11.5px; line-height: 1.55; }
 .memory-action-error { margin: 0 0 10px; padding: 8px 10px; border: 1px solid rgba(190, 74, 91, .3); border-radius: 10px; background: rgba(255, 243, 244, .8); color: #a33c4d; font-size: 12px; line-height: 1.5; }
+
+/* ============== 记忆 · 时间轴（日/周/月/季/年） ============== */
+/* 层级切换：圆角胶囊，和其余界面的圆角语言一致 */
+.tl-levels { display: flex; gap: 8px; padding: 2px 0 14px; overflow-x: auto; scrollbar-width: none; }
+.tl-levels::-webkit-scrollbar { display: none; }
+.tl-lv {
+  flex: 0 0 auto; padding: 7px 17px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--card); color: var(--ink-soft); font-size: 13px; font-family: inherit;
+  cursor: pointer; transition: background .2s, color .2s, border-color .2s, box-shadow .2s;
+}
+.tl-lv.on { background: var(--rose); border-color: var(--rose); color: #fff; box-shadow: var(--shadow-rose); }
+
+/* 时间轴主线 */
+.tl-wrap { position: relative; padding-left: 22px; }
+.tl-wrap::before {
+  content: ""; position: absolute; left: 5px; top: 10px; bottom: 10px; width: 2px; border-radius: 2px;
+  background: linear-gradient(180deg, rgba(193, 101, 121, .45), rgba(210, 144, 111, .3) 50%, rgba(43, 37, 40, .06) 88%, transparent);
+}
+.tl-item { position: relative; margin-bottom: 12px; }
+.tl-item::before {
+  content: ""; position: absolute; left: -21px; top: 19px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--ink-faint); border: 2.5px solid var(--paper); box-shadow: 0 0 0 2px rgba(43, 37, 40, .08);
+}
+.tl-item.milestone::before {
+  background: linear-gradient(135deg, #d9ab5e, #b0822f);
+  box-shadow: 0 0 0 2px rgba(198, 154, 81, .26), 0 0 12px rgba(198, 154, 81, .35);
+}
+
+/* 卡片 */
+.tl-card {
+  padding: 13px 15px; border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--card); box-shadow: var(--shadow-sm); cursor: pointer;
+  transition: box-shadow .22s, transform .16s, border-color .22s;
+}
+.tl-card:active { transform: scale(.99); }
+.tl-card:hover { box-shadow: var(--shadow); border-color: var(--rose-soft); }
+.tl-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.tl-date {
+  padding: 3px 10px; border-radius: 999px; font-size: 11.5px; letter-spacing: .4px;
+  background: var(--paper-2); color: var(--ink-soft); border: 1px solid var(--line);
+}
+.tl-badge {
+  padding: 3px 9px; border-radius: 999px; font-size: 10px; letter-spacing: .3px;
+  background: rgba(198, 154, 81, .14); color: #8a6a2c; border: 1px solid rgba(198, 154, 81, .3);
+}
+.tl-count { margin-left: auto; color: var(--ink-faint); font-size: 10.5px; }
+
+/* 摘要：默认只显示两行，点开才展开全文（避免长记忆变成一堵墙） */
+.tl-sum {
+  color: var(--ink); font-size: 13.5px; line-height: 1.75;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.tl-card.open .tl-sum { -webkit-line-clamp: unset; display: block; }
+
+.tl-more {
+  display: inline-flex; align-items: center; gap: 4px; margin-top: 9px;
+  padding: 3px 10px; border-radius: 999px; font-size: 11px;
+  background: var(--rose-tint); color: var(--rose);
+}
+.tl-ar { display: inline-block; font-size: 9px; transition: transform .25s; }
+.tl-card.open .tl-ar { transform: rotate(180deg); }
+
+.tl-detail { max-height: 0; overflow: hidden; transition: max-height .35s ease; }
+.tl-card.open .tl-detail { max-height: 3000px; }
+.tl-detail-inner { padding-top: 12px; margin-top: 11px; border-top: 1px dashed var(--line); }
+.tl-ev { margin-bottom: 10px; }
+.tl-ev:last-child { margin-bottom: 0; }
+.tl-mem-list { display: flex; flex-direction: column; gap: 10px; }
+.tl-loading { margin-top: 4px; }
+
+/* 「每日纸条」的详细版：展开后最先看到的那块 */
+.tl-digest {
+  margin-bottom: 12px; padding: 12px 14px; border-radius: var(--r-sm);
+  background: var(--paper-2); border: 1px solid var(--line);
+}
+.tl-digest-mark { margin-bottom: 6px; color: var(--ink-faint); font-size: 10.5px; letter-spacing: .6px; }
+.tl-digest-text { color: var(--ink-soft); font-size: 13px; line-height: 1.9; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .source-sheet { max-height: min(82vh, 720px); }
 .source-sheet-sub { margin-top: 4px; max-width: 250px; color: var(--ink-faint); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }

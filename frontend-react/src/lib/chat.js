@@ -195,6 +195,11 @@ export async function callReply(roleId, text) {
 }
 
 export function friendlyStreamHttpError(status) {
+  // 202 = 后端识别出"这句话刚刚已经发过一次"，正在处理中。
+  // 这不是故障，别把它显示成"接口异常"，免得用户以为又说错话了。
+  if (status === 202) {
+    return '这句话刚刚已经发出去了，她正在回你，稍等一下就好。';
+  }
   if (status === 504) {
     return '聊天渠道等太久没有返回（504）。不是你消息发错了，也不是她故意不理你，等一会儿再试或换个模型。';
   }
@@ -204,7 +209,35 @@ export function friendlyStreamHttpError(status) {
   return `聊天请求暂时失败（${status}），请稍后重试。`;
 }
 
+// 自动重试只在“还没收到任何回复内容”时的网络类失败上触发。
+// 判断标准：连接没建立 / 请求被中断 / 上游 502·503·504 抖动。
+// 一旦已经开始吐出回复内容，就不再自动重试（避免内容重复），交给用户手动“重新发送”。
+function isRetryableStreamError(error, status) {
+  if (status && (status === 502 || status === 503 || status === 504)) return true;
+  const message = String(error instanceof Error ? error.message : error || "").trim();
+  return /failed to fetch|networkerror|load failed|network request failed/i.test(message)
+    || (error instanceof Error && error.name === "AbortError");
+}
+
+const STREAM_RETRY_DELAY_MS = 1200;
+
 export async function streamAssistantReply(roleId, payload, handlers = {}) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    if (attempt === 2) await new Promise((resolve) => setTimeout(resolve, STREAM_RETRY_DELAY_MS));
+    try {
+      return await streamAssistantReplyOnce(roleId, payload, handlers);
+    } catch (error) {
+      // 已经产生过回复内容时，不再自动重试（避免内容重复），把原始错误交给上层。
+      if (handlers.producedAnyContent) throw error;
+      const status = error?.status || null;
+      if (attempt < 2 && isRetryableStreamError(error, status)) continue;
+      throw error;
+    }
+  }
+  throw new Error("聊天请求重试后仍失败");
+}
+
+async function streamAssistantReplyOnce(roleId, payload, handlers = {}) {
   let response;
   const controller = new AbortController();
   let idleTimeout;
@@ -239,9 +272,11 @@ export async function streamAssistantReply(roleId, payload, handlers = {}) {
     clearTimeout(idleTimeout);
     recordDiagnostic({ area: "chat", action: "stream-reply", status: response.status, error: `HTTP ${response.status}` });
     const data = await parseJson(response).catch(() => null);
-    throw new Error(
+    const httpError = new Error(
       data?.error || friendlyStreamHttpError(response.status),
     );
+    httpError.status = response.status;
+    throw httpError;
   }
 
   const reader = response.body.getReader();
@@ -294,11 +329,13 @@ export async function streamAssistantReply(roleId, payload, handlers = {}) {
         }
 
         if (parsed?.type === "reasoning" && parsed?.delta) {
+          handlers.producedAnyContent = true;
           handlers.onReasoning?.(String(parsed.delta));
           continue;
         }
 
         if (parsed?.type === "inner_os" && parsed?.content) {
+          handlers.producedAnyContent = true;
           handlers.onInnerOs?.(String(parsed.content), String(parsed.source || ""));
           continue;
         }
@@ -310,6 +347,7 @@ export async function streamAssistantReply(roleId, payload, handlers = {}) {
 
         const token = parsed?.choices?.[0]?.delta?.content || "";
         if (token) {
+          handlers.producedAnyContent = true;
           handlers.onToken?.(token);
         }
       }
