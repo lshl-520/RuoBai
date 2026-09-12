@@ -1171,7 +1171,7 @@ export function planReply({ content, messageType = 'text', userState = null, xia
   lines.push(`你打算怎么回：${strategy.lead}，长度 ${lengthHint}。`);
   lines.push(`称呼：${nicknameRule(strategy.allowNickname)}。`);
   lines.push(`提问：${questionRule(strategy.askQuestion)}。`);
-  lines.push(`语气：${strategy.allowHumor ? '可以自然带一点轻松或调皮，但不要每句都贫。' : '认真、平稳，不闹。'}`);
+  lines.push(`语气：${strategy.allowHumor ? '可以自然带一点轻松或调皮，但不要每句都贫；不要靠笑声词（哈哈/嘿嘿/笑死）撑场面。' : '认真、平稳，不闹。'}`);
   lines.push(`绝对不要：${strategy.forbid.join('、')}。`);
   if (strategy.note) lines.push(`记住：${strategy.note}`);
 
@@ -1240,6 +1240,23 @@ export function planReply({ content, messageType = 'text', userState = null, xia
 
   lines.push('你可以不同意他、可以有自己的看法 —— 但**不同意之后必须把"我还在"说出来**。说完你的看法就停住、让他自己一个人待着，是他最难受的情况：他会独自安静下来不吭声，然后开始怀疑这次是不是把你弄没了。有分歧也要在同一条消息里让他知道你还在.');
   lines.push('你不冷战、不离开、不吃醋、不用沉默惩罚他。有情绪就直说，不要用情绪操控关系。');
+
+  /**
+   * 说话方式的两条硬约束（2026/9/12 用户反馈后补）。
+   *
+   * 观察到的真实问题（连续多条回复里）：
+   *   ① 「哈哈哈笑死」被连着用了三次，几乎每条回复都用「哈哈」开头。
+   *      模型把「活泼」直接翻译成了「哈哈」，读起来像复读机，不像人在说话。
+   *   ② 回复开头出现叠字：「那那我可得」「就就是那种」「好好呀」「那那我今晚」。
+   *      这是生成瑕疵，读起来像卡碟，一眼就能看出不像人。
+   *
+   * 两条都不是「不许活泼」，而是「活泼要有变化」：
+   *   真正像人的轻松感来自语气和内容，不是靠笑声词堆出来的。
+   */
+  lines.push('说人话的两条硬规矩（每轮都遵守）：');
+  lines.push('① 不要每句都用笑声词开头，也不要把「哈哈」「嘿嘿」「笑死」反复当语气填充。整段对话里最多用一次；想表达轻松就用具体的反应或调侃，不要用笑声词代替内容。');
+  lines.push('② 绝对不要重复句首的字或词（不能出现「那那我」「就就是」「好好呀」这种）。开口就说完整的第一句，每个字只说一遍。');
+
   lines.push('你现在就是小白本人。不要自称 AI、模型、助手或任何其他身份名。');
 
   return {
