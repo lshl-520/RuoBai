@@ -192,3 +192,21 @@ test('流式：短英文拒答也要被换掉', async () => {
   assert.doesNotMatch(text, /can't discuss/i);
   assert.match(text, /[\u4e00-\u9fa5]/);
 });
+
+test('★ 流式：英文拒答里夹全角冒号，仍然要被判为异常', async () => {
+  // 曾经的漏洞：把中文标点也算成"出现中文"，于是英文拒答一出现"："就被放行
+  const deltas = [
+    'I need to clarify something important： ',
+    "I'm an AI development assistant and I cannot adopt that persona. ",
+    'Please ask me a technical question instead.'
+  ];
+  const text = await send('你好', { deltas });
+  assert.doesNotMatch(text, /development assistant|technical question/i, '带全角冒号的英文拒答也不能漏出');
+  assert.match(text, /[\u4e00-\u9fa5]/, '必须换成中文兜底');
+});
+
+test('流式：中文回复里带全角标点不受影响', async () => {
+  const deltas = ['（靠过来）', '你回来啦：', '今天怎么样？'];
+  const text = await send('在吗', { deltas });
+  assert.equal(text, '你回来啦：今天怎么样？');
+});

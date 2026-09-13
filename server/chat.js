@@ -217,9 +217,15 @@ function messageContentAsText(content) {
  */
 const UPSTREAM_REFUSAL_RE = /^\s*(i can'?t|i cannot|i'?m (unable|sorry)|i am unable|sorry[,，]? (but )?i|as an ai|i must decline|i won'?t|unable to (help|assist|continue)|i need to clarify|i should clarify|i'?m not able|我不能|我无法|抱歉[，,]?我(不能|无法)|作为(一个)?(ai|人工智能))/i;
 
-/** 有没有汉字或中文标点。这些角色正常说话一定有。 */
-function hasCjk(text) {
-  return /[\u3400-\u4dbf\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/.test(String(text || ''));
+/**
+ * 有没有**汉字**（不含中文标点、不含全角符号）。
+ *
+ * ★ 这里刻意只认汉字，不认 "："、"。" 这类标点 ——
+ *   英文拒答里经常夹一个全角冒号，若把它算作"出现中文"，
+ *   门闸会立刻放行，整段英文就漏给用户了（线上复现过）。
+ */
+function hasHanzi(text) {
+  return /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(String(text || ''));
 }
 
 /**
@@ -233,7 +239,7 @@ function hasCjk(text) {
 function looksLikeForeignReply(text) {
   const value = String(text || '').trim();
   if (!value) return false;
-  if (hasCjk(value)) return false;
+  if (hasHanzi(value)) return false;
   // 至少十来个字母才算"一整段英文"，避免把 "OK" / "hmm" 这类误判成拒答
   const letters = (value.match(/[A-Za-z]/g) || []).length;
   return letters >= 10;
@@ -242,7 +248,7 @@ function looksLikeForeignReply(text) {
 function looksLikeUpstreamRefusal(text) {
   const value = String(text || '').trim();
   if (!value) return false;
-  if (hasCjk(value)) return false;
+  if (hasHanzi(value)) return false;
   // ① 最可靠：整条没有一个汉字 → 不是她的中文回复（不限长度）
   if (looksLikeForeignReply(value)) return true;
   // ② 次之：短句 + 典型拒答开头
@@ -1959,7 +1965,7 @@ export function createChatRouter({
                 //   线上表现为**每条回复的第一个字被复制一遍**（"龟龟头""就就那儿"）。
                 if (!shouldStrip && !gateOpen) {
                   gateBuf += delta;
-                  if (hasCjk(gateBuf)) {
+                  if (hasHanzi(gateBuf)) {
                     // 出现汉字 → 这是她正常的中文回复，放行
                     flushGate();
                   } else if (gateBuf.length >= GATE_LIMIT) {
@@ -2015,7 +2021,7 @@ export function createChatRouter({
                   // 拒答门闸：开门前先扣住，确认不是英文拒答再放行
                   if (!gateOpen) {
                     gateBuf += filtered;
-                    if (hasCjk(gateBuf)) {
+                    if (hasHanzi(gateBuf)) {
                       flushGate();
                     } else if (gateBuf.length >= GATE_LIMIT) {
                       refusalDetected = true;
