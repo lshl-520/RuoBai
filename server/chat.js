@@ -215,14 +215,37 @@ function messageContentAsText(content) {
  *      于是用户感到"拒答之后断层"（她只接新话题，不再接上一句）。
  * 所以这里做三件事：识别它、不把它当作她的回复、用中文兜底顶上。
  */
-const UPSTREAM_REFUSAL_RE = /^\s*(i can'?t|i cannot|i'?m (unable|sorry)|i am unable|sorry[,，]? (but )?i|as an ai|i must decline|i won'?t|unable to (help|assist|continue)|我不能|我无法|抱歉[，,]?我(不能|无法)|作为(一个)?(ai|人工智能))/i;
+const UPSTREAM_REFUSAL_RE = /^\s*(i can'?t|i cannot|i'?m (unable|sorry)|i am unable|sorry[,，]? (but )?i|as an ai|i must decline|i won'?t|unable to (help|assist|continue)|i need to clarify|i should clarify|i'?m not able|我不能|我无法|抱歉[，,]?我(不能|无法)|作为(一个)?(ai|人工智能))/i;
+
+/** 有没有汉字或中文标点。这些角色正常说话一定有。 */
+function hasCjk(text) {
+  return /[\u3400-\u4dbf\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/.test(String(text || ''));
+}
+
+/**
+ * 一段"完全没有中文"的英文回复。
+ *
+ * 这是比匹配拒答短语**更可靠**的判据：这些角色只会说中文，
+ * 所以整条没有汉字 = 这条不是她想说的话，不管它用了什么句式开头。
+ * （线上真实案例：模型回了 684 字的 "I need to clarify something important here.
+ *   I'm Kiro, an AI development assistant..." —— 短语匹配完全没命中。）
+ */
+function looksLikeForeignReply(text) {
+  const value = String(text || '').trim();
+  if (!value) return false;
+  if (hasCjk(value)) return false;
+  // 至少十来个字母才算"一整段英文"，避免把 "OK" / "hmm" 这类误判成拒答
+  const letters = (value.match(/[A-Za-z]/g) || []).length;
+  return letters >= 10;
+}
 
 function looksLikeUpstreamRefusal(text) {
   const value = String(text || '').trim();
   if (!value) return false;
-  // 她只说中文；纯英文回复本身就是异常信号。
-  if (!/^[\x00-\x7F\s]*$/.test(value)) return false;
-  // 短句 + 典型拒答开头才算，避免误伤她偶尔说的英文单词。
+  if (hasCjk(value)) return false;
+  // ① 最可靠：整条没有一个汉字 → 不是她的中文回复（不限长度）
+  if (looksLikeForeignReply(value)) return true;
+  // ② 次之：短句 + 典型拒答开头
   if (value.length > 200) return false;
   return UPSTREAM_REFUSAL_RE.test(value) || /(can'?t|cannot|unable|decline|not able)/i.test(value);
 }
@@ -1929,22 +1952,24 @@ export function createChatRouter({
                   ? { choices: [{ delta: { content: delta } }] }
                   : json;
 
-                // 拒答门闸：开门前先扣住内容，确认不是英文拒答再放行。
-                if (!gateOpen) {
+                // 拒答门闸（**只用于不裁剪的路径**）。
+                //
+                // ★ 这里必须带 !shouldStrip：裁剪路径的门闸在下面按 filtered 处理。
+                //   如果这里也跑一遍，同一段首块会被 flushGate 发一次、下面又发一次，
+                //   线上表现为**每条回复的第一个字被复制一遍**（"龟龟头""就就那儿"）。
+                if (!shouldStrip && !gateOpen) {
                   gateBuf += delta;
-                  const asciiOnly = /^[\x00-\x7F\s]*$/.test(gateBuf);
-                  const hasContent = gateBuf.trim().length > 0;
-                  if (!asciiOnly && hasContent) {
+                  if (hasCjk(gateBuf)) {
+                    // 出现汉字 → 这是她正常的中文回复，放行
                     flushGate();
                   } else if (gateBuf.length >= GATE_LIMIT) {
-                    if (looksLikeUpstreamRefusal(gateBuf)) {
-                      refusalDetected = true;
-                    } else {
-                      flushGate();
-                    }
+                    // 已经收了这么长还一个汉字都没有 → 不是她的中文回复
+                    refusalDetected = true;
                   }
                   if (refusalDetected) continue;
-                  if (!gateOpen) continue;
+                  // 门刚打开时内容已经由 flushGate 发出（含本次 delta），
+                  // 必须 continue 掉头，否则会落到下面再写一次。
+                  continue;
                 }
 
                 if (!shouldStrip) {
@@ -1990,15 +2015,10 @@ export function createChatRouter({
                   // 拒答门闸：开门前先扣住，确认不是英文拒答再放行
                   if (!gateOpen) {
                     gateBuf += filtered;
-                    const asciiOnly = /^[\x00-\x7F\s]*$/.test(gateBuf);
-                    if (!asciiOnly && gateBuf.trim()) {
+                    if (hasCjk(gateBuf)) {
                       flushGate();
                     } else if (gateBuf.length >= GATE_LIMIT) {
-                      if (looksLikeUpstreamRefusal(gateBuf)) {
-                        refusalDetected = true;
-                      } else {
-                        flushGate();
-                      }
+                      refusalDetected = true;
                     }
                     if (refusalDetected) continue;
                     if (!gateOpen) continue;
