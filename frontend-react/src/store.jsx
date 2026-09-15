@@ -384,9 +384,12 @@ function Icon({ name, ...p }) {
     download: <><path d="M12 3v12M7 10l5 5 5-5M5 20h14"/></>,
     stop: <rect x="6" y="6" width="12" height="12" rx="2"/>,
     lock: <><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></>,
+    /* 2026/9/15：表情入口图标。原来的 star（空心星）用户反馈"不好看"，
+       换成小白的爪印——一眼就知道是"用她的表情"。 */
+    paw: <><ellipse cx="12" cy="15.6" rx="4.5" ry="3.8"/><ellipse cx="6.4" cy="10.6" rx="2" ry="2.5"/><ellipse cx="10" cy="7.4" rx="1.9" ry="2.4"/><ellipse cx="14" cy="7.4" rx="1.9" ry="2.4"/><ellipse cx="17.6" cy="10.6" rx="2" ry="2.5"/></>,
   };
   return (
-    <svg viewBox="0 0 24 24" fill={["heartFill","spark","sparkSm","flame","play","pause"].includes(name) ? "currentColor" : "none"}
+    <svg viewBox="0 0 24 24" fill={["heartFill","spark","sparkSm","flame","play","pause","paw"].includes(name) ? "currentColor" : "none"}
       stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...p}>
       {paths[name]}
     </svg>

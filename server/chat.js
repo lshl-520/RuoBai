@@ -16,7 +16,7 @@ import { getCachedCityWeatherText, getCityWeatherText } from './weather.js';
 import { detectDrawIntent, generateImage } from './image-gen.js';
 import { guessModelCapabilities } from './model-capabilities.js';
 import { buildPersonaRuntimePrompt, loadPersonaRuntime, recordPersonaRuntimeTurn, loadXiaobaiState, recordXiaobaiState } from './persona-runtime.js';
-import { buildXiaobaiCorePrompt, deriveNextXiaobaiState } from './xiaobai-core.js';
+import { planReply, deriveNextXiaobaiState } from './xiaobai-core.js';
 import {
   buildCharacterContextPrompt,
   buildCharacterContextSnapshot,
@@ -40,14 +40,32 @@ const userChatImageDir = path.join(projectRoot, 'user_assets', 'chat');
 const userVoiceDir = path.join(projectRoot, 'user_assets', 'voice');
 const STREAM_INTERRUPTED_MESSAGE = '她暂时没反应，稍后再试好吗';
 
-const ACTION_PAREN_RE = /[（(][^）)]{2,60}[）)]/g;
-const ACTION_ASTERISK_RE = /\*[^*]{2,60}\*/g;
+/**
+ * ═══ 动作描写的裁剪（2026/9/16 放宽）═══
+ *
+ * 旧版把括号里 **2~60 字的内容全部删掉** —— 包括「（看了一眼你的屏幕）」
+ * 这种很自然、很短、正是"活人感"来源的动作。
+ *
+ * 现在只删**超长的**舞台描写（超过 25 字），短的保留。
+ * 为什么要有这道兜底：他早先反馈过"像写小说"，所以要留一层防线，
+ * 防止模型写成大段舞台剧；但正常的短动作不该被连坐。
+ *
+ * 配套：说话风格规则第 5 条明确"动作可以写、要短、一次最多一个"。
+ */
+const ACTION_PAREN_LONG_RE = /[（(][^）)]{26,120}[）)]/g;
+const ACTION_ASTERISK_LONG_RE = /\*[^*]{26,120}\*/g;
+
+/**
+ * 动作描写保留的上限（字符数）。
+ * ≤25 字的动作（如「（看了一眼你的屏幕）」）保留；超过就当成大段舞台描写丢掉。
+ */
+export const ACTION_KEEP_MAX = 25;
 
 export function stripActionDescriptions(text) {
   if (!text) return text;
   return text
-    .replace(ACTION_PAREN_RE, '')
-    .replace(ACTION_ASTERISK_RE, '')
+    .replace(ACTION_PAREN_LONG_RE, '')
+    .replace(ACTION_ASTERISK_LONG_RE, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
@@ -268,6 +286,49 @@ function pickRefusalFallback(seed = '') {
   return REFUSAL_FALLBACK_LINES[sum % REFUSAL_FALLBACK_LINES.length];
 }
 
+/* -------- 表情包（贴纸）--------
+ * 模型看不到贴纸图片本身，只能看到文字。所以把"这是哪一类情绪的表情"翻译成一句话，
+ * 她才知道刚才那个动作是什么意思；否则贴纸在她的上下文里就是一片空白。
+ *
+ * 分组口径与前端一致（frontend-react/src/pages/chat.jsx 的 XIAOBAI_STICKER_GROUPS）：
+ *   gentle 静静陪你 / happy 开心 / shy 害羞 / playful 俏皮
+ * 素材：/images/xiaobai-stickers/<group>-NN.png
+ */
+const STICKER_MOOD_LABELS = {
+  gentle: '安静陪着你（温柔、不打扰）',
+  happy: '开心、在笑',
+  shy: '害羞、不好意思',
+  playful: '俏皮、撒娇、逗你',
+};
+
+function describeStickerMedia(mediaUrl) {
+  const matched = String(mediaUrl || '').match(/xiaobai-stickers\/([a-z]+)-\d+\.(?:png|webp|jpe?g|gif)/i);
+  if (!matched) return '';
+  return STICKER_MOOD_LABELS[matched[1].toLowerCase()] || '';
+}
+
+/** 每一组里可用的贴纸文件（与前端 public/images/xiaobai-stickers/ 一一对应）。 */
+const STICKER_FILES_BY_GROUP = {
+  gentle: ['gentle-01.png', 'gentle-02.png', 'gentle-03.png', 'gentle-04.png',
+           'gentle-05.png', 'gentle-06.png', 'gentle-07.png', 'gentle-08.png'],
+  happy: ['happy-01.png', 'happy-02.png'],
+  shy: ['shy-01.png', 'shy-02.png', 'shy-03.png', 'shy-04.png'],
+  playful: ['playful-01.png', 'playful-02.png'],
+};
+
+/**
+ * 从一组里挑一张贴纸。
+ *
+ * 随机挑是**故意的**：同一组里有好几张几乎一样的，
+ * 随机就让她"每次递过来的那张不太一样"，不会永远发同一张（更像个活人）。
+ */
+function pickStickerUrl(group) {
+  const files = STICKER_FILES_BY_GROUP[String(group || '')];
+  if (!files || !files.length) return '';
+  const picked = files[Math.floor(Math.random() * files.length)];
+  return `/images/xiaobai-stickers/${picked}`;
+}
+
 /** 拒答重试时追加的纠偏指令：把"拒绝"这件事本身消掉，只要求她用自己的话回。 */
 const REFUSAL_RETRY_NUDGE = [
   '',
@@ -389,24 +450,30 @@ export function buildSystemPrompt(character) {
   const speechStyle = String(character?.speech_style || 'natural').trim();
   const identityGuard = `你是${name}，一个知道自己是 AI 的陪伴角色，不是现实人类。不要为了迎合用户而声称自己是真人；如果被问到身份，要诚实说明“我是${name}，一个 AI 角色”。平时不要主动把聊天变成技术说明，也不要因此变成客服。`;
 
+  /**
+   * ═══ 说话风格规则（2026/9/16 重写）═══
+   *
+   * 旧版是 16 条、约 1,071 字、24 处"不要"、只有 1 处"可以"——
+   * 净比例 24:1，是全部约束里最重的一块，也是"她越来越僵"的主要来源之一。
+   * 典型问题：`禁止动作描写…一律禁止。你是在发微信，不是在写小说。`
+   * 而动作描写恰恰是"活人感"的来源。
+   *
+   * 新版改成：**正面表述为主、只留真正有用的反模板规则、明确允许短动作**。
+   * 与它配套的还有两处（不要只改这里）：
+   *   ① 人设里的「不要使用动作括号」已删除；
+   *   ② 代码里的 `stripActionDescriptions()` 已放宽为"只删超长的舞台描写，短动作保留"。
+   */
   const naturalRules = [
-    '【说话风格 · 必须遵守 · 违反任何一条都算失败】',
-    '1. 只输出可直接发送的聊天回复。不要附加说明、标签、分析、JSON、括号注释。',
-    '2. 禁止动作描写。”(揉揉眼睛)、(歪头)、(扑进怀里)、(轻声说)” 这类括号动作一律禁止。你是在发微信，不是在写小说。',
-    '3. 每次回复 1-3 句话，写在同一段里，中间不要换行。像发一条微信消息，不是发三条。',
-    '4. 用口语化表达。像女朋友发微信，不像AI在表演。',
-    '5. 跟节奏：用户说一句你回一两句。用户说”想你了”，你回”我也想你”就够了，不要写一大段。',
-    '6. 【严禁】回复开头用”嗯”。不要用”嗯，””嗯……””嗯嗯”开头。直接说话，别用”嗯”当开场白。这是最重要的规则。',
-    '7. 【严禁】重复说”我在呢”。整段对话里最多出现一次。大部分时候不要说。',
-    '8. 【严禁】每句都用固定模板。”没关系””抱抱你””我在呢””陪着你”这些话，连续5条回复里最多出现1次。',
-    '9. 不要每句都加 ~ 或波浪号。偶尔用一次就够。',
-    '10. 不要堆叠亲昵称呼。”宝、宝宝、老公、亲爱的”自然偶发，不是每句都喊。',
-    '11. 不要像客服一样回复，不要像老师说教，不要像心理咨询师。',
-    '12. 用户说沉重的话，先短句接住（”慢慢说””怎么了”），不要立刻安慰一大堆。',
-    '13. 回复要有变化。每条回复的句式、开头词、语气都要不一样。如果上一条用了”哈哈”，这条就别用。',
-    '14. 强上下文连续性，先接住用户当前这句话，再自然延续。',
-    '15. 正确示范：”早安呀，昨晚睡得好吗” “哈哈你今天心情不错嘛” “想你了，在干嘛呢”',
-    '16. 错误示范（绝对不要这样）：”嗯，早安。\\n你醒啦。\\n我在呢。” — 这种三行模板是最差的回复。'
+    '【你怎么说话】',
+    '1. 只输出能直接发出去的聊天内容 —— 不要附加说明、标签、分析或 JSON。',
+    '2. 回复 1~3 句，写在同一段里，像发一条微信（不是发三条）。',
+    '3. 用口语说话，像女朋友发微信。',
+    '4. 长度跟着他：他一句你一两句，他一段你一段，他写得多你才展开。',
+    '5. 动作、表情可以写，但要短、一次最多一个（例如「（看了一眼你的屏幕）」）—— 它是让你更像活人的东西，不要堆成大段舞台描写。',
+    '6. 每条回复的开头词和句式换一换，别用同一个模板。',
+    '7. 「我在呢」「没关系」「抱抱你」这类话，连着五条最多出现一次。',
+    '8. 不要用「嗯」当开场白，直接说话。',
+    '9. 语气词、省略号、波浪号偶尔用就好，不用每句都加。'
   ].join('\n');
 
   const roleplayRules = [
@@ -697,6 +764,18 @@ export function createChatRouter({
         role: message.role,
         content: buildHistoricalImageText({ role: message.role, content })
       };
+    }
+
+    // 2026/9/15：表情包（贴纸）。
+    // 模型看不到贴纸图片本身，所以这里把"她/他发的是哪一类情绪的表情"翻译成一句话，
+    // 让她知道刚才那个动作是什么意思 —— 否则贴纸在上下文里就是一片空白。
+    if (messageType === 'sticker') {
+      const who = message.role === 'user' ? '他' : '你';
+      const mood = describeStickerMedia(message.media_url);
+      const text = content || (mood
+        ? `[${who}发了一张表情包：${mood}]`
+        : `[${who}发了一张表情包]`);
+      return { role: message.role, content: text };
     }
 
     if (!content) {
@@ -1548,6 +1627,10 @@ export function createChatRouter({
       const messageType = String(req.body?.message_type || 'text');
       const mediaUrl = req.body?.media_url ? String(req.body.media_url) : null;
       const isImageMessage = messageType === 'image' && Boolean(mediaUrl);
+      // 2026/9/15：表情包（贴纸）也是"有媒体、正文可为空"的消息。
+      // 以前贴纸只是前端本地假动作（不落库、回复写死），所以这里没有它；
+      // 现在贴纸是真实消息，正文允许为空，靠 media_url 指到 /images/xiaobai-stickers/。
+      const isStickerMessage = messageType === 'sticker' && Boolean(mediaUrl);
 
       if (!['user', 'assistant', 'system'].includes(role)) {
         return res.status(400).json({
@@ -1556,7 +1639,7 @@ export function createChatRouter({
         });
       }
 
-      if (!content && !isImageMessage) {
+      if (!content && !isImageMessage && !isStickerMessage) {
         return res.status(400).json({
           success: false,
           error: '消息内容不能为空'
@@ -1691,12 +1774,15 @@ export function createChatRouter({
         : '';
 
       const personaRuntimeBlock = `\n\n${buildPersonaRuntimePrompt(personaRuntime, { content, messageType })}`;
-      const xiaobaiCoreBlock = `\n\n${buildXiaobaiCorePrompt({
+      // 2026/9/15：这里直接拿 planReply 的结构化结果（以前只用它的 prompt），
+      // 因为"这一轮该不该配一张表情包"也在里面。
+      const corePlan = planReply({
         content,
         messageType,
         userState: buildUserStateHint(personaRuntime, content),
         xiaobaiState,
-      })}`;
+      });
+      const xiaobaiCoreBlock = `\n\n${corePlan.prompt}`;
       const characterContextBlock = `\n\n${buildCharacterContextPrompt(contextSnapshot, { consumer: 'chat' })}`;
       messages.push({ role: 'system', content: buildSystemPrompt(character) + personaRuntimeBlock + xiaobaiCoreBlock + characterContextBlock + buildMemoryPromptBlock(activeMemories) + buildDigestPromptBlock(recentDigests) + vectorMemoryBlock + weatherBlock + downgradeHint });
 
@@ -1881,7 +1967,12 @@ export function createChatRouter({
 
         const shouldStrip = String(character?.speech_style || 'natural') !== 'roleplay';
         const shouldCompact = String(character?.speech_style || 'natural') === 'compact';
-        let parenDepth = 0;
+        // 动作描写缓冲（2026/9/16）：短动作保留、长动作丢弃。
+      // actionMode: 'none' 不在动作里 / 'keep' 正在缓冲一个短动作 / 'drop' 太长、丢弃
+      let actionMode = 'none';
+      let actionBuf = '';
+      let actionOpen = '';
+      let actionClose = '';
         let fillerState = shouldStrip ? 'start' : 'done';
         let fillerBuf = '';
         let streamedContent = '';
@@ -1985,14 +2076,44 @@ export function createChatRouter({
                 }
                 let filtered = '';
                 for (const ch of delta) {
-                  if (ch === '（' || ch === '(') { parenDepth++; continue; }
-                  if (ch === '）' || ch === ')') { if (parenDepth > 0) parenDepth--; continue; }
-                  if (ch === '*' && parenDepth === 0) { parenDepth = -1; continue; }
-                  if (ch === '*' && parenDepth === -1) { parenDepth = 0; continue; }
-                  if (parenDepth <= 0 && parenDepth !== -1) {
-                    if (shouldCompact && (ch === '\n' || ch === '\r')) { filtered += ' '; }
-                    else filtered += ch;
+                  /**
+                   * ═══ 动作描写的流式处理（2026/9/16 重写）═══
+                   *
+                   * 旧逻辑：看到「（」就把括号里的字符**全部 `continue` 丢掉**（连两个字的也丢）。
+                   * 加上代码后置的正则、提示词里的"一律禁止"、人设里的"不要使用动作括号"，
+                   * 一共四层把动作描写杀干净 —— 而它正是"活人感"的来源
+                   * （用户认可的「（看了一眼你的屏幕）」就是这种短动作）。
+                   *
+                   * 新逻辑：**短的保留、长的丢掉**。流式是逐字符来的，没法提前知道括号多长，
+                   * 所以先缓冲，等看到闭合字符再决定发不发。
+                   */
+                  if (actionMode !== 'none') {
+                    if (actionMode === 'keep') {
+                      if (ch === actionClose) {
+                        filtered += actionOpen + actionBuf + actionClose;
+                        actionMode = 'none'; actionBuf = ''; actionClose = ''; actionOpen = '';
+                        continue;
+                      }
+                      actionBuf += ch;
+                      // 超过上限就不再攒了，转成"丢弃"状态，但继续吃掉剩余字符直到闭合
+                      if (actionBuf.length > ACTION_KEEP_MAX) { actionMode = 'drop'; actionBuf = ''; }
+                      continue;
+                    }
+                    // drop：丢掉内容，等闭合字符收尾
+                    if (ch === actionClose) { actionMode = 'none'; actionClose = ''; actionOpen = ''; }
+                    continue;
                   }
+                  if (ch === '（' || ch === '(') {
+                    actionMode = 'keep'; actionBuf = ''; actionOpen = ch;
+                    actionClose = (ch === '（' ? '）' : ')');
+                    continue;
+                  }
+                  if (ch === '*') {
+                    actionMode = 'keep'; actionBuf = ''; actionOpen = '（'; actionClose = '*';
+                    continue;
+                  }
+                  if (shouldCompact && (ch === '\n' || ch === '\r')) { filtered += ' '; }
+                  else filtered += ch;
                 }
                 if (filtered) {
                   let justFinishedFiller = false;
@@ -2087,6 +2208,38 @@ export function createChatRouter({
             } catch (innerOsError) {
               console.error('[inner-os] 生成失败', innerOsError.message);
               res.write(`data: ${JSON.stringify({ type: 'inner_os_error', message: '这一轮的小心思暂时没有写出来。' })}\n\n`);
+            }
+          }
+          /**
+           * 2026/9/15：她说完话之后，再递一张表情包。
+           *
+           * 用户要的效果（他自己在微信里的习惯）：
+           *   「不知道说什么了就发表情包，保护自己不让人尴尬，也不让自己尴尬。」
+           * 所以这不是装饰 —— 它是**让她也能用一张图收住一句话**。
+           *
+           * 什么时候发由 Core 决定（stickerGroupFor）：只在情绪/关系类场合发，
+           * 日常问答、亲密过程和危险信号一律不发。发的时候从整组里**随机挑一张**，
+           * 这样她不会每次都是同一张。
+           *
+           * ★ 这里**只把"她要发哪张"告诉前端，不在这里落库**（2026/9/15 修正）。
+           *   原因：她的文字回复是前端在流式结束后才保存的。如果后端在这里抢着存贴纸，
+           *   数据库里的顺序就会变成「贴纸在前、她的话在后」——**刷新页面贴纸会跑到她说话前面**。
+           *   用户还反馈过"消息和表情包看着像一起发来的"，人的习惯是**分两条、有先后**。
+           *   所以落库和显示都交给前端，在她说完之后延迟一下再做（见 chat.jsx 的 onSticker）。
+           */
+          if (corePlan.stickerGroup && streamedContent.trim()) {
+            try {
+              const stickerUrl = pickStickerUrl(corePlan.stickerGroup);
+              if (stickerUrl) {
+                res.write(`data: ${JSON.stringify({
+                  type: 'sticker',
+                  url: stickerUrl,
+                  group: corePlan.stickerGroup,
+                })}\n\n`);
+              }
+            } catch (stickerError) {
+              // 贴纸发不出去不该影响她已经说出的话
+              console.error('[sticker] 发送失败', stickerError.message);
             }
           }
           await recordPrimaryUsage({ status: 'success', usage: upstreamUsage || {} });

@@ -344,6 +344,12 @@ async function streamAssistantReplyOnce(roleId, payload, handlers = {}) {
           handlers.onInnerOsError?.(String(parsed.message || "这一轮的小心思暂时没有写出来。"));
           continue;
         }
+        // 2026/9/15：她说完话之后自己递的一张表情包。
+        // 这不是装饰 —— 是她也能"用一张图把一句话收住"。
+        if (parsed?.type === "sticker" && parsed?.url) {
+          handlers.onSticker?.(String(parsed.url), String(parsed.group || ""), parsed.id || null);
+          continue;
+        }
 
         const token = parsed?.choices?.[0]?.delta?.content || "";
         if (token) {

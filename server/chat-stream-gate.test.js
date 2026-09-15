@@ -131,13 +131,20 @@ test('★ 流式：首块是多字时也不能被复制', async () => {
   assert.equal(text, '就就是那儿，湿的是我自己流的');
 });
 
-test('流式：裁剪模式下，开头的动作描写（括号）仍要被去掉', async () => {
-  // 门闸如果发出的是"未裁剪的原文"，括号内容就会漏给用户
-  const deltas = ['（她靠过来）', '别急，', '慢一点'];
-  const text = await send('继续', { deltas });
-  assert.doesNotMatch(text, /她靠过来/, '括号里的动作描写不该发给用户');
-  assert.match(text, /别急/);
-  assert.match(text, /慢一点/);
+test('流式：裁剪模式下，**短**动作描写保留（2026/9/16 放宽），超长舞台描写才删', async () => {
+  // 旧的实现把括号里 2~60 字的内容全删 —— 连「（看了一眼你的屏幕）」这种
+  // 很自然的短动作也删掉了，而它正是"活人感"的来源。
+  // 现在只删超长的（>25 字）舞台描写，短的保留。
+  const short = ['（她靠过来）', '别急，', '慢一点'];
+  const shortText = await send('继续', { deltas: short });
+  assert.match(shortText, /她靠过来/, '短动作描写应当保留给用户');
+  assert.match(shortText, /别急/);
+  assert.match(shortText, /慢一点/);
+
+  const long = ['（她把头轻轻靠在你肩膀上，手指慢慢收紧，像是怕你突然站起来走掉一样）', '我在。'];
+  const longText = await send('继续', { deltas: long });
+  assert.doesNotMatch(longText, /她把头轻轻靠在你肩膀上/, '超长舞台描写仍要被去掉');
+  assert.match(longText, /我在/);
 });
 
 test('流式：裁剪模式下，开头的"嗯"仍要被去掉，且不丢内容', async () => {
@@ -208,5 +215,7 @@ test('★ 流式：英文拒答里夹全角冒号，仍然要被判为异常', a
 test('流式：中文回复里带全角标点不受影响', async () => {
   const deltas = ['（靠过来）', '你回来啦：', '今天怎么样？'];
   const text = await send('在吗', { deltas });
-  assert.equal(text, '你回来啦：今天怎么样？');
+  // 2026/9/16：短动作描写现在**保留**（旧版会把括号内容删掉）。
+  // 这条测试的本意是"全角标点（：？）不会破坏流式"，括号只是顺带出现的内容。
+  assert.equal(text, '（靠过来）你回来啦：今天怎么样？');
 });

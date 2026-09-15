@@ -117,7 +117,28 @@
 .sticker { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 14px; border-radius: 18px; background: rgba(255,255,255,0.7); box-shadow: var(--shadow-sm); animation: pop 0.4s ease; }
 .st-emo { font-size: 40px; line-height: 1; }
 .st-label { font-size: 10.5px; color: var(--ink-faint); font-weight: 500; }
-.sticker-panel { position: relative; z-index: 6; background: var(--card-warm); border-top: 1px solid var(--line); padding: 12px 14px 22px; animation: sheetUp 0.3s cubic-bezier(0.2,0.85,0.25,1); max-height: 35vh; overflow-y: auto; }
+/* 2026/9/15：透明贴纸 —— 不要白方块、不要边框、不要盒子阴影。
+   用户原话："透明底色比较可爱"。 */
+.sticker.sticker-plain {
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+.sticker.sticker-plain img {
+  width: 132px;
+  height: 132px;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 3px 7px rgba(170,130,130,0.16));
+}
+.sticker-panel { position: relative; z-index: 6; background: var(--card-warm); border-top: 1px solid var(--line); padding: 10px 12px 20px; animation: sheetUp 0.3s cubic-bezier(0.2,0.85,0.25,1); max-height: 38vh; overflow-y: auto; }
+/* 场景分组胶囊（替代原来的两个大 tab：按场合找，比按名字找快） */
+.sp-chips { display: flex; gap: 7px; padding: 2px 2px 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.sp-chips::-webkit-scrollbar { display: none; }
+.sp-chip { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; padding: 6px 13px; border-radius: 14px; font-size: 12.5px; font-weight: 500; color: var(--ink-soft); background: var(--paper-2); border: 1px solid var(--line); cursor: pointer; transition: background 0.18s, color 0.18s, border-color 0.18s; }
+.sp-chip.on { background: var(--rose-tint); color: var(--rose); border-color: var(--rose-soft, #f6d2dc); font-weight: 600; }
+.sp-chip-n { font-size: 10px; opacity: 0.6; }
 .sp-tabs { display: flex; gap: 0; margin-bottom: 10px; border-bottom: 1px solid var(--line); }
 .sp-tab { flex: 1; padding: 8px 0; font-size: 12.5px; font-weight: 500; color: var(--ink-soft); background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; }
 .sp-tab.on { color: var(--rose); border-bottom-color: var(--rose); font-weight: 600; }
@@ -129,6 +150,11 @@
 .sp-item:active { transform: scale(0.86); background: var(--rose-tint); }
 .sp-item.sp-img { padding: 4px; }
 .sp-item.sp-img img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; }
+/* 透明贴纸在面板里：不要灰底方块，让贴纸自己浮着 */
+.sp-grid-stk { grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.sp-item.sp-stk { background: transparent; padding: 2px; }
+.sp-item.sp-stk img { width: 100%; height: 100%; object-fit: contain; }
+.sp-item.sp-stk:active { background: transparent; }
 .sp-emoji-grid { grid-template-columns: repeat(7, 1fr); }
 .sp-item.sp-emoji { font-size: 24px; background: transparent; }
 

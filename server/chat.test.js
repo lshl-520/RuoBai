@@ -795,9 +795,11 @@ test('POST /api/chat includes active memories and anti-roleplay rules in the sys
     const systemPrompt = requestBody.messages[0].content;
     assert.match(systemPrompt, /I like blueberry cake/);
     assert.match(systemPrompt, /Preference/);
-    assert.match(systemPrompt, /说话风格/);
-    assert.match(systemPrompt, /禁止动作描写/);
-    assert.match(systemPrompt, /只输出可直接发送的聊天回复/);
+    assert.match(systemPrompt, /说话风格|你怎么说话/);
+    // 2026/9/16：说话风格规则重写为正面版 —— 从"禁止动作描写"改成"动作可以写、但要短"
+    assert.match(systemPrompt, /动作、表情可以写/, '新规则应当明确允许短动作描写');
+    assert.doesNotMatch(systemPrompt, /禁止动作描写/, '不该再一律禁止动作描写');
+    assert.match(systemPrompt, /只输出能直接发出去的聊天内容/);
     assert.match(systemPrompt, /本轮陪伴上下文/);
     assert.match(systemPrompt, /场景：/);
   });

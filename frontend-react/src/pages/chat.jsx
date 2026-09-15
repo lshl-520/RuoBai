@@ -672,11 +672,16 @@ function Bubble({ m, agent, tts, voice, myAvatar, onDelete, onOpenImage, onRetry
   } : {};
 
   if (m.type === "sticker") {
+    // 2026/9/15：表情包改成**透明贴纸**——不再套白色方块气泡。
+    // 有 img 就渲染图片（透明 PNG），没有就退回原来的 emoji 贴纸。
+    const stickerImg = m.img || m.stickerImg;
     return (
       <div className={"row " + (isMe ? "me" : "her")}>
         {!isMe && <div className="row-avatar"><img src={agent.avatar} alt="" onError={fallbackToDefaultRoleAvatar} /></div>}
         <div className="sticker-wrap">
-          <div className="sticker"><span className="st-emo">{m.sticker}</span>{m.label && <span className="st-label">{m.label}</span>}</div>
+          {stickerImg
+            ? <div className="sticker sticker-plain"><img src={stickerImg} alt={m.label || "表情"} loading="lazy" /></div>
+            : <div className="sticker"><span className="st-emo">{m.sticker}</span>{m.label && <span className="st-label">{m.label}</span>}</div>}
           {m.time && <span className="msg-time">{m.time}</span>}
         </div>
         {isMe && <div className="row-avatar"><img src={myAvatar} alt="" onError={fallbackToDefaultUserAvatar} /></div>}
@@ -843,6 +848,8 @@ function toMsg(m) {
     // 旧 reasoning_summary 可能是英文原始摘要，不能冒充角色内心。
     think: m.inner_os_source === "character_reflection" ? (m.inner_os_content || "") : "",
     images: (messageType === "image" && m.media_url) ? [m.media_url] : [],
+    // 2026/9/15：表情包（贴纸）靠 media_url 指到透明 PNG，和图片分开处理。
+    img: messageType === "sticker" ? (m.media_url || m.sticker_img || "") : "",
     audioUrl: messageType === "voice" ? (m.media_url || m.audio_url || "") : "",
     dur: m.dur || "",
     time,
@@ -868,43 +875,88 @@ const REPLIES = [
   { text: "听到了。这件事搁在你心里多久了?", emo: "05_关心担忧", think: "顺着他的情绪往下,而不是急着给建议。先把『多久』问出来,他自己也许会松动。" },
   { text: "没关系的。你不用现在就想明白,我陪你一起拖一会儿也行。", emo: "11_撒娇期待", think: "他要的是允许,不是答案。给他一个能喘气的缝隙。" },
 ];
-const STICKER_REPLIES = ["🥰", "🥺", "😘", "🌙", "😋", "🌸"];
-
-const XIAOBAI_EMOTIONS = [
-  { file: "01_默认温柔.png", name: "温柔" },
-  { file: "02_开心明亮.png", name: "开心" },
-  { file: "03_害羞微笑.png", name: "害羞" },
-  { file: "04_认真倾听.png", name: "认真" },
-  { file: "05_关心担忧.png", name: "担忧" },
-  { file: "06_委屈小嘴.png", name: "委屈" },
-  { file: "07_轻微惊讶.png", name: "惊讶" },
-  { file: "08_无奈温柔.png", name: "无奈" },
-  { file: "09_困倦慵懒.png", name: "困了" },
-  { file: "10_生气但不凶.png", name: "生气" },
-  { file: "11_撒娇期待.png", name: "撒娇" },
-  { file: "12_晚安微笑.png", name: "晚安" },
+/**
+ * 小白的表情包（2026/9/15 用户确认）
+ * ────────────────────────────────────────────
+ * 来源：用户用 GPT 生成的 4×4 Q 版表情图（16 格），本机已切成 16 张并抠掉白底成透明 PNG。
+ * 素材位置：/images/xiaobai-stickers/
+ *
+ * ★ 为什么不按"每张一个精确名字"分组：
+ *   用户的实际用法是"看一眼就知道该发哪张"，不需要记住 16 个名字。
+ *   所以这里只按**场景**分 4 组 —— 她（和人）在这个场景里随便挑一张都对，
+ *   既不会发错场（不会在安慰时丢一张大笑的），也不会永远发同一张。
+ *
+ * ★ 与旧素材的区别（重要，别再拿旧的当表情包）：
+ *   旧的 `/images/xiaobai-emotions/` 那 12 张**不是表情包** ——
+ *   它们是半身立绘切成的方块（放大右下角能看到头发和蕾丝领子），放进聊天气泡里像贴照片。
+ *   它们仍可用在角色选择/状态展示，但**不用于聊天表情**。
+ *
+ * ★ 已知缺口（等补充素材）：
+ *   目前没有「委屈/难过」「生气鼓嘴」「困/想睡」「惊讶」四类。
+ *   所以"安慰"场景只能用 gentle 组（安静陪着你）—— 方向对，但做不出"心疼"的表情。
+ */
+const XIAOBAI_STICKER_GROUPS = [
+  {
+    key: "gentle", name: "静静陪你",
+    hint: "他累了、难过、要收场的时候",
+    files: ["gentle-01.png", "gentle-02.png", "gentle-03.png", "gentle-04.png",
+            "gentle-05.png", "gentle-06.png", "gentle-07.png", "gentle-08.png"],
+  },
+  {
+    key: "happy", name: "开心",
+    hint: "他说了甜话、她自己高兴",
+    files: ["happy-01.png", "happy-02.png"],
+  },
+  {
+    key: "shy", name: "害羞",
+    hint: "他被夸、不好意思",
+    files: ["shy-01.png", "shy-02.png", "shy-03.png", "shy-04.png"],
+  },
+  {
+    key: "playful", name: "俏皮",
+    hint: "撒娇、逗他、想他",
+    files: ["playful-01.png", "playful-02.png"],
+  },
 ];
+
+const XIAOBAI_STICKER_BASE = "/images/xiaobai-stickers";
 
 const COMMON_EMOJIS = ["😊","😀","😁","😌","😉","🥹","😳","😘","👍","👏","❤️","🌭","✅","🎀","😻","🥰","🙄","🙏","🫶","🙂","🤗","😫","😴","☀️","🥳","💆","🎰","🍃","☁️","🌫","💐","💏","🫰","🎜","🌛"];
 
 function EmojiPanel({ agent, onSendSticker, onInsertEmoji }) {
-  const [tab, setTab] = useStateC(0);
+  // tab 用字符串：组 key，或 "emoji"
+  const [tab, setTab] = useStateC("gentle");
+  const group = XIAOBAI_STICKER_GROUPS.find((g) => g.key === tab);
   return (
     <div className="sticker-panel">
-      <div className="sp-tabs">
-        <button className={"sp-tab" + (tab === 0 ? " on" : "")} onClick={() => setTab(0)}>{agent.name}表情</button>
-        <button className={"sp-tab" + (tab === 1 ? " on" : "")} onClick={() => setTab(1)}>通用Emoji</button>
+      <div className="sp-chips">
+        {XIAOBAI_STICKER_GROUPS.map((g) => (
+          <button
+            key={g.key}
+            className={"sp-chip" + (tab === g.key ? " on" : "")}
+            title={g.hint}
+            onClick={() => setTab(g.key)}
+          >
+            {g.name}<span className="sp-chip-n">{g.files.length}</span>
+          </button>
+        ))}
+        <button className={"sp-chip" + (tab === "emoji" ? " on" : "")} onClick={() => setTab("emoji")}>Emoji</button>
       </div>
-      {tab === 0 && (
-        <div className="sp-grid">
-          {XIAOBAI_EMOTIONS.map((em, i) => (
-            <button key={i} className="sp-item sp-img" title={em.name} onClick={() => onSendSticker({ e: "", label: em.name, img: `/images/xiaobai-emotions/${em.file}` })}>
-              <img src={`/images/xiaobai-emotions/${em.file}`} alt={em.name} />
+      {group && (
+        <div className="sp-grid sp-grid-stk">
+          {group.files.map((f, i) => (
+            <button
+              key={i}
+              className="sp-item sp-stk"
+              title={group.name}
+              onClick={() => onSendSticker({ e: "", label: "", img: `${XIAOBAI_STICKER_BASE}/${f}` })}
+            >
+              <img src={`${XIAOBAI_STICKER_BASE}/${f}`} alt={group.name} />
             </button>
           ))}
         </div>
       )}
-      {tab === 1 && (
+      {tab === "emoji" && (
         <div className="sp-grid sp-emoji-grid">
           {COMMON_EMOJIS.map((em, i) => (
             <button key={i} className="sp-item sp-emoji" onClick={() => onInsertEmoji(em)}><span>{em}</span></button>
@@ -1322,6 +1374,40 @@ function ChatRoom({ agent, onBack }) {
     return () => document.removeEventListener("paste", onPaste);
   }, []);
 
+  /**
+   * 她递过来的一张表情包 —— 显示 + 落库，两件事必须**晚一点、单独一条**做。
+   *
+   * 用户反馈原话（2026/9/15）：
+   *   「消息和表情包看着像一起发来的，人的习惯是先发表情包或者后发表情包都不影响，
+   *     然后是按条来的，一起出来看着就很怪。」
+   *
+   * 所以：① 延迟一下再出现（像她说完话之后又点了发送）；
+   *       ② 单独一条消息、自己的时间戳；
+   *       ③ **由前端落库**，而且排在她的文字之后 —— 刷新页面顺序也正确。
+   */
+  const appendHerSticker = React.useCallback((url, group) => {
+    if (!url) return;
+    const delay = 550 + Math.floor(Math.random() * 750);
+    setTimeout(() => {
+      const tm = now();
+      setMsgs((p) => [...p, {
+        who: "her", type: "sticker", img: url, group: group || "", label: "", time: tm,
+      }]);
+      saveMessage(roleId, {
+        role: "assistant",
+        content: "",
+        message_type: "sticker",
+        media_url: url,
+      }).then((saved) => {
+        const stickerId = saved?.item?.id;
+        if (!stickerId) return;
+        setMsgs((p) => p.map((m) => (
+          m.type === "sticker" && m.img === url && !m.id ? { ...m, id: stickerId } : m
+        )));
+      }).catch(() => { /* 保存失败不挡聊天 */ });
+    }, delay);
+  }, [roleId]);
+
   const send = async (retryPayload = null) => {
     const t = retryPayload ? String(retryPayload.text || "").trim() : draft.trim();
     const images = retryPayload
@@ -1462,6 +1548,12 @@ function ChatRoom({ agent, onBack }) {
         onError: (errMsg) => {
           streamError = String(errMsg || "发送失败，请检查后端和模型配置。");
         },
+        /**
+         * 2026/9/15：她说完话之后自己递的一张表情包。
+         * 后端已经把它存成一条 message_type='sticker' 的真实消息，
+         * 这里只要把它显示出来（她主动发，不是装饰）。
+         */
+        onSticker: (url, group) => appendHerSticker(url, group),
       });
       if (streamError) throw new Error(streamError);
 
@@ -1529,13 +1621,90 @@ function ChatRoom({ agent, onBack }) {
     if (failed?.clientId === clientId) sendRef.current?.(failed);
   }, []);
 
-  const sendSticker = (s) => {
+  /**
+   * 发表情包（贴纸）—— 2026/9/15 改成**真实发送**。
+   *
+   * 改之前这一版是"本地假动作"：
+   *   · 贴纸不落库，刷新就没了；
+   *   · "她的回复"是本地写死的随机 emoji（setTimeout 1400ms 假装她回了）；
+   *   · 贴纸也不会进她的上下文，她根本不知道你发了什么。
+   *
+   * 现在：
+   *   ① 贴纸按 message_type='sticker' + media_url 存成一条真实消息；
+   *   ② 再走正常的流式回复，让她对这张贴纸有真实反应；
+   *   ③ 后端会把"这是哪一类情绪的表情"翻译成一句话给她（她看不到图本身）。
+   */
+  const sendSticker = async (s) => {
+    const img = String(s?.img || "").trim();
     setStickerOpen(false);
-    setMsgs((p) => [...p, { who: "me", type: "sticker", sticker: s.e, label: s.label, time: now() }]);
+    setInputActionsOpen(false);
+
+    // 纯 emoji 贴纸（没有图片）：保持轻量，但不假装她回了话
+    if (!img) {
+      setMsgs((p) => [...p, { who: "me", type: "sticker", sticker: s?.e || "", label: s?.label || "", time: now() }]);
+      return;
+    }
+    if (typing) return;
+
+    setChatError("");
+    const clientId = `sticker-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setMsgs((p) => [...p, { who: "me", type: "sticker", img, label: s?.label || "", time: now(), _clientId: clientId }]);
     setTyping(true);
     if (hasEmo) setEmo("02_开心明亮");
-    const rs = STICKER_REPLIES[Math.floor(Math.random() * STICKER_REPLIES.length)];
-    setTimeout(() => { setTyping(false); setMsgs((p) => [...p, { who: "her", type: "sticker", sticker: rs, label: "", time: now() }]); }, 1400);
+
+    try {
+      // ① 贴纸先落库（正文留空，靠 media_url 指到透明 PNG）
+      const savedUser = await saveUserMessage(roleId, {
+        role: "user",
+        content: s?.label || "",
+        message_type: "sticker",
+        media_url: img,
+      });
+      const userMsgId = savedUser?.item?.id || savedUser?.user_message?.id;
+      if (userMsgId) {
+        setMsgs((p) => p.map((m) => m._clientId === clientId ? { ...m, id: userMsgId, _clientId: undefined } : m));
+      }
+
+      // ② 她的真实回复（和普通聊天走同一条流式链路）
+      const replyId = `sr-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      setMsgs((p) => [...p, { who: "her", type: "text", text: "", _id: replyId, streaming: true, time: now() }]);
+      let fullReply = "";
+      let streamError = "";
+      await streamAssistantReply(roleId, {
+        content: s?.label || "",
+        role: "user",
+        message_type: "sticker",
+        media_url: img,
+        skip_server_persistence: true,
+        ...(modelChoice.credentialId && modelChoice.modelId ? { credential_id: modelChoice.credentialId, model_id: modelChoice.modelId } : {}),
+        ...(modelChoice.thinkLevel && modelChoice.thinkLevel !== "off" ? { thinking_level: modelChoice.thinkLevel } : {}),
+      }, {
+        onToken: (token) => {
+          fullReply += token;
+          setMsgs((p) => p.map((m) => m._id === replyId ? { ...m, text: fullReply } : m));
+        },
+        onError: (errMsg) => { streamError = String(errMsg || "发送失败，请检查后端和模型配置。"); },
+        // 你发了贴纸，她也可以回你一张（同一条链路、同样"单独一条、晚一点"）
+        onSticker: (url, group) => appendHerSticker(url, group),
+      });
+      setMsgs((p) => p.map((m) => m._id === replyId ? { ...m, streaming: false } : m));
+      if (streamError) throw new Error(streamError);
+      setTyping(false);
+      if (!fullReply.trim()) {
+        setMsgs((p) => p.filter((m) => m._id !== replyId));
+        return;
+      }
+      try {
+        const savedReply = await saveMessage(roleId, { role: "assistant", content: fullReply });
+        if (savedReply?.item?.id) {
+          setMsgs((p) => p.map((m) => m._id === replyId ? { ...m, id: savedReply.item.id } : m));
+        }
+      } catch { /* 保存失败不挡聊天，和普通发消息保持一致 */ }
+    } catch (e) {
+      setTyping(false);
+      setChatError(String(e?.message || "贴纸发送失败，稍后再试。"));
+      setMsgs((p) => p.map((m) => m._clientId === clientId ? { ...m, failed: true } : m));
+    }
   };
 
   /* 发语音消息 */
@@ -1796,7 +1965,7 @@ function ChatRoom({ agent, onBack }) {
                 <Icon name="mic" />
                 <span>{typing ? `${agent.name}正在回复…` : "点击录音"}</span>
               </button>
-              <button className="ib-tool ib-voice-sticker" onClick={() => setStickerOpen(!stickerOpen)} style={stickerOpen ? { color: "var(--rose)" } : null} aria-label="打开表情包" title="打开表情包"><Icon name="star" /></button>
+              <button className="ib-tool ib-voice-sticker" onClick={() => setStickerOpen(!stickerOpen)} style={stickerOpen ? { color: "var(--rose)" } : null} aria-label="打开表情包" title="打开表情包"><Icon name="paw" /></button>
             </>
           ) : (
             /* 文字模式：原有布局 */
@@ -1805,14 +1974,14 @@ function ChatRoom({ agent, onBack }) {
               <button className="ib-tool ib-desktop-tool" onClick={openPicker} disabled={uploading} style={(atts.length || uploading) ? { color: "var(--rose)" } : null} aria-label="选择图片" title="选择图片"><Icon name="image" /></button>
               <button className={"ib-tool ib-desktop-tool" + (guidedImageOpen ? " on" : "")} onClick={openGuidedImage} disabled={typing || uploading || guidedImageBusy} aria-label="引导画图" title="不用写提示词，选几个选项让她画"><Icon name="spark" /></button>
               <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={onPickImage} />
-              <button className="ib-tool ib-desktop-tool" onClick={() => setStickerOpen(!stickerOpen)} style={stickerOpen ? { color: "var(--rose)" } : null} aria-label="打开表情包" title="打开表情包"><Icon name="star" /></button>
+              <button className="ib-tool ib-desktop-tool" onClick={() => setStickerOpen(!stickerOpen)} style={stickerOpen ? { color: "var(--rose)" } : null} aria-label="打开表情包" title="打开表情包"><Icon name="paw" /></button>
               <div className="ib-field">
                 <textarea ref={draftRef} value={draft} rows={1} enterKeyHint="send" onFocus={() => { setStickerOpen(false); setInputActionsOpen(false); }}
                   onChange={(e) => { setDraft(e.target.value); resizeDraft(e.currentTarget); }}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
                   placeholder={typing ? `${agent.name}正在回复…` : `和${agent.name}说点什么…`} />
               </div>
-              <button className={"ib-tool ib-mobile-action" + (stickerOpen ? " on" : "")} onClick={() => { setStickerOpen(!stickerOpen); setInputActionsOpen(false); }} aria-label="打开表情包" title="打开表情包"><Icon name="star" /></button>
+              <button className={"ib-tool ib-mobile-action" + (stickerOpen ? " on" : "")} onClick={() => { setStickerOpen(!stickerOpen); setInputActionsOpen(false); }} aria-label="打开表情包" title="打开表情包"><Icon name="paw" /></button>
               {!canSend && <button className={"ib-tool ib-mobile-action ib-mobile-more" + (inputActionsOpen ? " on" : "")} onClick={() => { setInputActionsOpen(!inputActionsOpen); setStickerOpen(false); }} aria-label="更多聊天操作" title="更多聊天操作"><Icon name="plus" /></button>}
               {canSend
                 ? <button className={"ib-send on" + (typing ? " busy" : "")} onClick={() => send()} disabled={typing || uploading} aria-label="发送消息" title="发送消息"><Icon name="send" /></button>
@@ -1825,7 +1994,7 @@ function ChatRoom({ agent, onBack }) {
             <button className="mobile-input-action" onClick={() => { setCalling(true); setInputActionsOpen(false); }} aria-label="开始实时通话"><Icon name="phone" /><span>通话</span></button>
             <button className="mobile-input-action" onClick={openPicker} disabled={uploading} aria-label="选择图片"><Icon name="image" /><span>图片</span></button>
             <button className="mobile-input-action" onClick={openGuidedImage} disabled={typing || uploading || guidedImageBusy} aria-label="引导画图"><Icon name="spark" /><span>画图</span></button>
-            <button className="mobile-input-action" onClick={() => { setStickerOpen(true); setInputActionsOpen(false); }} aria-label="打开表情包"><Icon name="star" /><span>表情</span></button>
+            <button className="mobile-input-action" onClick={() => { setStickerOpen(true); setInputActionsOpen(false); }} aria-label="打开表情包"><Icon name="paw" /><span>表情</span></button>
           </div>
         )}
       </footer>
