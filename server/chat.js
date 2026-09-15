@@ -444,6 +444,30 @@ function sendSyntheticStream(res, text) {
   res.end();
 }
 
+/**
+ * ═══ 摘掉"刚存下的这一轮"（2026/9/16 修 bug 用）═══
+ *
+ * 前端是两步：① `saveUserMessage` 先把他的话存库；② 再带 `skip_server_persistence`
+ * 发流式请求取回复。所以服务端读到的 `recent` **最后一条就是他刚说的这句**，
+ * 而下面又会把当前 `content` 推一次 —— 模型连续收到两条一模一样的用户消息。
+ *
+ * 用户 2026/9/16 截图实证：她会说「问两遍，是怕我答得不够真心吗」；
+ * 调试日志实测同一句被推了 3 遍。这不只是别扭，还白耗 token，
+ * 并且会让模型以为用户在重复自己。
+ *
+ * 这里做的是：**只在完全对得上时**（角色=user、正文一致、消息类型一致）
+ * 把最后一条从历史里摘掉，交给"当前轮"那次 push 代表。
+ */
+export function dropJustSavedCurrentTurn(recent, { content, messageType = 'text' } = {}) {
+  const list = Array.isArray(recent) ? recent : [];
+  const last = list[list.length - 1];
+  const isThisTurn = Boolean(last)
+    && last.role === 'user'
+    && String(last.content || '').trim() === String(content || '').trim()
+    && String(last.message_type || 'text') === String(messageType || 'text');
+  return isThisTurn ? list.slice(0, -1) : list;
+}
+
 export function buildSystemPrompt(character) {
   const name = String(character?.name || '').trim() || '陪伴角色';
   const persona = String(character?.persona || '').trim();
@@ -1786,8 +1810,14 @@ export function createChatRouter({
       const characterContextBlock = `\n\n${buildCharacterContextPrompt(contextSnapshot, { consumer: 'chat' })}`;
       messages.push({ role: 'system', content: buildSystemPrompt(character) + personaRuntimeBlock + xiaobaiCoreBlock + characterContextBlock + buildMemoryPromptBlock(activeMemories) + buildDigestPromptBlock(recentDigests) + vectorMemoryBlock + weatherBlock + downgradeHint });
 
+      /**
+       * ═══ 修：同一句话被发给模型两遍（2026/9/16 定位并修复）═══
+       * 详见 `dropJustSavedCurrentTurn()` 的注释。
+       */
+      const historyMessages = dropJustSavedCurrentTurn(recent, { content, messageType });
+
       messages.push(
-        ...recent
+        ...historyMessages
           .map(item => buildUpstreamMessage({
             message: item,
             useVision: Boolean(capabilityModelConfig)
@@ -1804,6 +1834,23 @@ export function createChatRouter({
         },
         useVision: Boolean(capabilityModelConfig)
       }));
+
+      // 诊断开关（默认关闭，只在 DEBUG_UPSTREAM_MESSAGES=1 时打印）。
+      // ⚠️ 隐私：**只打印角色 / 长度 / 指纹**，绝不打印聊天正文。
+      // 用途：核实"同一句话有没有被发给模型两遍"这类组装错误。
+      if (process.env.DEBUG_UPSTREAM_MESSAGES === '1') {
+        const fingerprint = (s) => {
+          const t = String(s || '');
+          let h = 0;
+          for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0;
+          return (h >>> 0).toString(16).slice(0, 8);
+        };
+        console.log('[debug-upstream] 共', messages.length, '条；最后 5 条：',
+          JSON.stringify(messages.slice(-5).map((m) => {
+            const c = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+            return { r: m.role, len: c.length, fp: fingerprint(c) };
+          })));
+      }
 
       const shouldStream = wantsEventStream(req);
 

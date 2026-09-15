@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import { requireAuth } from './middleware.js';
-import { buildAnthropicMessagesUrl, buildResponsesUrl, buildSystemPrompt, createChatRouter } from './chat.js';
+import { buildAnthropicMessagesUrl, buildResponsesUrl, buildSystemPrompt, createChatRouter, dropJustSavedCurrentTurn } from './chat.js';
 
 function createApp({ router, sessionUser = { userId: 1, username: 'user-1', role: 'user' } }) {
   const app = express();
@@ -1464,4 +1464,41 @@ test('POST /api/chat hides Chat Completions reasoning_content and keeps only the
     assert.match(streamText, /"type":"inner_os","content":"她把题目拆开核对了一遍，怕给错你。"/);
     assert.match(streamText, /"content":"2620"/);
   });
+});
+
+/* ══════════════════════════════════════════════════════════════════
+ * 回归：同一句话不许被发给模型两遍（2026/9/16 真实事故）
+ *
+ * 事故形态：前端"先存消息、再请求回复"两步走，服务端读到的 recent
+ * 末条就是他刚说的这句，而组装时又把当前 content 推了一次 ——
+ * 模型连续收到两条一模一样的用户消息，她会回「你问了两遍…」。
+ * 调试日志实测同一句被推过 3 遍。
+ * ══════════════════════════════════════════════════════════════════ */
+test('★ 同一条消息只发给模型一次：刚存下的那一轮要从历史里摘掉', () => {
+  const recent = [
+    { id: 1, role: 'user', content: '晚上吃什么', message_type: 'text' },
+    { id: 2, role: 'assistant', content: '你想吃啥', message_type: 'text' },
+    { id: 3, role: 'user', content: '想我没', message_type: 'text' },
+  ];
+  const out = dropJustSavedCurrentTurn(recent, { content: '想我没', messageType: 'text' });
+  assert.equal(out.length, 2, '刚存下的那条应当被摘掉');
+  assert.equal(out[out.length - 1].id, 2, '剩下的最后一条应当是她的上一条回复');
+});
+
+test('★ 只有当"完全对得上"时才摘：换句话、换类型、她的消息都不摘', () => {
+  const base = [
+    { id: 1, role: 'user', content: '想我没', message_type: 'text' },
+  ];
+  // 正文不同 → 不动
+  assert.equal(dropJustSavedCurrentTurn(base, { content: '在干嘛' }).length, 1);
+  // 消息类型不同 → 不动
+  assert.equal(dropJustSavedCurrentTurn(base, { content: '想我没', messageType: 'image' }).length, 1);
+  // 末条是她说的 → 不动
+  const herLast = [{ id: 1, role: 'assistant', content: '想我没', message_type: 'text' }];
+  assert.equal(dropJustSavedCurrentTurn(herLast, { content: '想我没' }).length, 1);
+  // 空数组、非法输入 → 不炸
+  assert.deepEqual(dropJustSavedCurrentTurn([], { content: 'x' }), []);
+  assert.deepEqual(dropJustSavedCurrentTurn(null, { content: 'x' }), []);
+  // 首尾空白不应影响判断
+  assert.equal(dropJustSavedCurrentTurn([{ id: 1, role: 'user', content: '  想我没  ', message_type: 'text' }], { content: '想我没' }).length, 0);
 });
