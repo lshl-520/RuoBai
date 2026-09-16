@@ -1,0 +1,15 @@
+{
+  "_说明": "这是示例模板。复制成 capacitor.config.json（同目录）再把 url 改成你自己的域名。那个文件已被 .gitignore 忽略。",
+  "appId": "fun.example.ruobai",
+  "appName": "RuoBai",
+  "webDir": "dist",
+  "server": {
+    "url": "https://your-domain.example.com",
+    "cleartext": false
+  },
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  }
+}

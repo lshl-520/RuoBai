@@ -325,7 +325,7 @@ function HomePage() {
             她属于第一个把她启动起来的人。
           </p>
           <div className="oss-actions">
-            <a className="btn-ghost" href="https://github.com/lshl-520/ruobai" target="_blank">查看 GitHub 仓库 →</a>
+            <a className="btn-ghost" href="https://github.com/your-github-name/ruobai" target="_blank">查看 GitHub 仓库 →</a>
             <a className="btn-ghost" href="/auth">直接进入体验 →</a>
           </div>
         </div>
@@ -381,7 +381,7 @@ function HomePage() {
         <div>
           <h5>支持</h5>
           <ul>
-            <li><a href="https://github.com/lshl-520/ruobai" target="_blank">GitHub</a></li>
+            <li><a href="https://github.com/your-github-name/ruobai" target="_blank">GitHub</a></li>
             <li><a href="#">使用文档</a></li>
             <li><a href="#">问题反馈</a></li>
           </ul>
@@ -389,7 +389,7 @@ function HomePage() {
         <div>
           <h5>联系</h5>
           <ul>
-            <li><a href="mailto:lshlidc@vip.qq.com">邮箱</a></li>
+            <li><a href="mailto:you@example.com">邮箱</a></li>
             <li className="contact-qr-item">
               <a href="https://qun.qq.com/universal-share/share?ac=1&authKey=tvzp6s%2B2SjRLji2DEOIcfuLXBj1ilHq%2BGUrUsqKRbboUGJkNTS05JO1M7kXVybYq&busi_data=eyJncm91cENvZGUiOiIxMDg0NDI5MzE4IiwidG9rZW4iOiI5YTJMZG9LUHFhejFyU1BpWWxzOElsZVYwRDlRREstJMkI1UEdTWkN2bzZ0ZmxwWExEOGFHYXlvRFdSbFlIcERRIiwidWluIjoiNzM2OTU5MyJ9&data=f-ikzcYxi3x3wlSQgD_N-6oS_YCZcpEjCPnGeNwxmL4PV0qgv5s-EUGeXd2twKdrUzfzJc51V6PmsW-9XT0uTw&svctype=4&tempid=h5_group_info" target="_blank" rel="noopener">QQ 群</a>
               <span className="contact-qr"><img src="/assets/contact/douyin-group.jpg" alt="QQ 群二维码" /></span>

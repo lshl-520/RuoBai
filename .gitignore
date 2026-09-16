@@ -168,3 +168,6 @@ frontend-react/android/app/*.keystore
 sensitive-words.local.json
 *.local.json
 *.local.js
+
+# 本地部署配置（含你自己的域名，不进仓库，2026/9/16）
+capacitor.config.json

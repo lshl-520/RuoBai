@@ -78,7 +78,10 @@ public class AppUpdaterPlugin extends Plugin {
     private boolean isTrustedUrl(String value) {
         try {
             URI uri = URI.create(value);
-            return "https".equalsIgnoreCase(uri.getScheme()) && "lshl.fun".equalsIgnoreCase(uri.getHost());
+            // ⚠️ 部署时改这里：只允许从你自己的域名下载更新包（防中间人替换 APK）。
+        // 开源仓库里放占位符，你自己打包前把它改成你的真实域名。
+        final String allowedHost = "your-domain.example.com";
+        return "https".equalsIgnoreCase(uri.getScheme()) && allowedHost.equalsIgnoreCase(uri.getHost());
         } catch (RuntimeException error) {
             return false;
         }
