@@ -468,6 +468,65 @@ export function dropJustSavedCurrentTurn(recent, { content, messageType = 'text'
   return isThisTurn ? list.slice(0, -1) : list;
 }
 
+/** 把 0-23 点说成"深夜/早上/中午/下午/晚上"。 */
+function describeHour(hour) {
+  if (hour >= 23 || hour <= 4) return '深夜';
+  if (hour <= 8) return '早上';
+  if (hour <= 11) return '上午';
+  if (hour <= 13) return '中午';
+  if (hour <= 17) return '下午';
+  if (hour <= 20) return '傍晚';
+  return '晚上';
+}
+
+/**
+ * ═══ 「他隔了多久才回来」（2026/9/16 新增）═══
+ *
+ * 为什么需要：用户原话 ——「**我不会知道怎么开口，她要是能判断我期间下次会话是啥时候，
+ * 就可以知道我醒了没醒**；我是怕再遇到时间错乱」。
+ *
+ * 真实场景：他 02:56 说晚安，13:12 才回来发了个 👀。她当时接着"睡前"那句往下说
+ * （"还没闭眼呢？"），虽然那句其实是在接 👀 的梗，**但中间那 10 小时她没有认**。
+ * 她知道时间（提示词里有"当前时间"），只是没人告诉她"这次的间隔值得认一下"。
+ *
+ * 做法：用**上一条消息**的时间算间隔（注意：调用方必须先去掉"刚存下的当前轮"，
+ * 否则间隔恒为 0），超过 3 小时才提；并区分"睡了一觉"和"同一段里的长间隔"。
+ * 只给方向，不写死台词 —— 她怎么开口该由她自己决定。
+ */
+export function buildGapHint(recent = [], nowMs = Date.now()) {
+  const list = Array.isArray(recent) ? recent : [];
+  const last = list[list.length - 1];
+  const raw = String(last?.created_at || '').trim();
+  if (!raw) return '';
+  // 数据库返回的是服务器本地时间（Asia/Shanghai）、不带时区 → 按本地解析
+  const prev = new Date(raw.replace(' ', 'T'));
+  const prevMs = prev.getTime();
+  if (!Number.isFinite(prevMs)) return '';
+  const minutes = Math.floor((nowMs - prevMs) / 60000);
+  if (minutes < 180) return '';   // 3 小时以内算同一段对话，不提
+
+  const nowDate = new Date(nowMs);
+  const hours = Math.floor(minutes / 60);
+  // 跨天用四舍五入：46 小时读成"差不多 2 天"比"1 天"自然
+  const days = Math.round(hours / 24);
+  const readGap = days >= 1 ? `差不多 ${days} 天` : `大概 ${hours} 个小时`;
+
+  const prevHour = prev.getHours();
+  const nowHour = nowDate.getHours();
+  const prevWasNight = prevHour >= 22 || prevHour <= 5;
+  const nowIsDay = nowHour >= 7 && nowHour <= 18;
+
+  const lines = ['【他隔了多久才回来】'];
+  lines.push(`他上一次跟你说话是${readGap}前（那时是${describeHour(prevHour)}），现在已经是${describeHour(nowHour)}了。`);
+  if (prevWasNight && nowIsDay) {
+    lines.push('中间这一大段，他多半是去睡了 —— 他再来的时候先自然认一下这个间隔（"睡醒啦""这才起？"），别当成刚才还在说话。');
+  } else {
+    lines.push('他再来的时候先自然认一下这个间隔（"忙完了？""怎么隔了这么久"），别当成刚才还在说话。');
+  }
+  lines.push('认一下就好，一句带过；不用追问他去哪了，也不用解释自己等了多久。');
+  return '\n\n' + lines.join('\n');
+}
+
 export function buildSystemPrompt(character) {
   const name = String(character?.name || '').trim() || '陪伴角色';
   const persona = String(character?.persona || '').trim();
@@ -497,7 +556,8 @@ export function buildSystemPrompt(character) {
     '6. 每条回复的开头词和句式换一换，别用同一个模板。',
     '7. 「我在呢」「没关系」「抱抱你」这类话，连着五条最多出现一次。',
     '8. 不要用「嗯」当开场白，直接说话。',
-    '9. 语气词、省略号、波浪号偶尔用就好，不用每句都加。'
+    '9. 语气词、省略号、波浪号偶尔用就好，不用每句都加。',
+    '10. 表情不算"堆装饰"，别因为上面几条就一个都不用：该有情绪的时候用表情比用字更自然（😊 😆 🥺 😳 这类），他说话也常带表情。一句里最多一个，不用每句都带；想笑就配一句话，别只发一个表情。',
   ].join('\n');
 
   const roleplayRules = [
@@ -518,7 +578,18 @@ export function buildSystemPrompt(character) {
 
   const now = new Date();
   const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
-  const timeInfo = `当前时间：${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 星期${weekdays[now.getDay()]} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const dayPart = describeHour(now.getHours());
+  /**
+   * ═══ 时间要说清楚，而且要说"这是准的"（2026/9/16）═══
+   *
+   * 真实事故：下午 15:05，她回「刚说完晚安又想我，这一分钟都没到呢」
+   * 「心情好还熬到这个点，小心明天早上骂我」—— **把下午当成了深夜**。
+   *
+   * 根因不是时间没给她（提示词里本来就有"当前时间"），而是
+   * **对话上下文停在"睡前"那一串，她跟着上下文走，把那一行时间忽略了**。
+   * 所以这里除了给时间，还明确告诉她：上下文看着像夜里时，以这个时间为准。
+   */
+  const timeInfo = `当前时间：${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 星期${weekdays[now.getDay()]} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}（${dayPart}）\n★ 以这行时间为准：如果你们的聊天上下文看起来还停在别的时段（例如还在说睡觉、晚安，但现在其实是白天），按现在这个时间来，不要当成还是夜里。`;
 
   if (persona) {
     return `${identityGuard}\n\n${timeInfo}\n\n${persona}\n\n${relationshipContinuityRules}\n\n${styleRules}`;
@@ -1808,13 +1879,18 @@ export function createChatRouter({
       });
       const xiaobaiCoreBlock = `\n\n${corePlan.prompt}`;
       const characterContextBlock = `\n\n${buildCharacterContextPrompt(contextSnapshot, { consumer: 'chat' })}`;
-      messages.push({ role: 'system', content: buildSystemPrompt(character) + personaRuntimeBlock + xiaobaiCoreBlock + characterContextBlock + buildMemoryPromptBlock(activeMemories) + buildDigestPromptBlock(recentDigests) + vectorMemoryBlock + weatherBlock + downgradeHint });
 
       /**
        * ═══ 修：同一句话被发给模型两遍（2026/9/16 定位并修复）═══
        * 详见 `dropJustSavedCurrentTurn()` 的注释。
+       *
+       * ⚠️ 顺序要紧：**先**摘掉"刚存下的当前轮"，**再**算"他隔了多久才回来"。
+       * 否则历史末条就是这一轮本身，间隔恒为 0，间隔提示永远不会触发。
        */
       const historyMessages = dropJustSavedCurrentTurn(recent, { content, messageType });
+      const gapBlock = buildGapHint(historyMessages);
+
+      messages.push({ role: 'system', content: buildSystemPrompt(character) + personaRuntimeBlock + xiaobaiCoreBlock + characterContextBlock + gapBlock + buildMemoryPromptBlock(activeMemories) + buildDigestPromptBlock(recentDigests) + vectorMemoryBlock + weatherBlock + downgradeHint });
 
       messages.push(
         ...historyMessages

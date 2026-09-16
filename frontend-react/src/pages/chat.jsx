@@ -1385,27 +1385,56 @@ function ChatRoom({ agent, onBack }) {
    *       ② 单独一条消息、自己的时间戳；
    *       ③ **由前端落库**，而且排在她的文字之后 —— 刷新页面顺序也正确。
    */
+  /* 她主动递的那张表情包（2026/9/16 重写保存时机） */
+  const pendingStickerRef = useRefC(null);
+
+  /**
+   * 只负责"显示"，不负责"保存"。
+   *
+   * 旧实现是「延迟 550~1300ms 之后再发保存请求」，有两个真实问题：
+   *   ① 它和"存她的文字"在**赛跑** —— 定时器先跑完，贴纸的 id 就比文字小，
+   *      刷新后贴纸会**跑到文字前面**（用户实际遇到过，当时只能手工调 id 补救）；
+   *   ② 用户在这 1.3 秒内刷新/退出/断网，贴纸就**永久丢失**
+   *      （实测：她发过的贴纸在数据库里一条都没有，只有用户自己发的那条）。
+   *
+   * 现在改成：显示照旧晚一点点（像人先打字、再随手递张图），
+   * 但**保存统一挪到"她的文字存完之后"执行**（见 flushHerSticker），
+   * 这样顺序稳、内容也不会丢。
+   */
   const appendHerSticker = React.useCallback((url, group) => {
     if (!url) return;
+    pendingStickerRef.current = { url, group: group || "" };
     const delay = 550 + Math.floor(Math.random() * 750);
     setTimeout(() => {
-      const tm = now();
       setMsgs((p) => [...p, {
-        who: "her", type: "sticker", img: url, group: group || "", label: "", time: tm,
+        who: "her", type: "sticker", img: url, group: group || "", label: "", time: now(),
       }]);
-      saveMessage(roleId, {
+    }, delay);
+  }, []);
+
+  /**
+   * 把挂起的那张贴纸真正存下来。
+   * **必须在"她的文字"存完之后调用** —— 这样贴纸的 id 一定大于文字，
+   * 刷新后顺序永远是「先说一句，再递张图」。
+   */
+  const flushHerSticker = React.useCallback(async () => {
+    const pending = pendingStickerRef.current;
+    if (!pending?.url) return;
+    pendingStickerRef.current = null;
+    try {
+      const saved = await saveMessage(roleId, {
         role: "assistant",
         content: "",
         message_type: "sticker",
-        media_url: url,
-      }).then((saved) => {
-        const stickerId = saved?.item?.id;
-        if (!stickerId) return;
+        media_url: pending.url,
+      });
+      const stickerId = saved?.item?.id;
+      if (stickerId) {
         setMsgs((p) => p.map((m) => (
-          m.type === "sticker" && m.img === url && !m.id ? { ...m, id: stickerId } : m
+          m.type === "sticker" && m.img === pending.url && !m.id ? { ...m, id: stickerId } : m
         )));
-      }).catch(() => { /* 保存失败不挡聊天 */ });
-    }, delay);
+      }
+    } catch { /* 保存贴纸失败不挡聊天 */ }
   }, [roleId]);
 
   const send = async (retryPayload = null) => {
@@ -1582,6 +1611,9 @@ function ChatRoom({ agent, onBack }) {
           }
         } catch (e) { /* 保存回复失败仍继续 */ }
       }
+
+      // 4) 她递的那张贴纸：等上面"她的文字"存完再存，保证刷新后是「先说、再递图」
+      await flushHerSticker();
     } catch (err) {
       const baseText = friendlyChatNetworkError(err);
       setChatError(withDiagnosticId(baseText, recordDiagnostic({ area: "chat", action: "send-message", error: err })));
@@ -1700,6 +1732,8 @@ function ChatRoom({ agent, onBack }) {
           setMsgs((p) => p.map((m) => m._id === replyId ? { ...m, id: savedReply.item.id } : m));
         }
       } catch { /* 保存失败不挡聊天，和普通发消息保持一致 */ }
+      // 她回敬的那张贴纸：同样等文字存完再存，保证顺序
+      await flushHerSticker();
     } catch (e) {
       setTyping(false);
       setChatError(String(e?.message || "贴纸发送失败，稍后再试。"));

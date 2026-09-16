@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import { requireAuth } from './middleware.js';
-import { buildAnthropicMessagesUrl, buildResponsesUrl, buildSystemPrompt, createChatRouter, dropJustSavedCurrentTurn } from './chat.js';
+import { buildAnthropicMessagesUrl, buildResponsesUrl, buildSystemPrompt, createChatRouter, dropJustSavedCurrentTurn, buildGapHint } from './chat.js';
 
 function createApp({ router, sessionUser = { userId: 1, username: 'user-1', role: 'user' } }) {
   const app = express();
@@ -1501,4 +1501,40 @@ test('★ 只有当"完全对得上"时才摘：换句话、换类型、她的�
   assert.deepEqual(dropJustSavedCurrentTurn(null, { content: 'x' }), []);
   // 首尾空白不应影响判断
   assert.equal(dropJustSavedCurrentTurn([{ id: 1, role: 'user', content: '  想我没  ', message_type: 'text' }], { content: '想我没' }).length, 0);
+});
+
+/* ══════════════════════════════════════════════════════════════════
+ * 「他隔了多久才回来」（2026/9/16 新增）
+ *
+ * 起因：用户原话「我不会知道怎么开口，她要是能判断我期间下次会话是啥时候，
+ * 就可以知道我醒了没醒；我是怕再遇到时间错乱」。
+ * 真实场景：他 02:56 说晚安，13:12 才回来，中间 10 小时她没认出来。
+ * ══════════════════════════════════════════════════════════════════ */
+test('★ 隔得久（深夜→白天）要认出来是"睡了一觉"', () => {
+  const now = new Date('2026-09-16T13:12:00').getTime();
+  const hint = buildGapHint([{ role: 'assistant', created_at: '2026-09-16 02:56:28' }], now);
+  assert.match(hint, /隔了多久才回来/, '应当给出间隔提示');
+  assert.match(hint, /10 个小时/, '应当算出约 10 小时');
+  assert.match(hint, /深夜/, '应当认出上一次是深夜');
+  assert.match(hint, /睡/, '深夜→白天应当提示"多半是去睡了"');
+});
+
+test('★ 同一段对话里（3 小时以内）不许提间隔，避免啰嗦', () => {
+  const now = new Date('2026-09-16T13:12:00').getTime();
+  assert.equal(buildGapHint([{ role: 'assistant', created_at: '2026-09-16 11:12:00' }], now), '', '2 小时前不该提');
+  assert.equal(buildGapHint([{ role: 'assistant', created_at: '2026-09-16 12:42:00' }], now), '', '30 分钟前不该提');
+  // 边界：差一点到 3 小时不提，满 3 小时开始提
+  assert.equal(buildGapHint([{ role: 'assistant', created_at: '2026-09-16 10:13:00' }], now), '', '不到 3 小时不提');
+  assert.notEqual(buildGapHint([{ role: 'assistant', created_at: '2026-09-16 10:12:00' }], now), '', '满 3 小时开始提');
+});
+
+test('★ 间隔提示：跨天说"几天"、白天→白天不说"睡了"、脏数据不炸', () => {
+  const now = new Date('2026-09-16T13:12:00').getTime();
+  const days = buildGapHint([{ role: 'assistant', created_at: '2026-09-14 15:00:00' }], now);
+  assert.match(days, /2 天/, '跨天应读成"天"');
+  const daytime = buildGapHint([{ role: 'assistant', created_at: '2026-09-16 06:00:00' }], now);
+  assert.doesNotMatch(daytime, /睡/, '白天→白天不该说"睡了"');
+  assert.equal(buildGapHint([], now), '', '空历史不提示');
+  assert.equal(buildGapHint([{ role: 'assistant', created_at: '' }], now), '', '没时间戳不提示');
+  assert.equal(buildGapHint([{ role: 'assistant', created_at: '不是时间' }], now), '', '脏数据不炸');
 });
