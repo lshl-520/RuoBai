@@ -1326,7 +1326,11 @@ test('POST /api/chat keeps Claude raw thinking private and returns a separate Ch
   assert.equal(body.thinking, undefined);
   assert.equal(body.max_tokens, 2048);
   assert.match(body.system, /学习老师/);
-  assert.equal(body.messages.at(-1).content, '帮我查资料');
+  // 去掉 2026/9/16 起的「【现在是…】」时段前缀（见 chat.js buildNowBlock）
+  assert.equal(
+    String(body.messages.at(-1).content).replace(/^【现在是[^】]*】[^\n]*\n/, ''),
+    '帮我查资料'
+  );
   assert.equal(upstreamCalls[1].url, 'https://middle.example/v1/messages');
   const innerOsBody = JSON.parse(upstreamCalls[1].options.body);
   assert.equal(innerOsBody.model, 'claude-sonnet-5');

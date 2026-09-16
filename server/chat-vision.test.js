@@ -158,7 +158,14 @@ test('POST /api/chat sends image_url payload to vision model when image message 
     assert.equal(requestBody.model, 'qwen-vl-max-2025-04-08');
     assert.equal(requestBody.messages[0].role, 'system');
     assert.equal(requestBody.messages.at(-1).role, 'user');
-    assert.deepEqual(requestBody.messages.at(-1).content, [
+    // 2026/9/16 起，每条用户消息前面会带一行「【现在是…】…」的时段标注
+    // （防止她把下午当成深夜）。断言正文时要先去掉它。
+    const lastContent = requestBody.messages.at(-1).content.map((part) => (
+      part?.type === 'text'
+        ? { ...part, text: String(part.text).replace(/^【现在是[^】]*】[^\n]*\n/, '') }
+        : part
+    ));
+    assert.deepEqual(lastContent, [
       { type: 'text', text: '看看这张图里有什么' },
       {
         type: 'image_url',
@@ -304,7 +311,11 @@ test('POST /api/chat never forwards an assistant image as image_url (upstream fo
 
     // 本轮不是图片提问，最后一轮仍是普通文字。
     assert.equal(requestBody.messages.at(-1).role, 'user');
-    assert.equal(requestBody.messages.at(-1).content, '再给我看看刚才那只猫');
+    // 去掉 2026/9/16 起的「【现在是…】」时段前缀（见 chat.js buildNowBlock）
+    assert.equal(
+      String(requestBody.messages.at(-1).content).replace(/^【现在是[^】]*】[^\n]*\n/, ''),
+      '再给我看看刚才那只猫'
+    );
   });
 });
 
@@ -390,6 +401,11 @@ test('POST /api/chat falls back to chat model with downgrade hint when vision ca
     const requestBody = JSON.parse(upstreamCalls[0].options.body);
     assert.equal(requestBody.messages[0].role, 'system');
     assert.match(requestBody.messages[0].content, /用户给你看了一张图/);
-    assert.equal(requestBody.messages.at(-1).content, '你看到了吗\n[用户当时发了一张图]');
+    assert.equal(requestBody.messages.at(-1).role, 'user');
+    // 去掉 2026/9/16 起的「【现在是…】」时段前缀（见 chat.js buildNowBlock）
+    assert.equal(
+      String(requestBody.messages.at(-1).content).replace(/^【现在是[^】]*】[^\n]*\n/, ''),
+      '你看到了吗\n[用户当时发了一张图]'
+    );
   });
 });

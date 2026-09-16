@@ -469,7 +469,7 @@ export function dropJustSavedCurrentTurn(recent, { content, messageType = 'text'
 }
 
 /** 把 0-23 点说成"深夜/早上/中午/下午/晚上"。 */
-function describeHour(hour) {
+export function describeHour(hour) {
   if (hour >= 23 || hour <= 4) return '深夜';
   if (hour <= 8) return '早上';
   if (hour <= 11) return '上午';
@@ -477,6 +477,31 @@ function describeHour(hour) {
   if (hour <= 17) return '下午';
   if (hour <= 20) return '傍晚';
   return '晚上';
+}
+
+/** 算出"他隔了多久才回来"；不足 3 小时返回 null。 */
+function computeGap(recent = [], nowMs = Date.now()) {
+  const list = Array.isArray(recent) ? recent : [];
+  const last = list[list.length - 1];
+  const raw = String(last?.created_at || '').trim();
+  if (!raw) return null;
+  // 数据库返回的是服务器本地时间（Asia/Shanghai）、不带时区 → 按本地解析
+  const prev = new Date(raw.replace(' ', 'T'));
+  const prevMs = prev.getTime();
+  if (!Number.isFinite(prevMs)) return null;
+  const minutes = Math.floor((nowMs - prevMs) / 60000);
+  if (minutes < 180) return null;   // 3 小时以内算同一段对话
+  const hours = Math.floor(minutes / 60);
+  // 满 24 小时才用"天"；跨天用四舍五入（46 小时读成"差不多 2 天"比"1 天"自然）
+  const days = hours >= 24 ? Math.round(hours / 24) : 0;
+  return {
+    minutes,
+    hours,
+    days,
+    text: days >= 1 ? `差不多 ${days} 天` : `大概 ${hours} 个小时`,
+    prevPart: describeHour(prev.getHours()),
+    prevHour: prev.getHours(),
+  };
 }
 
 /**
@@ -487,44 +512,44 @@ function describeHour(hour) {
  *
  * 真实场景：他 02:56 说晚安，13:12 才回来发了个 👀。她当时接着"睡前"那句往下说
  * （"还没闭眼呢？"），虽然那句其实是在接 👀 的梗，**但中间那 10 小时她没有认**。
- * 她知道时间（提示词里有"当前时间"），只是没人告诉她"这次的间隔值得认一下"。
  *
- * 做法：用**上一条消息**的时间算间隔（注意：调用方必须先去掉"刚存下的当前轮"，
- * 否则间隔恒为 0），超过 3 小时才提；并区分"睡了一觉"和"同一段里的长间隔"。
- * 只给方向，不写死台词 —— 她怎么开口该由她自己决定。
+ * 注意：这里用的是**上一条消息**（调用方必须先去掉"刚存下的当前轮"，
+ * 否则间隔恒为 0）。这一份放在系统提示里；更贴近对话的那一份见 `buildNowBlock()`。
  */
 export function buildGapHint(recent = [], nowMs = Date.now()) {
-  const list = Array.isArray(recent) ? recent : [];
-  const last = list[list.length - 1];
-  const raw = String(last?.created_at || '').trim();
-  if (!raw) return '';
-  // 数据库返回的是服务器本地时间（Asia/Shanghai）、不带时区 → 按本地解析
-  const prev = new Date(raw.replace(' ', 'T'));
-  const prevMs = prev.getTime();
-  if (!Number.isFinite(prevMs)) return '';
-  const minutes = Math.floor((nowMs - prevMs) / 60000);
-  if (minutes < 180) return '';   // 3 小时以内算同一段对话，不提
-
-  const nowDate = new Date(nowMs);
-  const hours = Math.floor(minutes / 60);
-  // 跨天用四舍五入：46 小时读成"差不多 2 天"比"1 天"自然
-  const days = Math.round(hours / 24);
-  const readGap = days >= 1 ? `差不多 ${days} 天` : `大概 ${hours} 个小时`;
-
-  const prevHour = prev.getHours();
-  const nowHour = nowDate.getHours();
-  const prevWasNight = prevHour >= 22 || prevHour <= 5;
-  const nowIsDay = nowHour >= 7 && nowHour <= 18;
-
+  const gap = computeGap(recent, nowMs);
+  if (!gap) return '';
+  const nowHour = new Date(nowMs).getHours();
   const lines = ['【他隔了多久才回来】'];
-  lines.push(`他上一次跟你说话是${readGap}前（那时是${describeHour(prevHour)}），现在已经是${describeHour(nowHour)}了。`);
-  if (prevWasNight && nowIsDay) {
+  lines.push(`他上一次跟你说话是${gap.text}前（那时是${gap.prevPart}），现在已经是${describeHour(nowHour)}了。`);
+  if ((gap.prevHour >= 22 || gap.prevHour <= 5) && nowHour >= 7 && nowHour <= 18) {
     lines.push('中间这一大段，他多半是去睡了 —— 他再来的时候先自然认一下这个间隔（"睡醒啦""这才起？"），别当成刚才还在说话。');
   } else {
     lines.push('他再来的时候先自然认一下这个间隔（"忙完了？""怎么隔了这么久"），别当成刚才还在说话。');
   }
   lines.push('认一下就好，一句带过；不用追问他去哪了，也不用解释自己等了多久。');
   return '\n\n' + lines.join('\n');
+}
+
+/**
+ * ═══ 紧贴这一轮再报一次时间（2026/9/16 第二次修）═══
+ *
+ * 第一版把时段写进系统提示**开头**，结果实测**压不过上下文**：
+ * 她最近 20 条全是"睡前"那一串，于是下午 15 点还在说
+ * 「刚说完晚安就在这儿说想我，你这是舍不得闭眼」。
+ *
+ * 所以在他这条消息前面再放一行**极短的**时段标注 —— 位置离当前对话最近，
+ * 模型最容易照做。注意这里**只放时段、不放间隔**：
+ *   · 间隔（"他隔了 10 小时才回来"）已经由 `buildGapHint()` 放在系统提示里；
+ *   · 每条消息都重复一大段间隔会变噪音，实测还会出现「差不多 114 天前」这种
+ *     被测试夹具的老时间戳放大的荒唐输出。
+ * 代价：每条消息多约 30 个字。
+ */
+export function buildNowBlock(nowMs = Date.now()) {
+  const now = new Date(nowMs);
+  const part = describeHour(now.getHours());
+  const hm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  return `【现在是${part} ${hm}】按这个时段说话，不要停在之前那个时段（现在是${part}，就别继续说睡觉、晚安那一套）。`;
 }
 
 export function buildSystemPrompt(character) {
@@ -1901,10 +1926,20 @@ export function createChatRouter({
           .filter(Boolean)
       );
 
+      /**
+       * ★ 紧贴他这条消息再报一次"现在是什么时候"（系统提示里的那份离得太远，
+       *   实测压不过"最近 20 条全是睡前"的上下文）。
+       *
+       * 实现方式：**不插 system 消息** —— 实测在对话中间插 system 会让上游返回空回复。
+       * 所以把时段提示拼在**他这条 user 消息的前面**，用一行极短的中括号标注，
+       * 任何渠道都吃这种格式，也不影响原来的消息结构。
+       */
+      const nowBlock = buildNowBlock();
+
       messages.push(buildUpstreamMessage({
         message: {
           role: 'user',
-          content: content + videoHint,
+          content: `${nowBlock}\n${content}${videoHint}`,
           message_type: messageType,
           media_url: mediaUrl
         },
