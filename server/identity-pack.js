@@ -21,6 +21,8 @@ export function buildIdentityPack({ character = {}, runtime = {}, memories = [] 
     version: IDENTITY_PACK_VERSION,
     updated_at: new Date().toISOString(),
     identity: {
+      id: character.id ?? null,
+      char_key: String(character.char_key || '').trim(),
       name: String(character.name || '').trim(),
       persona: String(character.persona || '').trim(),
       tag: String(character.tag || '').trim(),

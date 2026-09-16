@@ -30,7 +30,10 @@ test('动态模型选择失败不会被静默吞掉', () => {
 test('角色编辑允许用户直接测试动态发图渠道，不等待聊天规划或冷却时间', () => {
   assert.match(agentsSource, /testAutoMoment\(agent\._raw\.id\)/);
   assert.match(agentsSource, /现在测试动态发图/);
-  assert.match(agentsSource, /可能消耗一次额度/);
+  // 文案在 58a2764 已由“可能消耗一次额度”改为更准确的“只测试一张安全生活照；
+  // 失败不会用文字动态顶替”，旧断言未同步，这里对齐当前真实文案。
+  assert.match(agentsSource, /只测试一张安全生活照/);
+  assert.match(agentsSource, /失败不会用文字动态顶替/);
   assert.match(agentsSource, /跳过聊天判断/);
 });
 

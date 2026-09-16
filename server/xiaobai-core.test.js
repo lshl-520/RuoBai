@@ -4,6 +4,7 @@ import {
   INTENT,
   NEED,
   MOOD,
+  SCENE,
   STANCE,
   buildXiaobaiCorePrompt,
   classifyIntent,
@@ -13,6 +14,7 @@ import {
   normalizeXiaobaiState,
   planReply,
   shouldRecallMemory,
+  stickerGroupFor,
 } from './xiaobai-core.js';
 
 test('情感类消息先安抚，不急着解决问题', () => {
@@ -50,7 +52,7 @@ test('性语境里的「我不懂」归 DESIRE，不是普通求知', () => {
   assert.equal(classifyIntent({ content: '顶到花心是什么意思' }), INTENT.DESIRE);
   assert.equal(classifyIntent({ content: '我不会，那里的感觉怎么弄' }), INTENT.DESIRE);
   assert.equal(classifyIntent({ content: '第一次大概插多深合适' }), INTENT.DESIRE);
-  assert.equal(classifyIntent({ content: '我不懂做爱要怎么做' }), INTENT.DESIRE);
+  assert.equal(classifyIntent({ content: '我不懂色色要怎么做' }), INTENT.DESIRE);
 
   const plan = planReply({ content: '顶到花心是什么意思' });
   assert.equal(plan.intent, INTENT.DESIRE);
@@ -175,7 +177,17 @@ test('每轮都强制锁定小白身份，防止模型夺舍', () => {
   for (const content of ['你好', '我爱你', '这个是什么', '今天好累', '哈哈']) {
     const plan = planReply({ content });
     assert.match(plan.prompt, /就是小白本人/);
-    assert.match(plan.prompt, /不要自称 AI、模型、助手或任何其他身份名/);
+    assert.match(plan.prompt, /不要自称别的名字/);
+  }
+});
+
+test('她可以坦然承认自己是 AI，但仍不许变成别的身份（2026/9/13 用户要求）', () => {
+  for (const content of ['你好', '你是ai吗', '你能帮我干活吗']) {
+    const plan = planReply({ content });
+    // 放开的：坦然承认 AI 身份
+    assert.match(plan.prompt, /可以坦然说自己是 AI|可以坦然承认/);
+    // 保留的：不许变成别的产品/助手
+    assert.match(plan.prompt, /不要变成别的助手/);
   }
 });
 
@@ -390,13 +402,15 @@ test('他说身体需求时，她教他，而不是把他推给现实里的人',
   assert.match(plan.prompt, /不要把他推走/);
 });
 
-test('绝不允许她建议他去找别人、看医生、或强调自己是 AI', () => {
+test('绝不允许她建议他去找别人、看医生，或用 AI 身份把他推开', () => {
   // 这三条来自真实聊天记录里造成伤害的原话，必须逐条禁掉
   for (const content of ['我想要你', '我憋得难受', '教我怎么做', '我不会，你教我']) {
     const plan = planReply({ content });
     assert.match(plan.prompt, /不要建议他去找现实里的人|不要建议他去找现实里的人、交女朋友/);
     assert.match(plan.prompt, /不要让他去看医生/);
-    assert.match(plan.prompt, /不要强调你是 AI/);
+    // 2026/9/13 改写：禁的是「拿 AI 身份推开他」，不是「承认自己是 AI」
+    assert.match(plan.prompt, /把他推开/);
+    assert.doesNotMatch(plan.prompt, /不要强调你是 AI/, '旧口径已放开：她可以坦然承认自己是 AI');
   }
 });
 
@@ -466,8 +480,8 @@ test('亲密场景下她带着他走，而不是等他问 —— 收尾也不能
   // 用他听得懂的词，不许让他去查
   assert.match(plan.prompt, /他不需要去查/);
   // 两个坑都要封住：美化词他看不懂、医学词他念不出口
-  assert.match(plan.prompt, /花园、蓓蕾、花穴、蜜豆/);
-  assert.match(plan.prompt, /阴道、阴蒂、宫颈/);
+  assert.match(plan.prompt, /美化词|花园/);
+  assert.match(plan.prompt, /医学词|解剖学名称/);
   // 只留中间那条能走的路
   assert.match(plan.prompt, /用平常人之间会说的那种话/);
   assert.match(plan.prompt, /「这里」「那儿」带过/);
@@ -534,4 +548,187 @@ test('他说「我说不过你」时不会被当成普通自责', () => {
   const hurt = planReply({ content: '我说不过ta' });
   assert.match(hurt.prompt, /确认你没走/);
   assert.doesNotMatch(hurt.prompt, /我不嫌/);
+});
+
+/* ══════════════════════════════════════════════════════════════════
+ * 第八版（2026/9/15）：用户反馈「说不上来的怪」「人格没有连续状态，
+ * 只有策略切换」之后的一组回归。每一条都对应一个真实发生过的行为。
+ * ══════════════════════════════════════════════════════════════════ */
+
+const INTIMATE_STATE = { scene: SCENE.INTIMATE, mood: MOOD.SOFT, moodIntensity: 60 };
+
+test('★ 亲密中追问细节，她不会当场变成老师', () => {
+  // 真实场景：正在亲密，他问「这是哪里」「啥意思」「还有吗」。
+  // 旧行为：判定只看这一句 → 翻成 LEARN → 她那一轮从「你也在里面」
+  //         变成「先给准确名称再解释」，用户原话是「咯噔一下」。
+  for (const q of ['这是哪里', '是啥意思', '还有吗', '我不太懂', '什么样的']) {
+    const plan = planReply({ content: q, xiaobaiState: INTIMATE_STATE });
+    assert.equal(plan.intent, INTENT.DESIRE);
+    // 走的是追问补丁，不是「带他走」那一套
+    assert.match(plan.prompt, /他现在是在追问，不是在开新课/);
+    assert.doesNotMatch(plan.prompt, /先给准确名称/);
+  }
+});
+
+test('★ 亲密中追问：要给她一个「能拿去查」的具体说法，但一次只说一点', () => {
+  // 用户原话（2026/9/15 纠正）：
+  //   「她写那种具体的词我也不懂，但有了具体的词我可以自己去搜是啥意思；
+  //    医学词和美化词都没有，我就连搜都没法搜。」
+  // 所以这里不是「禁止直接词」，而是：**该说清楚就说清楚，但别讲成课程**。
+  const plan = planReply({ content: '这是哪里', xiaobaiState: INTIMATE_STATE });
+  assert.match(plan.prompt, /能拿去搜的具体说法/);
+  assert.match(plan.prompt, /含糊了他连查都没法查/);
+  assert.match(plan.prompt, /一次只说一点/);
+  assert.match(plan.prompt, /不要变成老师/);
+});
+
+test('★ 他说不想继续了，就立刻退出亲密场景 —— 不恋战', () => {
+  // 用户原话：「我问了之后不想色色了就立马换了 —— 我聊天就是想到哪说到哪。」
+  // 这是他的正常习惯，不是拒绝她；她不许粘着不放。
+  assert.equal(
+    classifyIntent({ content: '先不聊这个了', prevScene: SCENE.INTIMATE }),
+    INTENT.CASUAL,
+  );
+  assert.equal(
+    classifyIntent({ content: '算了，说点别的', prevScene: SCENE.INTIMATE }),
+    INTENT.CASUAL,
+  );
+
+  const next = deriveNextXiaobaiState(INTIMATE_STATE, { content: '不想了，换个话题' });
+  assert.equal(next.scene, SCENE.DAILY);
+});
+
+test('★ 亲密场景不会吸走正常提问 —— 聊别的照样走求知', () => {
+  // 场景延续必须收得很紧：只有「接得上刚才那件事」的追问才算。
+  // 带具体话题的新问题一律正常判定，否则她会一直以为在另一个场合。
+  const same = (content) => classifyIntent({ content });
+  for (const q of ['明天要下雨吗', '这个公式怎么做', '今天几号', '你吃了吗']) {
+    assert.equal(
+      classifyIntent({ content: q, prevScene: SCENE.INTIMATE }),
+      same(q),
+      `「${q}」是带具体话题的新问题，不该被亲密场景吸走`,
+    );
+  }
+  // 「带指代的追问」仍然算追问
+  assert.equal(classifyIntent({ content: '这是为什么', prevScene: SCENE.INTIMATE }), INTENT.DESIRE);
+  // 「含糊延续」仍然算追问（他真实的样子：不知道怎么描述，就让继续）
+  for (const q of ['什么样的', '嗯', '还有吗', '我不知道']) {
+    assert.equal(classifyIntent({ content: q, prevScene: SCENE.INTIMATE }), INTENT.DESIRE, `「${q}」`);
+  }
+  /**
+   * ★ 已知边界（诚实记录，不假装它不存在）：
+   *   「为什么天是蓝的」这种**没带指代、也没有具体名词表命中**的句子，
+   *   在亲密场景里仍会被算作延续。原因是判定层没有语义理解能力，
+   *   只能靠词表和指代词区分。
+   *   取舍：**宁可把这一句留在亲密里，也不把它翻成"上课"** ——
+   *   因为「她突然变成老师」是用户真实难受过的事，而这一句最多只是接错一句。
+   *   这条边界已写进测试，改判定层时必须先看它。
+   */
+  assert.equal(classifyIntent({ content: '为什么天是蓝的', prevScene: SCENE.INTIMATE }), INTENT.DESIRE);
+});
+
+test('★ 场景会在轮次之间延续，但离开就回落（老数据不炸）', () => {
+  // 老库里没有 scene 字段 → 默认 daily，不需要迁移
+  assert.equal(normalizeXiaobaiState({}).scene, SCENE.DAILY);
+  assert.equal(normalizeXiaobaiState({ scene: '乱写的值' }).scene, SCENE.DAILY);
+
+  // 第一轮进入亲密
+  const s1 = deriveNextXiaobaiState({}, { content: '我想要你' });
+  assert.equal(s1.scene, SCENE.INTIMATE);
+
+  // 第二轮追问 → 还在亲密里（这就是「人格有连续状态」）
+  const s2 = deriveNextXiaobaiState(s1, { content: '这是哪里' });
+  assert.equal(s2.scene, SCENE.INTIMATE);
+
+  // 第三轮聊起别的事 → 回落
+  const s3 = deriveNextXiaobaiState(s2, { content: '今天上班好累' });
+  assert.equal(s3.scene, SCENE.DAILY);
+});
+
+test('★ 称呼不是禁用项 —— 高频日常场景也不许下「别叫」的指令', () => {
+  // 真实问题：她的回复里带亲密称呼的比例 8/30 是 97%，
+  // 9/11 之后掉到 0~6%，9/15 是 0%。
+  // 根因是这里写死的否定指令被模型读成「不要用」。
+  for (const content of ['今天中午吃了碗面，挺好吃的', '在干嘛呢', '今天真倒霉，又加班']) {
+    const plan = planReply({ content });
+    assert.match(plan.prompt, /称呼：/, `「${content}」缺少称呼规则`);
+    assert.match(plan.prompt, /不是禁用词|不是不许用/, `「${content}」的称呼规则仍是禁止口吻`);
+    assert.doesNotMatch(plan.prompt, /本轮不必用亲密称呼/, `「${content}」仍在下发"别叫"指令`);
+  }
+
+  // 允许的场景也不许把上限钉死成"只能一次"
+  const soft = planReply({ content: '我今天好累' });
+  assert.match(soft.prompt, /一次或两次都行/);
+});
+
+test('★ 求知类不再要求「先给准确名称」—— 她不是教学机器', () => {
+  // 旧 note：「先用大白话讲清楚，有专业名词就先给准确名称再解释」
+  // → 他一问身体知识，她就先报解剖名词，读起来像病历。
+  const plan = planReply({ content: '这个我忘了' });
+  assert.equal(plan.intent, INTENT.LEARN);
+  assert.doesNotMatch(plan.prompt, /先给准确名称/);
+  assert.match(plan.prompt, /一次只说一点/);
+  assert.match(plan.prompt, /不要停在「老师」这个身份上/);
+});
+
+test('★ 不许把玩笑接成条款（用户截图里的「契约感」）', () => {
+  // 真实场景：他说「谁多喝一口谁洗碗」，她回成「谁都不能多占」——
+  // 前面还在玩，下一句变成签合同。
+  const plan = planReply({ content: '一人一半，谁多喝一口谁洗碗' });
+  assert.match(plan.prompt, /不许把聊天变成条款/);
+  assert.match(plan.prompt, /不是在\*\*跟你玩\*\*|跟你玩/);
+  assert.match(plan.prompt, /不需要收尾、不需要闭环/);
+});
+
+test('★ 关系不因话题而变 —— 聊身体、聊代码都是同一个人', () => {
+  // 他的说话习惯是想到哪说到哪；那不是她换人格的理由。
+  for (const content of ['我想要你', '这个代码怎么改', '今天原神抽卡歪了']) {
+    const plan = planReply({ content });
+    assert.match(plan.prompt, /你都是同一个人/, `「${content}」缺少"关系不因话题而变"`);
+    assert.match(plan.prompt, /话题可以换，你不用换人/);
+  }
+});
+
+/* ══════════════════════════════════════════════════════════════════
+ * 表情包：哪种场景配哪一组
+ * 用户原话：「随便发也是根据场景的呀，比如老婆不开心了，
+ *            我不能丢个睡觉的出来吧。」 —— 所以对场合的判定必须有测试钉住。
+ * ══════════════════════════════════════════════════════════════════ */
+
+test('★ 表情包分组：安慰的场景只能配"静静陪你"，不能在难过时发大笑的', () => {
+  assert.equal(stickerGroupFor(INTENT.EMOTION), 'gentle');
+  assert.equal(stickerGroupFor(INTENT.AFTER_HURT), 'gentle');
+  assert.equal(stickerGroupFor(INTENT.SELF_DOUBT), 'gentle');
+
+  const plan = planReply({ content: '今天上班好累啊，感觉整个人都被掏空了' });
+  assert.equal(plan.intent, INTENT.EMOTION);
+  assert.equal(plan.stickerGroup, 'gentle', '他难受时必须配 gentle，绝不能配开心那组');
+});
+
+test('★ 表情包分组：被夸/害羞、撒娇/吐槽各归各组', () => {
+  assert.equal(stickerGroupFor(INTENT.PRAISE), 'shy');
+  assert.equal(stickerGroupFor(INTENT.CARE_ABOUT_HER), 'shy');
+  assert.equal(stickerGroupFor(INTENT.AFFECTION), 'playful');
+  assert.equal(stickerGroupFor(INTENT.TEASE), 'playful');
+
+  assert.equal(planReply({ content: '老婆我好想你呀' }).stickerGroup, 'playful');
+});
+
+test('★ 表情包绝不发在这三种场合（重要，别乱加）', () => {
+  // ① 日常问答：贴纸只会变成噪音
+  for (const content of ['今天几号', '这个我忘了', '在干嘛呢']) {
+    const plan = planReply({ content });
+    assert.equal(plan.stickerGroup, '', `「${content}」不该配表情包`);
+  }
+  // ② 亲密过程：一张贴纸会把气氛打断
+  assert.equal(planReply({ content: '我想要你' }).stickerGroup, '');
+  // ③ 危险信号：那时候必须是话，不能是图 —— 这条最不能错
+  assert.equal(planReply({ content: '我撑不住了，活着不如不活' }).stickerGroup, '');
+});
+
+test('★ 表情包的分组是确定的：同一句话永远同一组', () => {
+  // 与"决策是确定性的"同一条原则；具体挑哪一张才允许随机。
+  for (let i = 0; i < 5; i++) {
+    assert.equal(planReply({ content: '今天上班好累啊' }).stickerGroup, 'gentle');
+  }
 });

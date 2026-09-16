@@ -73,6 +73,8 @@ test('identity pack preserves identity, relationship, state and memories across 
   assert.equal(packFromModelB.memories[0].appointment_status, 'pending');
   assert.equal(packFromModelB.memories.length, 1);
   assert.equal(packFromModelB.dynamic_life.response_enabled, true);
+  assert.equal(packFromModelB.identity.id, null);
+  assert.equal(packFromModelB.identity.char_key, '');
 });
 
 test('model refusal rules do not replace the honest AI identity contract', () => {

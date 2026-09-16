@@ -155,3 +155,16 @@ server/firebase-service-account*.json
 cookies.txt
 cookies_online.txt
 cookies*.txt
+
+# === Android 签名证书与密码，绝不能进公开仓库 ===
+*.jks
+*.keystore
+key.properties
+frontend-react/android/key.properties
+frontend-react/android/app/*.jks
+frontend-react/android/app/*.keystore
+
+# 敏感词表（含用户私人语境，绝不提交，2026/9/16）
+sensitive-words.local.json
+*.local.json
+*.local.js

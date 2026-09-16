@@ -1,4 +1,7 @@
 import { pool } from './db.js';
+import { loadSensitiveWords, wordsToRegex } from './sensitive-words.js';
+
+const SENSITIVE = loadSensitiveWords();
 import { supportsDynamicSingleImage } from './capabilities.js';
 import { generateImage } from './image-gen.js';
 import { buildChatCompletionsUrl } from './chat.js';
@@ -23,7 +26,8 @@ const MAX_RECENT_MOMENTS_FOR_DEDUP = 12;
 const RECENT_MOMENT_DEDUP_DAYS = 7;
 const RECENT_MOMENT_SIMILARITY_THRESHOLD = 0.72;
 const MOMENT_IMAGE_MODES = new Set(['none', 'auto', 'selfie', 'third_person']);
-const UNSAFE_DAILY_VISUAL_PATTERN = /(?:裸体|裸露|内衣|情趣|床上|卧室|浴室|洗澡|私密|敏感部位|性行为|亲密接触|身体接触|湿身|撩人|性感|诱惑|自慰|亲吻|拥抱|胸|臀)/u;
+// 2026/9/16：具体词表外置（见 sensitive-words.local.json，不进仓库）；缺文件时用温和回退。
+const UNSAFE_DAILY_VISUAL_PATTERN = wordsToRegex(SENSITIVE.unsafeDailyVisual);
 
 export function sanitizeGeneratedMoment(value) {
   const text = stripGeneratedText(value).replace(/\s*\n+\s*/g, ' ').trim();
@@ -255,7 +259,7 @@ export function hasRecentSimilarMoment(content, recentMoments = [], {
 function chooseSafeDailyVisual(values, fallback, random = Math.random) {
   const safeChoices = (Array.isArray(values) ? values : [])
     .map(value => String(value || '').trim())
-    .filter(value => value && !UNSAFE_DAILY_VISUAL_PATTERN.test(value));
+    .filter(value => value && !(UNSAFE_DAILY_VISUAL_PATTERN && UNSAFE_DAILY_VISUAL_PATTERN.test(value)));
   return chooseOne(safeChoices, random) || fallback;
 }
 

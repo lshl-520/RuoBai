@@ -2211,7 +2211,7 @@ export function createChatRouter({
                 //
                 // ★ 这里必须带 !shouldStrip：裁剪路径的门闸在下面按 filtered 处理。
                 //   如果这里也跑一遍，同一段首块会被 flushGate 发一次、下面又发一次，
-                //   线上表现为**每条回复的第一个字被复制一遍**（"龟龟头""就就那儿"）。
+                //   线上表现为**每条回复的第一个字被复制一遍**（叠字现象，如「就就那儿」）。
                 if (!shouldStrip && !gateOpen) {
                   gateBuf += delta;
                   if (hasHanzi(gateBuf)) {

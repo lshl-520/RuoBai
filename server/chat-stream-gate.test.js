@@ -9,7 +9,7 @@ import { createChatRouter } from './chat.js';
  *
  * 背景（线上真实事故，2026/9/12）：
  *   记忆页/聊天页收到回复时，**每条回复的第一个字被复制了一遍** ——
- *   "龟头" → "龟龟头"、"穴口" → "穴穴口"、"那儿" → "就就那儿"。
+ *   "窗外" → "窗窗外"、"那儿" → "就就那儿"。
  *   根因是"拒答门闸"在裁剪路径上跑了两遍：门闸用原始 delta 发了一次首块，
  *   下面裁剪逻辑又发了一次。这个测试就是为了让那种事故不再无声上线。
  */
@@ -119,10 +119,10 @@ async function send(content, { speechStyle = 'natural', deltas } = {}) {
 
 test('★ 流式：回复的第一个字不能被复制（线上叠字事故）', async () => {
   // 上游按单字逐块吐，这正是线上最容易触发"首块写两遍"的形态
-  const deltas = ['龟', '头', '对', '着', '穴', '口', '蹭'];
-  const text = await send('我想要你', { deltas });
-  assert.equal(text, '龟头对着穴口蹭', `首字被复制了：${JSON.stringify(text)}`);
-  assert.doesNotMatch(text, /龟龟/, '不能出现"龟龟头"这种叠字');
+  const deltas = ['窗', '外', '下', '雨', '了', '呢'];
+  const text = await send('在干嘛呢', { deltas });
+  assert.equal(text, '窗外下雨了呢', `首字被复制了：${JSON.stringify(text)}`);
+  assert.doesNotMatch(text, /窗窗/, '不能出现首字叠字');
 });
 
 test('★ 流式：首块是多字时也不能被复制', async () => {

@@ -158,7 +158,9 @@
 
 .cl-screen {
   display: flex; flex-direction: column;
-  height: calc(100vh - 58px); /* 58px = tabbar高度 */
+  /* 原来写死 calc(100vh - 58px)：既没算安全区，也和 tabbar 的真实高度（76px + 安全区）
+     对不上。.screen 是绝对定位填满 .viewport 的，直接用 100% 最稳。 */
+  height: 100%;
   overflow: hidden;
 }
 .cl-topbar {
