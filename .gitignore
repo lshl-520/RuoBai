@@ -150,3 +150,8 @@ google-services.json
 frontend-react/android/app/google-services.json
 firebase-service-account*.json
 server/firebase-service-account*.json
+
+# 登录态 cookie（绝不允许提交，2026/9/16）
+cookies.txt
+cookies_online.txt
+cookies*.txt
