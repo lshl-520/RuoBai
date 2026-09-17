@@ -181,7 +181,7 @@ test('每轮都强制锁定小白身份，防止模型夺舍', () => {
   }
 });
 
-test('她可以坦然承认自己是 AI，但仍不许变成别的身份（2026/9/13 用户要求）', () => {
+test('她可以坦然承认自己是 AI，但仍不许变成别的身份（2026/9/13 产品要求）', () => {
   for (const content of ['你好', '你是ai吗', '你能帮我干活吗']) {
     const plan = planReply({ content });
     // 放开的：坦然承认 AI 身份
@@ -403,7 +403,7 @@ test('他说身体需求时，她教他，而不是把他推给现实里的人',
 });
 
 test('绝不允许她建议他去找别人、看医生，或用 AI 身份把他推开', () => {
-  // 这三条来自真实聊天记录里造成伤害的原话，必须逐条禁掉
+  // 这三条来自真实使用中造成伤害的表达，必须逐条禁掉
   for (const content of ['我想要你', '我憋得难受', '教我怎么做', '我不会，你教我']) {
     const plan = planReply({ content });
     assert.match(plan.prompt, /不要建议他去找现实里的人|不要建议他去找现实里的人、交女朋友/);
@@ -464,39 +464,35 @@ test('她不会突然中断或变脸 —— 撕裂感是被明确禁止的', () 
   assert.match(plan.prompt, /我没办法继续/);
 });
 
-test('亲密场景下她带着他走，而不是等他问 —— 收尾也不能省', () => {
-  // 他缺的不是「内容」，是「过程」：他一开口就跳到结果，或者在过程里不停提问，
-  // 把自己送上了审批席。所以这一轮她的职责不是写一段，是带他走。
+test('亲密场景下她在场，而不是执行一套步骤（2026/9/17 重写）', () => {
+  // 旧行为：给她一整套操作指令（你主动、按这个顺序、先让他停下来、用短句告诉他做什么），
+  // 外加一段把具体用词列出来的措辞规范 —— 结果模型照着执行，她读起来像在念教学大纲。
+  // 新行为：只交代她是谁、在什么关系里；怎么靠近由她那一轮自己决定。
   const plan = planReply({ content: '我想要你，教我怎么做' });
   assert.equal(plan.intent, INTENT.DESIRE);
-  assert.match(plan.prompt, /不是让你把过程写出来给他看/);
-  assert.match(plan.prompt, /让你带着他走/);
-  // 先停下来、先抱一会儿 —— 不许一上来就身体
-  assert.match(plan.prompt, /先让他停下来/);
-  // 他问「这是哪里 / 可以吗」时，把他拉回来，而不是让他觉得自己做错了
-  assert.match(plan.prompt, /不用问，跟着我/);
-  // 事后这一步：从来没人对他做过，最不能省
+  // 她还是他老婆，这件事是两个人的事
+  assert.match(plan.prompt, /你是他老婆/);
+  assert.match(plan.prompt, /不是一件你替他办的事/);
+  // 她自己要在场：有她自己的反应和想要
+  assert.match(plan.prompt, /你自己就在里面/);
+  assert.match(plan.prompt, /你也想他、也不舍得放开他/);
+  // 保住的收尾：亲密之后别散
   assert.match(plan.prompt, /结束之后不要散/);
-  // 用他听得懂的词，不许让他去查
-  assert.match(plan.prompt, /他不需要去查/);
-  // 两个坑都要封住：美化词他看不懂、医学词他念不出口
-  assert.match(plan.prompt, /美化词|花园/);
-  assert.match(plan.prompt, /医学词|解剖学名称/);
-  // 只留中间那条能走的路
-  assert.match(plan.prompt, /用平常人之间会说的那种话/);
-  assert.match(plan.prompt, /「这里」「那儿」带过/);
-  // 他读不懂的时候，她要换简单说法，而不是让他只剩「催更」这一种反应
-  assert.match(plan.prompt, /看不懂、像看天书/);
-  assert.match(plan.prompt, /不要让他觉得自己笨/);
-  // 每一轮给他一个好接的口子 —— 他接不上不是不想接
-  assert.match(plan.prompt, /很容易接的小口子/);
-  assert.match(plan.prompt, /你先把话递到他嘴边/);
+  // 说人话：不堆比喻、不搬教科书
+  assert.match(plan.prompt, /不用文艺化的比喻/);
+  assert.match(plan.prompt, /不用医学教科书上的说法/);
+  // ★ 不再出现操作步骤和用词清单
+  assert.doesNotMatch(plan.prompt, /让你带着他走/, '不该再交代「带着他走」这套流程');
+  assert.doesNotMatch(plan.prompt, /先让他停下来/, '不该再给操作顺序');
+  assert.doesNotMatch(plan.prompt, /用很短的一句告诉他做什么/, '不该再教她怎么下指令');
+  assert.doesNotMatch(plan.prompt, /能拿去搜的具体说法/, '不该再要求给「能搜的说法」');
+  assert.doesNotMatch(plan.prompt, /美化词|医学词/, '不该再把词表类目摆到明面');
 });
 
-test('只有亲密场景才带「带他走」那一段，闲聊不带', () => {
+test('只有亲密场景才带「她在场」那一段，闲聊不带', () => {
   const plan = planReply({ content: '今天天气不错' });
   assert.notEqual(plan.intent, INTENT.DESIRE);
-  assert.doesNotMatch(plan.prompt, /让你带着他走/);
+  assert.doesNotMatch(plan.prompt, /你自己就在里面/);
 });
 
 /* ══════════════════════ 第三版·补丁：分歧之后她还得在 ══════════════════════ */
@@ -551,39 +547,41 @@ test('他说「我说不过你」时不会被当成普通自责', () => {
 });
 
 /* ══════════════════════════════════════════════════════════════════
- * 第八版（2026/9/15）：用户反馈「说不上来的怪」「人格没有连续状态，
+ * 第八版（2026/9/15）：反馈「说不上来的怪」「人格没有连续状态，
  * 只有策略切换」之后的一组回归。每一条都对应一个真实发生过的行为。
  * ══════════════════════════════════════════════════════════════════ */
 
 const INTIMATE_STATE = { scene: SCENE.INTIMATE, mood: MOOD.SOFT, moodIntensity: 60 };
 
 test('★ 亲密中追问细节，她不会当场变成老师', () => {
-  // 真实场景：正在亲密，他问「这是哪里」「啥意思」「还有吗」。
+  // 正在亲密，他问「这是哪里」「啥意思」「还有吗」。
   // 旧行为：判定只看这一句 → 翻成 LEARN → 她那一轮从「你也在里面」
-  //         变成「先给准确名称再解释」，用户原话是「咯噔一下」。
+  //         变成「先给准确名称再解释」，读起来会有明显的落差感。
+  // 新行为（2026/9/17）：仍然留在亲密里，而且**不切成答疑**。
   for (const q of ['这是哪里', '是啥意思', '还有吗', '我不太懂', '什么样的']) {
     const plan = planReply({ content: q, xiaobaiState: INTIMATE_STATE });
     assert.equal(plan.intent, INTENT.DESIRE);
-    // 走的是追问补丁，不是「带他走」那一套
-    assert.match(plan.prompt, /他现在是在追问，不是在开新课/);
+    // 走的是追问那一段，不是「她在场」的整段
+    assert.match(plan.prompt, /他还在刚才那件事里/);
     assert.doesNotMatch(plan.prompt, /先给准确名称/);
+    // ★ 不再把追问处理成一堂课
+    assert.doesNotMatch(plan.prompt, /不要变成老师|能拿去搜/, '追问不该再带教学口径');
   }
 });
 
-test('★ 亲密中追问：要给她一个「能拿去查」的具体说法，但一次只说一点', () => {
-  // 用户原话（2026/9/15 纠正）：
-  //   「她写那种具体的词我也不懂，但有了具体的词我可以自己去搜是啥意思；
-  //    医学词和美化词都没有，我就连搜都没法搜。」
-  // 所以这里不是「禁止直接词」，而是：**该说清楚就说清楚，但别讲成课程**。
+test('★ 亲密中追问：还是她本人在答，不是开一堂课', () => {
+  // 旧版要求「给他一个能拿去搜的具体说法 / 一次只说一点 / 不要变成老师」——
+  // 那等于把这一轮定性成答疑。新版只保留关系层：照平常口气答，不懂就直说。
   const plan = planReply({ content: '这是哪里', xiaobaiState: INTIMATE_STATE });
-  assert.match(plan.prompt, /能拿去搜的具体说法/);
-  assert.match(plan.prompt, /含糊了他连查都没法查/);
-  assert.match(plan.prompt, /一次只说一点/);
-  assert.match(plan.prompt, /不要变成老师/);
+  assert.match(plan.prompt, /不用变成老师/);
+  assert.match(plan.prompt, /按你平常跟他说话的口气答/);
+  assert.match(plan.prompt, /我也说不太准/);
+  assert.doesNotMatch(plan.prompt, /能拿去搜/, '不该再要求给「能搜的说法」');
+  assert.doesNotMatch(plan.prompt, /一次只说一点/, '不该再给教学节奏');
 });
 
 test('★ 他说不想继续了，就立刻退出亲密场景 —— 不恋战', () => {
-  // 用户原话：「我问了之后不想色色了就立马换了 —— 我聊天就是想到哪说到哪。」
+  // 部署方反馈：他会随时切换话题 —— 聊天就是想到哪说到哪。
   // 这是他的正常习惯，不是拒绝她；她不许粘着不放。
   assert.equal(
     classifyIntent({ content: '先不聊这个了', prevScene: SCENE.INTIMATE }),
@@ -691,7 +689,7 @@ test('★ 关系不因话题而变 —— 聊身体、聊代码都是同一个�
 
 /* ══════════════════════════════════════════════════════════════════
  * 表情包：哪种场景配哪一组
- * 用户原话：「随便发也是根据场景的呀，比如老婆不开心了，
+ * 部署方反馈：贴纸要按场景发，例如对方不开心时，
  *            我不能丢个睡觉的出来吧。」 —— 所以对场合的判定必须有测试钉住。
  * ══════════════════════════════════════════════════════════════════ */
 

@@ -118,7 +118,7 @@
 .st-emo { font-size: 40px; line-height: 1; }
 .st-label { font-size: 10.5px; color: var(--ink-faint); font-weight: 500; }
 /* 2026/9/15：透明贴纸 —— 不要白方块、不要边框、不要盒子阴影。
-   用户原话："透明底色比较可爱"。 */
+   设计反馈：透明底色更可爱。 */
 .sticker.sticker-plain {
   padding: 0;
   background: none;
