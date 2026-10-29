@@ -1,0 +1,146 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import express from 'express';
+import { createAutoMomentsRouter } from './auto-moments-routes.js';
+
+function createApp(router) {
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    req.userId = 7;
+    next();
+  });
+  app.use('/api/auto-moments', router);
+  app.use((error, _req, res, _next) => {
+    res.status(500).json({ success: false, error: error.message });
+  });
+  return app;
+}
+
+async function withServer(app, run) {
+  const server = app.listen(0);
+  try {
+    await run(`http://127.0.0.1:${server.address().port}`);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+}
+
+test('渠道试发只运行当前用户已开启的角色，不走聊天规划或频率冷却', async () => {
+  const calls = [];
+  const router = createAutoMomentsRouter({
+    pool: {
+      query: async (sql, params) => {
+        calls.push({ sql, params });
+        assert.match(sql, /FROM characters/);
+        assert.deepEqual(params, [12, 7]);
+        return [[{ id: 12, name: '小白', auto_moments_enabled: 1 }]];
+      }
+    },
+    service: {
+      runScan: async options => {
+        assert.deepEqual(options, { characterId: 12, ignoreLimits: true, forceChannelTest: true });
+        return [{ characterId: 12, status: 'posted', imageStatus: 'generated' }];
+      }
+    }
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/auto-moments/characters/12/test`, { method: 'POST' });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(payload.success, true);
+    assert.equal(payload.message, '动态发图渠道正常：已发出一条测试图文动态');
+    assert.equal(calls.length, 1);
+  });
+});
+
+test('手动试发拒绝未开启主动动态的角色', async () => {
+  const router = createAutoMomentsRouter({
+    pool: {
+      query: async () => [[{ id: 12, name: '小白', auto_moments_enabled: 0 }]]
+    },
+    service: {
+      runScan: async () => {
+        throw new Error('不应调用');
+      }
+    }
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/auto-moments/characters/12/test`, { method: 'POST' });
+    const payload = await response.json();
+    assert.equal(response.status, 400);
+    assert.equal(payload.error, '请先保存并开启主动发动态');
+  });
+});
+
+test('手动试发在没有图片时明确失败，绝不把文字动态报成成功', async () => {
+  const router = createAutoMomentsRouter({
+    pool: {
+      query: async () => [[{ id: 12, name: '小白', auto_moments_enabled: 1 }]]
+    },
+    service: {
+      runScan: async () => [{
+        characterId: 12,
+        status: 'skipped_image_failed',
+        imageStatus: 'failed',
+        imageError: '上游返回空图片'
+      }]
+    }
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/auto-moments/characters/12/test`, { method: 'POST' });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(payload.success, true);
+    assert.equal(payload.message, '图片渠道没有返回图片，本次没有用文字动态顶替（上游返回空图片）');
+  });
+});
+
+test('手动试发要求先开启动态发图，不会生成文字测试动态', async () => {
+  const router = createAutoMomentsRouter({
+    pool: {
+      query: async () => [[{ id: 12, name: '小白', auto_moments_enabled: 1 }]]
+    },
+    service: {
+      runScan: async () => [{ characterId: 12, status: 'skipped_image_disabled', imageStatus: 'disabled' }]
+    }
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/auto-moments/characters/12/test`, { method: 'POST' });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(payload.message, '没有发出测试动态：请先开启动态发图，系统不会用纯文字顶替');
+  });
+});
+
+test('状态接口说明今天为什么还没有动态', async () => {
+  const pool = {
+    query: async (sql) => {
+      if (sql.includes('FROM characters')) return [[{ id: 12, auto_moments_enabled: 1, auto_moments_daily_min: 0, auto_moments_daily_max: 6 }]];
+      if (sql.includes('FROM moments')) return [[{ cnt: 0 }]];
+      if (sql.includes('FROM auto_moment_attempts')) return [[{ cnt: 6, last_outcome: 'planner_skipped' }]];
+      throw new Error(`Unexpected query: ${sql}`);
+    }
+  };
+  const router = createAutoMomentsRouter({ pool, service: { runScan: async () => [] } });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/auto-moments/characters/12/status`);
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(payload.status, {
+      enabled: true,
+      mode: 'system',
+      dailyTarget: 0,
+      dailyMax: 6,
+      postedToday: 0,
+      attemptCount: 6,
+      lastOutcome: 'planner_skipped',
+      summary: '她判断暂时不适合发'
+    });
+  });
+});

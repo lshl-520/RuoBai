@@ -1,0 +1,103 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+const main = await readFile(new URL("./main.jsx", import.meta.url), "utf8");
+const profile = await readFile(new URL("./pages/profile.jsx", import.meta.url), "utf8");
+const app = await readFile(new URL("./App.jsx", import.meta.url), "utf8");
+const agents = await readFile(new URL("./pages/agents.jsx", import.meta.url), "utf8");
+const moments = await readFile(new URL("./pages/moments.jsx", import.meta.url), "utf8");
+const chat = await readFile(new URL("./pages/chat.jsx", import.meta.url), "utf8");
+const nativeMain = await readFile(new URL("../android/app/src/main/java/fun/lshl/ruobai/MainActivity.java", import.meta.url), "utf8");
+const classic = await readFile(new URL("./styles/classic-theme.css", import.meta.url), "utf8");
+const components = await readFile(new URL("./styles/components.css", import.meta.url), "utf8");
+const components2 = await readFile(new URL("./styles/components2.css", import.meta.url), "utf8");
+
+test("原版主题在首次绘制前恢复并最后加载覆盖样式", () => {
+  assert.match(main, /ruobai_theme/);
+  assert.match(main, /dataset\.theme = "classic"/);
+  assert.match(main, /import "\.\/styles\/classic-theme\.css"/);
+});
+
+test("主题面板明确说明三套完整外观", () => {
+  assert.match(profile, /原版 3\.13/);
+  assert.match(profile, /轻语/);
+  assert.match(profile, /三套完整外观/);
+  assert.match(profile, /布局、卡片、标题、背景、间距和导航/);
+});
+
+test("原版主题覆盖五个主页面和聊天室布局", () => {
+  for (const selector of [
+    ".cl-card", ".hero", ".agent-card", ".moments-cover", ".moment",
+    ".history-entry", ".mem-card", ".me-hero", ".cap-card", ".chat-top", ".her-bubble"
+  ]) {
+    assert.ok(classic.includes(`html[data-theme="classic"] ${selector}`), `缺少 ${selector} 的原版样式`);
+  }
+});
+
+test("聊天列表不把角色关系数据伪装成等级进度", () => {
+  assert.doesNotMatch(chat, /cl-classic-meter/);
+  assert.doesNotMatch(classic, /\.cl-classic-meter/);
+});
+
+test("聊天列表不把角色人设伪装成最近聊天内容", () => {
+  assert.doesNotMatch(chat, /role\.persona \? role\.persona\.slice/);
+  assert.match(chat, /a\.tag \|\| "点击开始聊天"/);
+  assert.doesNotMatch(chat, /lastTime|unread/);
+});
+
+test("聊天室不展示没有加载来源的关系数字", () => {
+  assert.doesNotMatch(chat, /agent\.days|关系温度|亲密度/);
+});
+
+test("八个页面共用同一套 React 功能路由，不按主题复制业务页面", () => {
+  for (const path of ["/", "/auth", "/chat", "/characters", "/moments", "/memory", "/profile"]) {
+    assert.ok(app.includes(`path="${path}"`), `缺少 ${path} 路由`);
+  }
+  assert.match(app, /<ChatRoom /);
+  assert.doesNotMatch(app, /theme\s*===\s*["']classic["']\s*\?/);
+});
+
+test("角色页不把关系数据或临时状态伪装成角色资料", () => {
+  assert.doesNotMatch(agents, /关系温度/);
+  assert.doesNotMatch(agents, /亲密度/);
+  assert.doesNotMatch(agents, /在一起 · 天/);
+  assert.doesNotMatch(agents, /className="hero-stats"/);
+  assert.match(classic, /\.ac-photo\s*\{\s*display:\s*contents/);
+});
+
+test("空状态不使用持续漂浮来伪造角色在场", () => {
+  assert.doesNotMatch(components, /emptyFloat/);
+});
+
+test("聊天室立绘不用持续呼吸或光晕伪造状态", () => {
+  for (const selector of ["chat-fig-glow", "chat-fig-img", "bigview-glow"]) {
+    assert.doesNotMatch(components2, new RegExp(`\\.${selector}\\s*\\{[^}]*animation:`));
+  }
+  assert.doesNotMatch(components2, /bigviewBreathe|breatheFig|temp-dot/);
+});
+
+test("原版动态装饰头像有等价筛选入口，聊天室常驻立绘不能被主题隐藏", () => {
+  assert.match(moments, /filter === null/);
+  assert.match(moments, /user\?\.name \|\| "我"/);
+  assert.match(chat, /className="ct-avatar"[\s\S]{0,260}onClick=\{\(\) => setBig\(true\)\}/);
+  assert.match(chat, /className="chat-figure-stage"[\s\S]{0,600}onOpen\(\)/);
+  assert.match(chat, /<ChatFigure[\s\S]{0,300}onOpen=\{\(\) => setBig\(true\)\}/);
+  assert.match(classic, /\.chat-figure\s*\{\s*display:\s*block/);
+  assert.doesNotMatch(classic, /\.chat-figure\s*\{\s*display:\s*none/);
+});
+
+test("两套聊天室共用的图标入口具有大白话名称", () => {
+  for (const label of ["返回聊天列表", "搜索聊天记录", "更多聊天操作", "开始实时通话", "选择图片", "打开表情包", "发送消息"]) {
+    assert.ok(chat.includes(label), `缺少 ${label} 的可读名称`);
+  }
+});
+
+test("Android 系统返回会先回退网页层级，再允许关闭 App", () => {
+  assert.match(nativeMain, /OnBackPressedCallback/);
+  assert.match(nativeMain, /webView\.canGoBack\(\)/);
+  assert.match(nativeMain, /webView\.goBack\(\)/);
+  assert.match(app, /pushState\(\{ rbChat: true \}/);
+  assert.match(chat, /pushState\(\{ rbFigure: true \}/);
+  assert.match(chat, /onClose=\{closeBig\}/);
+});

@@ -1,0 +1,84 @@
+/* 轻语 · 通话：不设黑屏，是灯下的一张纸。
+   单独一个文件，避免热更新时旧样式残留。 */
+html[data-skin="qingyu"] .call-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  background: var(--paper);
+}
+html[data-skin="qingyu"] .call-glow { display: none; }
+html[data-skin="qingyu"] .call-fig {
+  height: 92%;
+  mix-blend-mode: multiply;
+  opacity: 1;
+}
+html[data-skin="qingyu"] .call-scrim {
+  background: linear-gradient(to bottom, rgba(250, 249, 245, 0.58) 0%, rgba(250, 249, 245, 0.16) 16%, rgba(250, 249, 245, 0) 38%, rgba(250, 249, 245, 0.42) 72%, var(--paper) 98%);
+}
+html[data-skin="qingyu"] .call-status {
+  text-shadow: 0 1px 12px rgba(250, 249, 245, 0.95);
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  color: var(--ink-faint);
+}
+html[data-skin="qingyu"] .call-status .live-dot { background: var(--rose); }
+html[data-skin="qingyu"] .call-name {
+  text-shadow: 0 1px 18px rgba(250, 249, 245, 0.95), 0 0 34px rgba(250, 249, 245, 0.8);
+  margin-top: 16px;
+  font-family: var(--serif);
+  font-size: 33px;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  color: var(--ink);
+}
+html[data-skin="qingyu"] .call-timer {
+  text-shadow: 0 1px 14px rgba(250, 249, 245, 0.95);
+  margin-top: 10px;
+  font-size: 12px;
+  letter-spacing: 0.09em;
+  color: var(--ink-soft);
+}
+html[data-skin="qingyu"] .call-caption {
+  text-shadow: 0 1px 16px rgba(250, 249, 245, 0.95), 0 0 30px rgba(250, 249, 245, 0.85);
+  bottom: 236px;
+  font-size: 13.5px;
+  line-height: 1.9;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+}
+html[data-skin="qingyu"] .call-wave i {
+  width: 2px;
+  border-radius: 2px;
+  background: rgba(20, 20, 19, 0.32);
+}
+html[data-skin="qingyu"] .call-btn .cb {
+  width: 56px;
+  height: 56px;
+  background: var(--paper);
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  box-shadow: none;
+  color: var(--ink);
+}
+html[data-skin="qingyu"] .call-btn.on .cb {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+html[data-skin="qingyu"] .call-btn span {
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+}
+html[data-skin="qingyu"] .call-hangup {
+  width: 64px;
+  height: 64px;
+  background: var(--rose);
+  border: 1px solid var(--rose-deep);
+  box-shadow: none;
+  color: var(--paper);
+}

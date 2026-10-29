@@ -1,0 +1,184 @@
+/* ============================================================
+   若白 · 新骨架 v2（2026/10/19 开始落地）
+   目标：电脑三栏（左导航 / 中内容 / 右边是她）+ 手机五 Tab。
+   纪律：
+     · 只加结构与排版，不改任何现有页面的功能与数据；
+     · 颜色/圆角/阴影全部复用微光既有令牌，不新增色板；
+     · 未打开 v2 时此文件不产生任何视觉影响；
+     · 先用 ?ui=v2 预览，用户点头后再谈默认。
+   ============================================================ */
+
+.rb-app[data-ui="v2"] {
+  --rb-rail-w: 232px;
+  --rb-her-w: 336px;
+}
+
+/* ---------- 电脑：三栏 ---------- */
+@media (min-width: 1024px) {
+  .rb-app[data-ui="v2"] {
+    display: grid;
+    grid-template-columns: var(--rb-rail-w) minmax(0, 1fr) var(--rb-her-w);
+    grid-template-rows: minmax(0, 1fr);
+    max-width: none;
+  }
+  .rb-app[data-ui="v2"] .viewport {
+    grid-column: 2;
+    width: 100%;
+    max-width: 860px;
+    justify-self: center;
+  }
+  .rb-app[data-ui="v2"] .tabbar { display: none; }
+  .rb-app[data-ui="v2"] .rb-shell-rail { grid-column: 1; }
+  .rb-app[data-ui="v2"] .rb-shell-her { grid-column: 3; }
+}
+
+/* ---------- 手机/窄窗：保持原来的五 Tab ---------- */
+@media (max-width: 1023px) {
+  .rb-app[data-ui="v2"] .rb-shell-rail,
+  .rb-app[data-ui="v2"] .rb-shell-her { display: none; }
+  .rb-app[data-ui="v2"] .viewport {
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+}
+
+/* ---------- 左：导航 ---------- */
+.rb-shell-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  min-height: 0;
+  padding: 28px 18px 22px;
+  border-right: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255, 252, 250, 0.55), rgba(250, 246, 242, 0));
+}
+
+.rb-rail-brand {
+  font-family: var(--serif);
+  font-size: 22px;
+  letter-spacing: 0.14em;
+  color: var(--ink);
+  padding: 0 10px;
+}
+.rb-rail-brand small {
+  display: block;
+  margin-top: 5px;
+  font-family: var(--sans);
+  font-size: 9.5px;
+  letter-spacing: 0.3em;
+  color: var(--ink-ghost);
+}
+
+.rb-rail-nav { display: flex; flex-direction: column; gap: 6px; }
+
+.rb-rail-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+}
+.rb-rail-item svg { width: 20px; height: 20px; stroke-width: 1.8; }
+.rb-rail-item:hover { background: var(--card-warm); color: var(--ink); }
+.rb-rail-item.active {
+  background: var(--card);
+  color: var(--rose-deep);
+  box-shadow: var(--rb-lift-soft);
+}
+
+.rb-rail-foot {
+  margin-top: auto;
+  padding: 0 10px;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--ink-ghost);
+}
+
+/* ---------- 右：她 ---------- */
+.rb-shell-her {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  padding: 26px 22px 22px;
+  border-left: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255, 252, 250, 0.6), rgba(250, 246, 242, 0));
+}
+
+.rb-her-figure {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 6px 0;
+  overflow: hidden;
+}
+.rb-her-figure img {
+  max-height: 78%;
+  max-width: 92%;
+  object-fit: contain;
+  /* 有的立绘/预览图自带白底，压进奶油背景里才不会像贴纸框 */
+  mix-blend-mode: multiply;
+  filter: drop-shadow(0 18px 28px rgba(60, 40, 45, 0.16));
+}
+.rb-her-figure .rb-her-empty {
+  align-self: center;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.rb-her-meta { text-align: center; }
+.rb-her-name {
+  font-family: var(--serif);
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.rb-her-tagline {
+  margin-top: 4px;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--ink-faint);
+}
+
+.rb-her-notes {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.rb-her-notes-title {
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  color: var(--ink-ghost);
+}
+.rb-her-note {
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--ink-soft);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.rb-her-note-empty { font-size: 12px; color: var(--ink-ghost); }
+
+.rb-her-cta {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  border-radius: 999px;
+  background: var(--rose);
+  color: var(--card);
+  font-size: 13.5px;
+  font-weight: 600;
+  box-shadow: var(--rb-lift-warm);
+  transition: transform 0.15s;
+}
+.rb-her-cta:active { transform: scale(0.97); }

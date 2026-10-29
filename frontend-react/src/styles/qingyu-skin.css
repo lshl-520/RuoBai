@@ -1,0 +1,1961 @@
+/* ============================================================
+   轻语 · 设计语言（2026/10/19 起，作为主外观）
+   一句话：不是"社交 App"，是"她住的地方"。
+   —— 奶油纸面、暖墨字、衬线标题、珊瑚只做"她"的点缀；
+   —— 不用玻璃、不用厚阴影、不用渐变按钮；分隔靠 1px 细线和大留白；
+   —— 圆角克制（8/12/18/24），阴影几乎为零，靠"纸"和"字"立住。
+   只在 html[data-skin="qingyu"] 下生效，旧外观（微光/糖霜/原版）不受影响。
+   ============================================================ */
+
+html[data-skin="qingyu"] {
+  /* 纸面 */
+  --paper: #faf9f5;
+  --paper-2: #f2ede3;
+  --card: #ffffff;
+  --card-warm: #fffdf8;
+
+  /* 墨 */
+  --ink: #141413;
+  --ink-soft: #5e574e;
+  --ink-faint: #8c8478;
+  --ink-ghost: #bdb5a8;
+
+  /* 线 */
+  --line: rgba(20, 20, 19, 0.10);
+  --line-strong: rgba(20, 20, 19, 0.18);
+
+  /* 珊瑚（她） */
+  --rose: #cc785c;
+  --rose-deep: #b4644a;
+  --rose-tint: #f7eae3;
+  --rose-soft: #ebcfc3;
+
+  /* 陶土 / 薰衣草 / 鼠尾草：只做极少量点缀 */
+  --clay: #d9a87f;
+  --clay-tint: #f8eee3;
+  --lav: #8e86a0;
+  --lav-tint: #efebf1;
+  --sage: #7c8f72;
+
+  /* 立体：几乎不抬，只留一条 1px 的白 */
+  --shadow-sm: 0 1px 2px rgba(20, 20, 19, 0.04);
+  --shadow: 0 12px 32px rgba(20, 20, 19, 0.06);
+  --shadow-lg: 0 24px 60px rgba(20, 20, 19, 0.10);
+  --shadow-rose: 0 8px 22px rgba(204, 120, 92, 0.20);
+  --rb-lift-color: rgba(20, 20, 19, 0.05);
+  --rb-lift-hi: rgba(255, 255, 255, 0.9);
+  --rb-lift: 0 1px 2px rgba(20, 20, 19, 0.04), 0 -1px 0 rgba(255, 255, 255, 0.7);
+  --rb-lift-soft: 0 1px 2px rgba(20, 20, 19, 0.04);
+  --rb-lift-warm: 0 6px 18px rgba(204, 120, 92, 0.18);
+  --rb-lift-top: 0 1px 2px rgba(20, 20, 19, 0.04);
+  --rb-lift-bottom: 0 -1px 0 rgba(20, 20, 19, 0.06);
+
+  /* 圆角：更方一点，像纸 */
+  --r-sm: 8px;
+  --r: 12px;
+  --r-lg: 18px;
+  --r-xl: 24px;
+
+  --serif: "Noto Serif SC", "Songti SC", Georgia, serif;
+  --sans: "Noto Sans SC", -apple-system, "PingFang SC", system-ui, sans-serif;
+
+  --danger: #a8503f;
+  --danger-soft: #f9eae5;
+}
+
+/* 纸张底：不要彩色光斑，只要纸的呼吸 */
+html[data-skin="qingyu"] body {
+  background:
+    radial-gradient(1200px 800px at 15% -10%, #f6f1e7 0%, transparent 60%),
+    radial-gradient(900px 700px at 110% 10%, #f1ece1 0%, transparent 55%),
+    var(--paper);
+  color: var(--ink);
+}
+
+/* 纸面默认字体与行高 */
+html[data-skin="qingyu"] .rb-app {
+  background: var(--paper);
+}
+
+/* 标题：衬线、紧一点的字距 */
+html[data-skin="qingyu"] h1,
+html[data-skin="qingyu"] h2,
+html[data-skin="qingyu"] .serif {
+  font-family: var(--serif);
+  letter-spacing: 0.01em;
+}
+
+/* ============================================================
+   第一屏：登录 / 邀请码
+   电脑：左边她的照片与一句话，右边一张"信纸"上的表单；
+   手机：上面一小段照片，下面信纸。
+   ============================================================ */
+
+html[data-skin="qingyu"] .auth {
+  background: var(--paper);
+}
+
+/* 假状态栏是"手机壳 demo"的遗留，真产品里不该有 */
+html[data-skin="qingyu"] .auth .statusbar { display: none; }
+
+html[data-skin="qingyu"] .auth-badge {
+  top: 26px;
+  left: 26px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--ink-faint);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  font-weight: 500;
+}
+html[data-skin="qingyu"] .auth-badge-dot {
+  width: 5px;
+  height: 5px;
+  background: var(--rose);
+  box-shadow: none;
+}
+
+html[data-skin="qingyu"] .auth-hero-scrim {
+  background: linear-gradient(to bottom, rgba(250, 249, 245, 0.15) 0%, rgba(250, 249, 245, 0.05) 40%, rgba(250, 249, 245, 0.92) 100%);
+}
+
+html[data-skin="qingyu"] .auth-hero-text {
+  left: 26px;
+  right: 26px;
+  bottom: 22px;
+}
+html[data-skin="qingyu"] .auth-hl {
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.42;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+html[data-skin="qingyu"] .auth-hl-sub {
+  margin-top: 12px;
+  font-size: 12.5px;
+  line-height: 1.85;
+  color: var(--ink-faint);
+  max-width: 30em;
+}
+
+/* 表单 */
+html[data-skin="qingyu"] .auth-body {
+  padding: 26px 26px 34px;
+}
+html[data-skin="qingyu"] .field-label {
+  display: block;
+  margin: 18px 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  color: var(--ink-faint);
+  text-transform: none;
+}
+html[data-skin="qingyu"] .field-label:first-child { margin-top: 0; }
+html[data-skin="qingyu"] .lbl-hint {
+  margin-left: 6px;
+  letter-spacing: 0.02em;
+  color: var(--ink-ghost);
+}
+
+/* 输入：只用一条底线，像在信纸上写 */
+html[data-skin="qingyu"] .fld,
+html[data-skin="qingyu"] .auth-code {
+  width: 100%;
+  padding: 12px 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--line-strong);
+  border-radius: 0;
+  box-shadow: none;
+  font-size: 15px;
+  color: var(--ink);
+  transition: border-color 0.2s;
+}
+html[data-skin="qingyu"] .auth-code { display: flex; align-items: center; gap: 10px; }
+html[data-skin="qingyu"] .auth-code svg { color: var(--ink-ghost); }
+html[data-skin="qingyu"] .auth-code input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 15px;
+  color: var(--ink);
+}
+html[data-skin="qingyu"] .fld:focus,
+html[data-skin="qingyu"] .auth-code:focus-within {
+  border-bottom-color: var(--rose);
+  outline: none;
+}
+html[data-skin="qingyu"] .fld::placeholder,
+html[data-skin="qingyu"] .auth-code input::placeholder {
+  color: var(--ink-ghost);
+}
+
+/* 信任说明：不再用彩色小胶囊，改一行小字 */
+html[data-skin="qingyu"] .auth-trust {
+  margin: 20px 0 6px;
+  gap: 0;
+}
+html[data-skin="qingyu"] .auth-chip {
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--ink-faint);
+  font-size: 11.5px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  display: inline;
+}
+html[data-skin="qingyu"] .auth-chip svg { display: none; }
+html[data-skin="qingyu"] .auth-chip + .auth-chip::before {
+  content: "  ·  ";
+  color: var(--ink-ghost);
+  white-space: pre;
+}
+
+/* 主按钮：珊瑚色纸片，不要渐变、不要光 */
+html[data-skin="qingyu"] .auth-cta {
+  margin-top: 26px;
+  padding: 14px;
+  background: var(--rose);
+  color: var(--card);
+  border-radius: 10px;
+  box-shadow: none;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+html[data-skin="qingyu"] .auth-cta:active { background: var(--rose-deep); }
+html[data-skin="qingyu"] .auth-reassure {
+  margin-top: 16px;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  letter-spacing: 0.02em;
+}
+html[data-skin="qingyu"] .auth-switch {
+  margin-top: 22px;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+html[data-skin="qingyu"] .auth-switch b {
+  color: var(--ink);
+  font-weight: 500;
+  border-bottom: 1px solid var(--ink-ghost);
+  padding-bottom: 1px;
+}
+html[data-skin="qingyu"] .auth-foot {
+  margin-top: 30px;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-ghost);
+}
+html[data-skin="qingyu"] .auth-foot a { color: var(--ink-faint); text-decoration: none; }
+
+html[data-skin="qingyu"] .auth-msg {
+  border-radius: 8px;
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+html[data-skin="qingyu"] .auth-msg.error {
+  background: var(--danger-soft);
+  border-color: rgba(168, 80, 63, 0.2);
+  color: var(--danger);
+}
+
+/* 电脑：左右分栏，像一张摊开的信纸 */
+@media (min-width: 900px) {
+  html[data-skin="qingyu"] .auth {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(440px, 0.95fr);
+    align-items: stretch;
+  }
+  html[data-skin="qingyu"] .auth-hero {
+    height: auto;
+    min-height: 100dvh;
+    grid-column: 1;
+  }
+  html[data-skin="qingyu"] .auth-hero-bg { object-position: center 22%; }
+  html[data-skin="qingyu"] .auth-hero-scrim {
+    background: linear-gradient(to right, rgba(250, 249, 245, 0) 55%, rgba(250, 249, 245, 0.96) 100%);
+  }
+  html[data-skin="qingyu"] .auth-hero-text {
+    left: 48px;
+    bottom: 48px;
+    right: 42%;
+  }
+  html[data-skin="qingyu"] .auth-hl { font-size: 40px; line-height: 1.36; }
+  html[data-skin="qingyu"] .auth-badge { top: 40px; left: 48px; }
+
+  html[data-skin="qingyu"] .auth-body {
+    grid-column: 2;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    max-width: 520px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 56px 56px 40px;
+  }
+}
+
+/* 手机：照片压到上面一小段，表单就是主体 */
+@media (max-width: 899px) {
+  html[data-skin="qingyu"] .auth-hero { height: 300px; }
+  html[data-skin="qingyu"] .auth-hero-scrim {
+    background: linear-gradient(to bottom, rgba(250, 249, 245, 0.10) 0%, rgba(250, 249, 245, 0.55) 55%, rgba(250, 249, 245, 0.98) 100%);
+  }
+}
+
+/* 收尾：照片的对比度与移动端构图 */
+html[data-skin="qingyu"] .auth-hero-bg {
+  filter: contrast(1.04) saturate(0.96) brightness(0.99);
+}
+@media (max-width: 899px) {
+  html[data-skin="qingyu"] .auth-hero { height: 340px; }
+  html[data-skin="qingyu"] .auth-hero-bg { object-position: center 24%; }
+  html[data-skin="qingyu"] .auth-hl { font-size: 27px; line-height: 1.44; }
+  html[data-skin="qingyu"] .auth-hero-text { bottom: 18px; }
+}
+
+/* ============================================================
+   聊天列表：不是"联系人"，是"家里有谁在"
+   删：在线人数 / 在线离线圆点 / 金牌条 / 卡片阴影 / 右栏状态
+   留：头像、名字、一句她的话、点进去
+   ============================================================ */
+html[data-skin="qingyu"] .cl-screen { background: transparent; }
+html[data-skin="qingyu"] .qy-cl-head { padding: 38px 26px 4px; }
+html[data-skin="qingyu"] .qy-cl-date {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--ink-ghost);
+}
+html[data-skin="qingyu"] .qy-cl-title {
+  margin: 12px 0 0;
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+html[data-skin="qingyu"] .qy-cl-sub {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--ink-faint);
+}
+html[data-skin="qingyu"] .qy-cl-list { padding: 18px 26px 34px; }
+html[data-skin="qingyu"] .cl-card.qy-cl-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  margin: 0;
+  padding: 17px 2px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+  text-align: left;
+}
+html[data-skin="qingyu"] .cl-card.qy-cl-row:last-child { border-bottom: none; }
+html[data-skin="qingyu"] .cl-card.qy-cl-row:active { background: var(--paper-2); }
+html[data-skin="qingyu"] .cl-card.cl-primary::before { display: none; }
+html[data-skin="qingyu"] .cl-card.qy-cl-row .cl-avatar {
+  width: 50px;
+  height: 50px;
+  flex-shrink: 0;
+}
+html[data-skin="qingyu"] .cl-card.qy-cl-row .cl-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+html[data-skin="qingyu"] .cl-card.qy-cl-row .cl-main { flex: 1; min-width: 0; }
+html[data-skin="qingyu"] .qy-cl-line { display: flex; align-items: center; gap: 8px; }
+html[data-skin="qingyu"] .cl-card.qy-cl-row .cl-name {
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--ink);
+}
+html[data-skin="qingyu"] .qy-cl-tag {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--rose-deep);
+  border: 1px solid var(--rose-soft);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+html[data-skin="qingyu"] .cl-card.qy-cl-row .cl-msg {
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html[data-skin="qingyu"] .cl-card.qy-cl-row .cl-chev { color: var(--ink-ghost); }
+html[data-skin="qingyu"] .qy-cl-empty { padding: 40px 0; text-align: center; }
+html[data-skin="qingyu"] .qy-cl-empty-title {
+  font-family: var(--serif);
+  font-size: 20px;
+  color: var(--ink);
+}
+html[data-skin="qingyu"] .qy-cl-empty-desc {
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+html[data-skin="qingyu"] .qy-cl-empty-btn {
+  margin-top: 22px;
+  padding: 11px 22px;
+  background: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 13px;
+}
+html[data-skin="qingyu"] .qy-cl-empty-img {
+  display: block;
+  width: 168px;
+  height: 168px;
+  margin: 0 auto 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  filter: saturate(0.94);
+}
+
+/* ============================================================
+   记忆：一本收着的东西，不是一叠卡片
+   页头统一成"小标签 + 衬线大标题 + 一句副题"；分隔靠细线；
+   卡片、胶囊、阴影全部换成"纸上的条目"。
+   ============================================================ */
+html[data-skin="qingyu"] .topbar {
+  padding: 34px 26px 0;
+  align-items: flex-end;
+}
+html[data-skin="qingyu"] .topbar h1 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+html[data-skin="qingyu"] .topbar .sub {
+  margin-top: 10px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink-faint);
+}
+html[data-skin="qingyu"] .topbar .pill {
+  background: none;
+  border: 1px solid var(--line-strong);
+  box-shadow: none;
+  color: var(--ink);
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+html[data-skin="qingyu"] .topbar .pill svg { width: 14px; height: 14px; }
+html[data-skin="qingyu"] .mem-roles { padding: 20px 26px 0; gap: 20px; }
+html[data-skin="qingyu"] .mem-role-av {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--line);
+  background: var(--card);
+}
+html[data-skin="qingyu"] .mem-role.on .mem-role-av {
+  border-color: var(--rose);
+  box-shadow: none;
+}
+html[data-skin="qingyu"] .mem-role-name {
+  margin-top: 7px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+html[data-skin="qingyu"] .mem-role.on .mem-role-name { color: var(--ink); }
+html[data-skin="qingyu"] .pad { padding-left: 26px; padding-right: 26px; }
+html[data-skin="qingyu"] .history-entry {
+  width: 100%;
+  padding: 18px 0;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+}
+html[data-skin="qingyu"] .he-ic {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+}
+html[data-skin="qingyu"] .he-t {
+  font-family: var(--serif);
+  font-size: 15.5px;
+  font-weight: 600;
+}
+html[data-skin="qingyu"] .he-s { font-size: 11.5px; color: var(--ink-faint); }
+html[data-skin="qingyu"] .chat-search {
+  margin-top: 16px;
+  padding: 11px 0;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line-strong);
+  border-radius: 0;
+  box-shadow: none;
+}
+html[data-skin="qingyu"] .chat-search input { font-size: 13px; }
+html[data-skin="qingyu"] .mem-filters { padding-top: 16px; }
+html[data-skin="qingyu"] .tl-levels { gap: 20px; }
+html[data-skin="qingyu"] .tl-lv {
+  padding: 0 0 7px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--ink-faint);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+html[data-skin="qingyu"] .tl-lv.on {
+  background: none;
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+  box-shadow: none;
+}
+html[data-skin="qingyu"] .pinned-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 18px;
+  padding: 12px 0;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  text-align: left;
+}
+html[data-skin="qingyu"] .pt-t { font-size: 12.5px; color: var(--ink); }
+html[data-skin="qingyu"] .pt-s { font-size: 11.5px; color: var(--ink-ghost); }
+html[data-skin="qingyu"] .section-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 24px 0 4px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--ink-faint);
+}
+html[data-skin="qingyu"] .sl-line { background: var(--line); }
+html[data-skin="qingyu"] .mem-list { gap: 0; }
+html[data-skin="qingyu"] .mem-card {
+  padding: 16px 0 16px 14px;
+  background: none;
+  border: none;
+  border-left: 2px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+}
+html[data-skin="qingyu"] .mem-card.pinned {
+  border-left-color: var(--rose);
+  background: none;
+}
+html[data-skin="qingyu"] .mem-card.candidate {
+  border-left-color: var(--clay);
+  background: none;
+}
+html[data-skin="qingyu"] .mem-content {
+  font-size: 14px;
+  line-height: 1.85;
+  color: var(--ink);
+}
+html[data-skin="qingyu"] .mem-meta { color: var(--ink-ghost); font-size: 11px; }
+html[data-skin="qingyu"] .mem-tag {
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--rose-deep);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+html[data-skin="qingyu"] .tl-head { margin-top: 26px; }
+html[data-skin="qingyu"] .tl-date {
+  font-family: var(--serif);
+  font-size: 17px;
+  color: var(--ink);
+}
+html[data-skin="qingyu"] .tl-sum { font-size: 11.5px; color: var(--ink-ghost); }
+html[data-skin="qingyu"] .life-event-card {
+  padding: 14px 0 14px 14px;
+  background: none;
+  border: none;
+  border-left: 2px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+}
+html[data-skin="qingyu"] .life-event-title { font-size: 14px; line-height: 1.8; }
+html[data-skin="qingyu"] .life-event-meta, html[data-skin="qingyu"] .life-event-status { font-size: 11px; color: var(--ink-ghost); }
+html[data-skin="qingyu"] .date-hint, html[data-skin="qingyu"] .life-event-empty {
+  font-size: 12px;
+  color: var(--ink-faint);
+  line-height: 1.8;
+}
+html[data-skin="qingyu"] .memory-action-error {
+  background: var(--danger-soft);
+  border-color: rgba(168, 80, 63, 0.18);
+  color: var(--danger);
+  border-radius: 8px;
+}
+
+/* 时间轴：不是一张张白卡，是日记本上的一天一天 */
+html[data-skin="qingyu"] .tl-wrap { padding-left: 18px; }
+html[data-skin="qingyu"] .tl-wrap::before { background: var(--line); width: 1px; }
+html[data-skin="qingyu"] .tl-item { margin-bottom: 0; }
+html[data-skin="qingyu"] .tl-item::before {
+  width: 7px;
+  height: 7px;
+  background: var(--paper);
+  border: 1px solid var(--line-strong);
+  box-shadow: none;
+}
+html[data-skin="qingyu"] .tl-item.milestone::before { background: var(--rose); border-color: var(--rose); }
+html[data-skin="qingyu"] .tl-card {
+  padding: 18px 0;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+}
+html[data-skin="qingyu"] .tl-card:hover { box-shadow: none; border-color: var(--line); }
+html[data-skin="qingyu"] .tl-card:active { transform: none; }
+html[data-skin="qingyu"] .tl-head { margin-bottom: 10px; }
+html[data-skin="qingyu"] .tl-date {
+  padding: 0;
+  background: none;
+  border: none;
+  font-family: var(--serif);
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+html[data-skin="qingyu"] .tl-badge {
+  padding: 1px 6px;
+  background: none;
+  border: 1px solid var(--rose-soft);
+  color: var(--rose-deep);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+html[data-skin="qingyu"] .tl-badge::before { display: none; }
+html[data-skin="qingyu"] .tl-count { font-size: 10.5px; letter-spacing: 0.06em; color: var(--ink-ghost); }
+html[data-skin="qingyu"] .tl-sum {
+  font-size: 13.5px;
+  line-height: 1.9;
+  color: var(--ink-soft);
+  -webkit-line-clamp: 2;
+}
+html[data-skin="qingyu"] .tl-more {
+  margin-top: 10px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--ink-faint);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+}
+html[data-skin="qingyu"] .tl-ar { color: var(--ink-ghost); }
+html[data-skin="qingyu"] .tl-detail-inner { padding-top: 12px; }
+html[data-skin="qingyu"] .tl-digest-mark {
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  color: var(--ink-ghost);
+}
+html[data-skin="qingyu"] .tl-digest-text {
+  font-size: 13.5px;
+  line-height: 1.95;
+  color: var(--ink-soft);
+}
+/* 左栏：导航不是一排白药片 */
+html[data-skin="qingyu"] .rb-rail-item {
+  border-radius: 6px;
+  background: none;
+}
+html[data-skin="qingyu"] .rb-rail-item.active {
+  background: var(--paper-2);
+  color: var(--ink);
+  box-shadow: none;
+}
+
+/* ============================================================
+   角色：不是"主视觉大图 + 卡片墙"，是"相册里的一页"
+   主角色改成 小照片 + 名字 + 一句话 + 一个动作；
+   其他角色只留照片和名字，去掉白卡、阴影、在线点、彩色胶囊。
+   ============================================================ */
+html[data-skin="qingyu"] .hero {
+  display: grid;
+  grid-template-columns: 138px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  gap: 4px 20px;
+  height: auto;
+  padding: 2px 0 0;
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+html[data-skin="qingyu"] .hero-live2d-click {
+  position: static;
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  height: 186px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+html[data-skin="qingyu"] .hero-bg {
+  position: static;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+}
+html[data-skin="qingyu"] .hero-scrim { display: none; }
+html[data-skin="qingyu"] .hero-top {
+  position: static;
+  grid-column: 2;
+  grid-row: 1;
+  padding: 2px 0 0;
+}
+html[data-skin="qingyu"] .hero-top .tag { display: none !important; }
+html[data-skin="qingyu"] .hero-edit {
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink-soft);
+  backdrop-filter: none;
+}
+html[data-skin="qingyu"] .hero-body {
+  position: static;
+  grid-column: 2;
+  grid-row: 2;
+  padding: 0;
+  color: var(--ink);
+}
+html[data-skin="qingyu"] .hero-name {
+  font-family: var(--serif);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+html[data-skin="qingyu"] .hero-quote {
+  margin-top: 8px;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--ink-faint);
+  opacity: 1;
+}
+html[data-skin="qingyu"] .hero-cta-row {
+  margin-top: 16px;
+  gap: 10px;
+}
+html[data-skin="qingyu"] .hero-cta {
+  flex: 0 1 auto;
+  padding: 10px 16px;
+  background: var(--rose);
+  color: var(--paper);
+  border-radius: 8px;
+  box-shadow: none;
+  font-size: 12.5px;
+  letter-spacing: 0.04em;
+}
+html[data-skin="qingyu"] .hero-info-btn {
+  width: 40px;
+  height: 40px;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink-soft);
+  backdrop-filter: none;
+}
+html[data-skin="qingyu"] .topbar .icon-btn {
+  background: transparent !important;
+  color: var(--ink) !important;
+  box-shadow: none !important;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+}
+html[data-skin="qingyu"] .agent-grid { gap: 22px 14px; }
+html[data-skin="qingyu"] .agent-card {
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+html[data-skin="qingyu"] .agent-card:active { transform: none; }
+html[data-skin="qingyu"] .ac-photo {
+  aspect-ratio: 4 / 5;
+  border-radius: 10px;
+  overflow: hidden;
+}
+html[data-skin="qingyu"] .ac-scrim { display: none; }
+html[data-skin="qingyu"] .ac-online { display: none; }
+html[data-skin="qingyu"] .ac-overlay {
+  position: static;
+  padding: 10px 0 0;
+  color: var(--ink);
+}
+html[data-skin="qingyu"] .ac-name {
+  font-family: var(--serif);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+html[data-skin="qingyu"] .ac-meta { padding: 3px 0 0; }
+html[data-skin="qingyu"] .micro-tag {
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  color: var(--ink-ghost);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+}
+html[data-skin="qingyu"] .agent-new {
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  background: none;
+  box-shadow: none;
+}
+html[data-skin="qingyu"] .agent-new:active { background: var(--paper-2); border-color: var(--line-strong); }
+html[data-skin="qingyu"] .an-plus {
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+}
+html[data-skin="qingyu"] .an-t { font-family: var(--serif); font-size: 14px; }
+html[data-skin="qingyu"] .an-s { font-size: 10.5px; color: var(--ink-ghost); }
+
+/* 角色页收尾：主角色一行（小照片 + 名字 + 动作），其他角色三列小相册 */
+html[data-skin="qingyu"] .hero {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+html[data-skin="qingyu"] .hero-live2d-click {
+  position: static;
+  flex: 0 0 118px;
+  width: 118px;
+  height: 148px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+html[data-skin="qingyu"] .hero-top { display: none; }
+html[data-skin="qingyu"] .hero-body { position: static; flex: 1 1 auto; }
+html[data-skin="qingyu"] .hero-name { font-size: 24px; }
+html[data-skin="qingyu"] .hero-quote { margin-top: 6px; }
+html[data-skin="qingyu"] .hero-cta-row { margin-top: 14px; }
+html[data-skin="qingyu"] .hero-cta {
+  padding: 9px 14px;
+  border-radius: 7px;
+  font-size: 12px;
+}
+html[data-skin="qingyu"] .hero-info-btn { width: 34px; height: 34px; border-radius: 7px; }
+html[data-skin="qingyu"] .agent-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px 16px;
+}
+@media (max-width: 899px) {
+  html[data-skin="qingyu"] .agent-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+html[data-skin="qingyu"] .ac-photo { aspect-ratio: 4 / 5; }
+html[data-skin="qingyu"] .ac-name {
+  display: block;
+  color: var(--ink) !important;
+  font-size: 15px;
+  font-weight: 600;
+}
+html[data-skin="qingyu"] .ac-tags { display: none; }
+html[data-skin="qingyu"] .ac-meta { display: none; }
+html[data-skin="qingyu"] .agent-new {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px 10px;
+  min-height: 180px;
+}
+
+/* 名字要落在照片下面：照片容器别把名字裁掉 */
+html[data-skin="qingyu"] .ac-photo {
+  overflow: visible;
+  border-radius: 0;
+}
+html[data-skin="qingyu"] .ac-photo img {
+  border-radius: 10px;
+  display: block;
+}
+html[data-skin="qingyu"] .ac-overlay {
+  padding-top: 10px;
+}
+
+/* ============================================================
+   动态：不是朋友圈信息流，是"她的日常"一页一页翻
+   去掉大封面、白卡片、悬浮阴影；每条像一页日记，细线分开。
+   ============================================================ */
+html[data-skin="qingyu"] .moments-cover {
+  height: auto;
+  margin-top: 0;
+  padding: 34px 26px 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 2px 16px;
+}
+html[data-skin="qingyu"] .mc-bg,
+html[data-skin="qingyu"] .mc-scrim { display: none; }
+html[data-skin="qingyu"] .mc-title {
+  position: static;
+  grid-column: 1;
+  grid-row: 1;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-shadow: none;
+}
+html[data-skin="qingyu"] .mc-sub {
+  position: static;
+  grid-column: 1;
+  grid-row: 2;
+  margin-top: 10px;
+  color: var(--ink-faint);
+  font-size: 12.5px;
+  line-height: 1.7;
+  text-shadow: none;
+  max-width: 30em;
+}
+html[data-skin="qingyu"] .mc-user {
+  position: static;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  width: 40px;
+  height: 40px;
+}
+html[data-skin="qingyu"] .mc-user img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+}
+html[data-skin="qingyu"] .moment-role-strip {
+  margin-top: 18px;
+  padding: 10px 26px;
+  background: var(--paper);
+  backdrop-filter: none;
+  border-bottom: 1px solid var(--line);
+  box-shadow: none;
+}
+html[data-skin="qingyu"] .moment-role-strip.scrolled { box-shadow: none; }
+html[data-skin="qingyu"] .moment-all-avatar {
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+}
+html[data-skin="qingyu"] .moments-list { padding-top: 6px; }
+html[data-skin="qingyu"] .moment {
+  gap: 14px;
+  margin: 0;
+  padding: 22px 0;
+  background: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line);
+  box-shadow: none;
+}
+html[data-skin="qingyu"] .moment:hover { transform: none; box-shadow: none; }
+html[data-skin="qingyu"] .m-avatar { width: 36px; height: 36px; }
+html[data-skin="qingyu"] .m-name {
+  font-family: var(--serif);
+  font-size: 14.5px;
+  font-weight: 600;
+}
+html[data-skin="qingyu"] .m-body {
+  margin-top: 9px;
+  font-size: 14px;
+  line-height: 1.95;
+  color: var(--ink);
+}
+html[data-skin="qingyu"] .m-img-button { margin-top: 12px; border-radius: 8px; }
+html[data-skin="qingyu"] .m-img-button img {
+  display: block;
+  width: 100%;
+  border-radius: 8px;
+  max-height: 460px;
+  object-fit: cover;
+}
+html[data-skin="qingyu"] .m-foot { margin-top: 12px; }
+html[data-skin="qingyu"] .m-time {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--ink-ghost);
+}
+html[data-skin="qingyu"] .m-actions { gap: 20px; }
+html[data-skin="qingyu"] .m-act {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--ink-faint);
+}
+html[data-skin="qingyu"] .m-act.liked { color: var(--rose); }
+html[data-skin="qingyu"] .m-comments {
+  margin-top: 12px;
+  padding: 10px 0 0 14px;
+  background: none;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+}
+html[data-skin="qingyu"] .m-comment { font-size: 12.5px; line-height: 1.8; }
+html[data-skin="qingyu"] .mc-name { color: var(--ink); font-weight: 600; }
+html[data-skin="qingyu"] .m-comment-composer input {
+  border: none;
+  border-bottom: 1px solid var(--line-strong);
+  border-radius: 0;
+  background: none;
+  height: 34px;
+}
+html[data-skin="qingyu"] .m-comment-composer button {
+  background: var(--rose);
+  color: var(--paper);
+  border-radius: 6px;
+}
+html[data-skin="qingyu"] .m-delete-btn { opacity: 0.4; }
+html[data-skin="qingyu"] .fab.moment-fab {
+  background: var(--rose);
+  color: var(--paper);
+  box-shadow: none;
+}
+html[data-skin="qingyu"] .moment-top-button {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  box-shadow: none;
+}
+
+/* 动态配图：整张看完，不裁成横条 */
+html[data-skin="qingyu"] .m-img-button {
+  background: var(--paper-2);
+  border-radius: 8px;
+  margin-top: 12px;
+}
+html[data-skin="qingyu"] .m-img-button img {
+  width: auto;
+  max-width: 100%;
+  max-height: 520px;
+  margin: 0 auto;
+  border-radius: 8px;
+  object-fit: contain;
+}
+/* 删除这类危险操作，平时不出现 */
+@media (hover: hover) {
+  html[data-skin="qingyu"] .m-delete-btn { opacity: 0; }
+  html[data-skin="qingyu"] .moment:hover .m-delete-btn { opacity: 0.5; }
+}
+
+/* 覆盖 .m-imgs.c1 的固定裁切：整张照片完整显示 */
+html[data-skin="qingyu"] .m-imgs.c1 { max-width: 100%; }
+html[data-skin="qingyu"] .m-imgs.c1 .m-img-button {
+  display: flex;
+  justify-content: center;
+  background: var(--paper-2);
+  border-radius: 8px;
+  line-height: 0;
+}
+html[data-skin="qingyu"] .m-imgs.c1 .m-img-button img {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 520px;
+  aspect-ratio: auto;
+  object-fit: contain;
+  border-radius: 8px;
+  margin: 0 auto;
+}
+
+/* 动态收尾：标签、删除、写一条 */
+html[data-skin="qingyu"] .tag {
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--ink-ghost);
+}
+html[data-skin="qingyu"] .tag.tag-rose { color: var(--rose-deep); }
+html[data-skin="qingyu"] .tag.tag-lav { color: var(--lav); }
+@media (hover: hover) {
+  html[data-skin="qingyu"] .m-delete-btn { opacity: 0 !important; }
+  html[data-skin="qingyu"] .moment:hover .m-delete-btn { opacity: 0.5 !important; }
+}
+html[data-skin="qingyu"] .fab.moment-fab {
+  width: 46px;
+  height: 46px;
+  background: var(--rose);
+  color: var(--paper);
+}
+html[data-skin="qingyu"] .moment-top-button {
+  border-radius: 50%;
+}
+
+/* ============================================================
+   我的：不是"个人主页卡片堆"，是一张自己的书桌
+   头像/名字/两行事实 + 一条条设置，全用细线，去掉白卡和彩色药片。
+   ============================================================ */
+html[data-skin="qingyu"] .me-hero {
+  gap: 16px;
+  padding: 6px 0 0;
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+html[data-skin="qingyu"] .me-avatar img {
+  border-radius: 50%;
+  box-shadow: none;
+  border: 1px solid var(--line);
+}
+html[data-skin="qingyu"] .me-avatar-edit {
+  width: 20px;
+  height: 20px;
+  right: 0;
+  bottom: 0;
+  background: var(--paper);
+  border: 1px solid var(--line-strong);
+  color: var(--ink-faint);
+}
+html[data-skin="qingyu"] .me-avatar-edit svg { width: 10px; height: 10px; }
+html[data-skin="qingyu"] .me-name { font-family: var(--serif); font-size: 22px; }
+html[data-skin="qingyu"] .me-handle {
+  margin-top: 6px;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--ink-ghost);
+}
+html[data-skin="qingyu"] .me-pills { margin-top: 12px; gap: 16px; }
+html[data-skin="qingyu"] .me-pill {
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  color: var(--ink-faint);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+}
+html[data-skin="qingyu"] .me-pill.lav { background: none; color: var(--ink-faint); }
+html[data-skin="qingyu"] .me-pill svg { width: 11px; height: 11px; opacity: 0.65; }
+html[data-skin="qingyu"] .row-chev { opacity: 0.3; width: 16px; height: 16px; }
+html[data-skin="qingyu"] .onboard-card {
+  padding: 14px 16px;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: none;
+}
+html[data-skin="qingyu"] .ob-glow { display: none; }
+html[data-skin="qingyu"] .ob-av { width: 40px; height: 40px; border-radius: 8px; }
+html[data-skin="qingyu"] .ob-t { font-family: var(--serif); font-size: 14px; }
+html[data-skin="qingyu"] .ob-s { margin-top: 4px; font-size: 11px; color: var(--ink-faint); }
+html[data-skin="qingyu"] .me-stats {
+  gap: 0;
+  margin-top: 4px;
+  padding: 18px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+html[data-skin="qingyu"] .me-stats .ms {
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
+  text-align: left;
+}
+html[data-skin="qingyu"] .me-stats .ms + .ms {
+  padding-left: 22px;
+  border-left: 1px solid var(--line);
+}
+html[data-skin="qingyu"] .ms b { font-family: var(--serif); font-size: 26px; font-weight: 600; }
+html[data-skin="qingyu"] .ms span {
+  margin-top: 6px;
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  color: var(--ink-ghost);
+}
+html[data-skin="qingyu"] .cap-card {
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
+  border-top: 1px solid var(--line);
+}
+html[data-skin="qingyu"] .prow {
+  gap: 14px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+html[data-skin="qingyu"] .prow-ic,
+html[data-skin="qingyu"] .prow-ic.on,
+html[data-skin="qingyu"] .prow-ic.rose,
+html[data-skin="qingyu"] .prow-ic.lav {
+  width: auto;
+  height: auto;
+  background: none;
+  border-radius: 0;
+  color: var(--ink-faint);
+  place-items: start;
+}
+html[data-skin="qingyu"] .prow-ic svg { width: 18px; height: 18px; }
+html[data-skin="qingyu"] .prow-t { font-size: 13.5px; font-weight: 500; }
+html[data-skin="qingyu"] .prow-s { margin-top: 4px; font-size: 11px; color: var(--ink-ghost); }
+html[data-skin="qingyu"] .status-dot { gap: 6px; }
+html[data-skin="qingyu"] .sd-c { width: 6px; height: 6px; box-shadow: none; }
+html[data-skin="qingyu"] .sd-t { font-size: 10.5px; color: var(--ink-ghost); }
+html[data-skin="qingyu"] .logout-btn {
+  margin-top: 26px;
+  padding: 11px;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink-faint);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+html[data-skin="qingyu"] .logout-btn svg { width: 15px; height: 15px; opacity: 0.7; }
+html[data-skin="qingyu"] .profile-foot {
+  margin-top: 22px;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--ink-ghost);
+  line-height: 2;
+}
+
+/* 数字这一行要跟内容对齐，不要贴边 */
+html[data-skin="qingyu"] .me-stats { padding: 18px 26px; }
+
+/* ============================================================
+   用量与健康：不是"仪表盘卡片"，是一张账本
+   一个大数字 + 细柱子 + 一行行分类，不要渐变卡片和药片切换。
+   ============================================================ */
+html[data-skin="qingyu"] .usage-screen { padding: 34px 26px 40px; }
+html[data-skin="qingyu"] .uq-seg {
+  gap: 22px;
+  margin-top: 18px;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line);
+}
+html[data-skin="qingyu"] .uq-seg button {
+  flex: 0 0 auto;
+  height: auto;
+  padding: 0 0 9px;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--ink-ghost);
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+}
+html[data-skin="qingyu"] .uq-seg button.on {
+  background: none;
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+  box-shadow: none;
+}
+html[data-skin="qingyu"] .uq-hero {
+  margin-top: 22px;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+html[data-skin="qingyu"] .uq-hero-label {
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  color: var(--ink-ghost);
+}
+html[data-skin="qingyu"] .uq-hero-num {
+  margin-top: 6px;
+  font-family: var(--serif);
+  font-size: 40px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+html[data-skin="qingyu"] .uq-hero-sub { margin-top: 8px; font-size: 11px; color: var(--ink-faint); }
+html[data-skin="qingyu"] .uq-hero-cost {
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  text-align: right;
+}
+html[data-skin="qingyu"] .uq-hero-cost span { font-size: 10px; letter-spacing: 0.1em; color: var(--ink-ghost); }
+html[data-skin="qingyu"] .uq-hero-cost b {
+  margin-top: 4px;
+  font-family: var(--serif);
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+html[data-skin="qingyu"] .uq-chart-wrap {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+html[data-skin="qingyu"] .uq-chart { height: 54px; gap: 2px; }
+html[data-skin="qingyu"] .uq-chart i {
+  border-radius: 1px 1px 0 0;
+  background: var(--rose-soft);
+}
+html[data-skin="qingyu"] .uq-chart i.zero { background: var(--paper-2); }
+html[data-skin="qingyu"] .uq-chart-x { margin-top: 8px; font-size: 9.5px; color: var(--ink-ghost); }
+html[data-skin="qingyu"] .uq-hero-stats {
+  gap: 0;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+html[data-skin="qingyu"] .uq-hero-stats > div {
+  padding: 0;
+  background: none;
+  border-radius: 0;
+}
+html[data-skin="qingyu"] .uq-hero-stats > div + div {
+  padding-left: 16px;
+  border-left: 1px solid var(--line);
+}
+html[data-skin="qingyu"] .uq-hero-stats span { font-size: 10px; letter-spacing: 0.08em; color: var(--ink-ghost); }
+html[data-skin="qingyu"] .uq-hero-stats b { margin-top: 6px; font-family: var(--serif); font-size: 15px; }
+html[data-skin="qingyu"] .usage-section { margin-top: 30px; }
+html[data-skin="qingyu"] .usage-section h2 {
+  margin-bottom: 2px;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  color: var(--ink-ghost);
+}
+html[data-skin="qingyu"] .uq-entries { gap: 0; }
+html[data-skin="qingyu"] .uq-entry {
+  gap: 14px;
+  padding: 16px 0;
+  background: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line);
+}
+html[data-skin="qingyu"] .uq-entry:active { transform: none; }
+html[data-skin="qingyu"] .uq-entry-icon {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  background: none !important;
+  color: var(--ink-faint) !important;
+  border-radius: 0;
+}
+html[data-skin="qingyu"] .uq-entry-icon svg { width: 17px; height: 17px; }
+html[data-skin="qingyu"] .uq-entry-main b { font-size: 13.5px; font-weight: 500; }
+html[data-skin="qingyu"] .uq-entry-main small { margin-top: 4px; font-size: 11px; color: var(--ink-ghost); }
+html[data-skin="qingyu"] .uq-entry > svg { width: 15px; height: 15px; color: var(--ink-ghost); opacity: 0.4; }
+html[data-skin="qingyu"] .usage-note {
+  margin: 26px 0 10px;
+  font-size: 10.5px;
+  line-height: 1.9;
+  color: var(--ink-ghost);
+  text-align: left;
+}
+html[data-skin="qingyu"] .usage-error {
+  margin-top: 14px;
+  padding: 10px 0;
+  background: none;
+  border-left: 2px solid var(--rose);
+  border-radius: 0;
+  padding-left: 12px;
+  color: var(--rose-deep);
+  font-size: 11.5px;
+}
+/* 子页：面板、渠道、模型 */
+html[data-skin="qingyu"] .uq-panel,
+html[data-skin="qingyu"] .uq-provider,
+html[data-skin="qingyu"] .uq-model {
+  padding: 16px 0;
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
+  border-top: 1px solid var(--line);
+}
+html[data-skin="qingyu"] .uq-models { gap: 0; }
+html[data-skin="qingyu"] .uq-model + .uq-model { margin-top: 0; border-top: 1px solid var(--line); }
+html[data-skin="qingyu"] .uq-provider-tag,
+html[data-skin="qingyu"] .uq-model-tag {
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  color: var(--ink-ghost);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+html[data-skin="qingyu"] .uq-model-bar {
+  height: 3px;
+  border-radius: 0;
+  background: var(--paper-2);
+}
+html[data-skin="qingyu"] .uq-model-bar i { border-radius: 0; }
+html[data-skin="qingyu"] .uq-chips { gap: 18px; padding: 0; }
+html[data-skin="qingyu"] .uq-chips button {
+  height: auto;
+  padding: 0 0 8px;
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+  border-bottom: 1px solid transparent;
+  font-size: 11.5px;
+  color: var(--ink-ghost);
+}
+html[data-skin="qingyu"] .uq-chips button.on {
+  background: none;
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
+html[data-skin="qingyu"] .usage-event-row {
+  padding: 14px 0;
+  background: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line);
+}
+html[data-skin="qingyu"] .usage-event-icon {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  background: none !important;
+  color: var(--ink-faint);
+  border-radius: 0;
+}
+html[data-skin="qingyu"] .usage-event-row.failed .usage-event-icon { background: none !important; color: var(--rose-deep); }
+html[data-skin="qingyu"] .uq-linechart path:nth-of-type(3) { stroke: var(--rose); }
+html[data-skin="qingyu"] .uq-linechart circle { stroke: var(--rose); fill: var(--paper); }
+
+/* 渠道条：不管后端给什么色，统一成珊瑚色 */
+html[data-skin="qingyu"] .uq-model-bar i { background: var(--rose) !important; }
+
+html[data-skin="qingyu"] .uq-chart i { background: var(--rose); opacity: 0.5; }
+html[data-skin="qingyu"] .uq-chart i.zero { background: var(--paper-2); opacity: 1; }
+
+/* ============================================================
+   弹层与控件：所有底部弹窗、确认框、输入框、按钮这一层统一
+   去掉大圆角白卡、模糊、投影；改成纸面 + 1px 线 + 衬线标题。
+   ============================================================ */
+html[data-skin="qingyu"] .sheet-mask,
+html[data-skin="qingyu"] .confirm-mask,
+html[data-skin="qingyu"] .vin-mask,
+html[data-skin="qingyu"] .model-pop-mask {
+  background: rgba(20, 20, 19, 0.26);
+  backdrop-filter: blur(2px);
+}
+html[data-skin="qingyu"] .sheet {
+  background: var(--paper);
+  border-radius: 14px 14px 0 0;
+  border-top: 1px solid var(--line-strong);
+  box-shadow: none;
+}
+html[data-skin="qingyu"] .sheet-grip {
+  width: 32px;
+  height: 3px;
+  margin: 10px auto 0;
+  background: var(--line-strong);
+}
+html[data-skin="qingyu"] .sheet-head { padding: 10px 24px 12px; }
+html[data-skin="qingyu"] .sheet-head h2 {
+  font-family: var(--serif);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+html[data-skin="qingyu"] .sheet-body { padding: 4px 24px 18px; }
+html[data-skin="qingyu"] .sheet-foot {
+  gap: 12px;
+  padding: 14px 24px 26px;
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+}
+html[data-skin="qingyu"] .sheet .icon-btn {
+  background: none;
+  box-shadow: none;
+  color: var(--ink-soft);
+}
+html[data-skin="qingyu"] .field-label {
+  margin: 18px 0 8px;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  color: var(--ink-ghost);
+}
+html[data-skin="qingyu"] .fld {
+  padding: 11px 13px;
+  background: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  font-size: 13.5px;
+}
+html[data-skin="qingyu"] .fld:focus {
+  border-color: var(--ink-soft);
+  box-shadow: none;
+  outline: none;
+}
+html[data-skin="qingyu"] .fld.area { line-height: 1.8; }
+html[data-skin="qingyu"] .switch-row {
+  margin-top: 18px;
+  padding: 14px 0;
+  background: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line);
+}
+html[data-skin="qingyu"] .sr-t { font-size: 13.5px; font-weight: 500; }
+html[data-skin="qingyu"] .sr-s { margin-top: 4px; font-size: 11px; color: var(--ink-ghost); }
+html[data-skin="qingyu"] .pill {
+  padding: 11px 16px;
+  border-radius: 8px;
+  box-shadow: none;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+html[data-skin="qingyu"] .pill-primary { background: var(--rose); color: var(--paper); }
+html[data-skin="qingyu"] .pill-ghost {
+  background: none;
+  border: 1px solid var(--line-strong);
+  color: var(--ink-soft);
+}
+html[data-skin="qingyu"] .confirm-box {
+  padding: 24px 22px 18px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: none;
+}
+html[data-skin="qingyu"] .cf-t { font-family: var(--serif); font-size: 18px; font-weight: 600; }
+html[data-skin="qingyu"] .cf-s { font-size: 12.5px; line-height: 1.8; color: var(--ink-faint); }
+html[data-skin="qingyu"] .cf-del { background: none; border: 1px solid var(--rose-soft); color: var(--rose-deep); border-radius: 8px; }
+html[data-skin="qingyu"] .type-chip,
+html[data-skin="qingyu"] .freq-chip,
+html[data-skin="qingyu"] .ob-chip {
+  padding: 9px 12px;
+  background: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  font-weight: 400;
+}
+html[data-skin="qingyu"] .type-chip.on,
+html[data-skin="qingyu"] .freq-chip.on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+html[data-skin="qingyu"] .ob-chip.on {
+  background: none;
+  border-color: var(--ink);
+  color: var(--ink);
+}
+html[data-skin="qingyu"] .type-grid { gap: 8px; }
+html[data-skin="qingyu"] .date-hint { font-size: 11.5px; line-height: 1.8; color: var(--ink-ghost); }
+html[data-skin="qingyu"] .route-note { font-size: 11px; line-height: 1.8; color: var(--ink-ghost); }
+/* 关于 / 隐私 / 诊断 这些弹层里的卡片 */
+html[data-skin="qingyu"] .about-hero { padding: 6px 0 0; }
+html[data-skin="qingyu"] .about-logo,
+html[data-skin="qingyu"] .about-ver,
+html[data-skin="qingyu"] .about-meta { border-radius: 0; }
+html[data-skin="qingyu"] .about-row { border-radius: 0; border-bottom: 1px solid var(--line); background: none; }
+html[data-skin="qingyu"] .priv-card,
+html[data-skin="qingyu"] .diag-list,
+html[data-skin="qingyu"] .theme-sw {
+  border-radius: 10px;
+  box-shadow: none;
+  background: none;
+  border: 1px solid var(--line);
+}
+html[data-skin="qingyu"] .theme-check { background: var(--ink); color: var(--paper); }
+html[data-skin="qingyu"] .auth-foot { font-size: 10.5px; letter-spacing: 0.06em; color: var(--ink-ghost); }
+
+/* 开关：不是粉色胶囊，是墨色小闸 */
+html[data-skin="qingyu"] .toggle {
+  width: 42px;
+  height: 24px;
+  background: var(--paper-2);
+  border: 1px solid var(--line-strong);
+}
+html[data-skin="qingyu"] .toggle i {
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: var(--paper);
+  box-shadow: none;
+}
+html[data-skin="qingyu"] .toggle.on { background: var(--ink); border-color: var(--ink); }
+html[data-skin="qingyu"] .toggle.on i { transform: translateX(18px); background: var(--paper); }
+/* 禁用/不可用的一级按钮不要还那么亮 */
+html[data-skin="qingyu"] .pill-primary:disabled {
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--ink-ghost);
+}
+html[data-skin="qingyu"] .pill:disabled { opacity: 1; }
+
+/* ============================================================
+   聊天室：她说话不该像对话框，像纸上写着的话
+   页头一条线、她的话直接落在纸面上、我的话一小块纸；
+   输入栏只有一条上边线，没有胶囊和投影。
+   ============================================================ */
+html[data-skin="qingyu"] .chat-screen { background: var(--paper); }
+html[data-skin="qingyu"] .chat-top {
+  gap: 12px;
+  padding: 14px 26px 12px;
+  background: var(--paper);
+  box-shadow: none;
+  border-bottom: 1px solid var(--line);
+}
+html[data-skin="qingyu"] .ct-back {
+  width: 32px;
+  height: 32px;
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+  color: var(--ink-soft);
+}
+html[data-skin="qingyu"] .ct-avatar { width: 34px; height: 34px; }
+html[data-skin="qingyu"] .ct-avatar img {
+  border-radius: 50%;
+  box-shadow: none;
+  border: 1px solid var(--line);
+}
+html[data-skin="qingyu"] .ct-avatar .cl-online { display: none; }
+html[data-skin="qingyu"] .ct-name {
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+html[data-skin="qingyu"] .ct-model {
+  margin-top: 3px;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  color: var(--ink-ghost);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  gap: 5px;
+}
+html[data-skin="qingyu"] .ct-model svg { width: 11px; height: 11px; opacity: 0.6; }
+html[data-skin="qingyu"] .ct-ic {
+  width: 32px;
+  height: 32px;
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+  color: var(--ink-ghost);
+}
+html[data-skin="qingyu"] .ct-ic svg { width: 18px; height: 18px; }
+html[data-skin="qingyu"] .ct-ic.on { color: var(--rose-deep); }
+html[data-skin="qingyu"] .chat-more-menu {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 20, 19, 0.18);
+  backdrop-filter: none;
+  z-index: 40;
+}
+html[data-skin="qingyu"] .cmm-inner {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: none;
+  padding: 8px 0;
+}
+html[data-skin="qingyu"] .cmm-item {
+  padding: 12px 18px;
+  border-radius: 0;
+  font-size: 13px;
+  color: var(--ink);
+  background: none;
+}
+html[data-skin="qingyu"] .cmm-item:hover { background: var(--paper-2); }
+html[data-skin="qingyu"] .cmm-item.danger { color: var(--rose-deep); }
+html[data-skin="qingyu"] .chat-search {
+  margin: 12px 26px 0;
+  padding: 0 0 8px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line-strong);
+  border-radius: 0;
+  box-shadow: none;
+}
+html[data-skin="qingyu"] .chat-search input { font-size: 13px; background: none; }
+/* 消息区 */
+html[data-skin="qingyu"] .msg-area { padding: 16px 26px 10px; }
+html[data-skin="qingyu"] .time-div {
+  margin: 24px 0;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--ink-ghost);
+}
+html[data-skin="qingyu"] .row { gap: 12px; margin-bottom: 20px; }
+html[data-skin="qingyu"] .row-avatar { width: 28px; height: 28px; }
+html[data-skin="qingyu"] .row-avatar img { border-radius: 50%; }
+html[data-skin="qingyu"] .her-stack,
+html[data-skin="qingyu"] .me-stack { max-width: 78%; }
+html[data-skin="qingyu"] .bubble {
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+  font-size: 14px;
+  line-height: 1.95;
+  letter-spacing: 0.01em;
+}
+html[data-skin="qingyu"] .her-bubble {
+  background: none;
+  color: var(--ink);
+  border: none;
+  border-radius: 0;
+}
+html[data-skin="qingyu"] .her-bubble.proactive {
+  padding: 10px 14px;
+  background: var(--paper-2);
+  border: none;
+  border-radius: 10px 10px 10px 2px;
+}
+html[data-skin="qingyu"] .her-bubble.action {
+  padding: 0;
+  background: none;
+  color: var(--ink-ghost);
+  font-size: 12.5px;
+  line-height: 1.9;
+  font-style: normal;
+}
+html[data-skin="qingyu"] .me-bubble {
+  padding: 10px 14px;
+  background: var(--paper-2);
+  color: var(--ink);
+  border-radius: 10px 10px 2px 10px;
+}
+html[data-skin="qingyu"] .msg-time {
+  margin: 8px 2px 0;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  color: var(--ink-ghost);
+}
+html[data-skin="qingyu"] .bubble.typing {
+  display: flex;
+  gap: 5px;
+  padding: 6px 0;
+  background: none;
+}
+html[data-skin="qingyu"] .bubble.typing span {
+  width: 5px;
+  height: 5px;
+  background: var(--line-strong);
+}
+html[data-skin="qingyu"] .chat-notice,
+html[data-skin="qingyu"] .chat-error {
+  margin: 12px 0;
+  padding: 10px 0 10px 12px;
+  background: none;
+  border-left: 2px solid var(--line-strong);
+  border-radius: 0;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+html[data-skin="qingyu"] .chat-error { border-left-color: var(--rose); color: var(--rose-deep); }
+html[data-skin="qingyu"] .hist-more,
+html[data-skin="qingyu"] .search-note {
+  margin: 0 0 18px;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--ink-ghost);
+}
+html[data-skin="qingyu"] .call-her {
+  right: 22px;
+  bottom: 92px;
+  padding: 7px 12px 7px 7px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  box-shadow: none;
+  border-radius: 8px;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+html[data-skin="qingyu"] .call-her .ch-av { width: 22px; height: 22px; }
+/* 输入栏 */
+html[data-skin="qingyu"] .input-bar {
+  padding: 10px 26px 16px;
+  background: var(--paper);
+  border-top: 1px solid var(--line);
+  box-shadow: none;
+}
+html[data-skin="qingyu"] .ib-field {
+  padding: 9px 14px;
+  background: var(--paper-2);
+  border-radius: 10px;
+  box-shadow: none;
+}
+html[data-skin="qingyu"] .ib-field textarea {
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+html[data-skin="qingyu"] .ib-tool {
+  color: var(--ink-ghost);
+}
+html[data-skin="qingyu"] .ib-tool.on {
+  color: var(--ink);
+  background: none;
+}
+html[data-skin="qingyu"] .att-thumb { border-radius: 8px; }
+html[data-skin="qingyu"] .att-hint { font-size: 10.5px; color: var(--ink-ghost); }
+/* 立绘：不要光晕，收进纸里 */
+html[data-skin="qingyu"] .chat-fig-glow { display: none; }
+html[data-skin="qingyu"] .chat-fig-fade {
+  background: linear-gradient(to bottom, rgba(250, 249, 245, 0) 52%, var(--paper) 94%);
+}
+html[data-skin="qingyu"] .chat-figure.is-expanded { background: var(--paper); }
+html[data-skin="qingyu"] .chat-figure-close {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: none;
+  color: var(--ink-soft);
+}
+html[data-skin="qingyu"] .chat-figure-name { font-family: var(--serif); }
+html[data-skin="qingyu"] .chat-figure-hint { font-size: 10.5px; letter-spacing: 0.08em; color: var(--ink-ghost); }
+
+html[data-skin="qingyu"] .tts-btn {
+  margin-top: 8px;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  color: var(--ink-ghost);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+html[data-skin="qingyu"] .tts-btn.on { background: none; color: var(--rose-deep); }
+html[data-skin="qingyu"] .think-toggle {
+  min-height: 30px;
+  padding: 0 10px;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink-faint);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+}
+html[data-skin="qingyu"] .voice-play {
+  background: var(--paper-2);
+  color: var(--ink-soft);
+}
+html[data-skin="qingyu"] .sticker { background: none; border-radius: 0; padding: 0; box-shadow: none; }
+html[data-skin="qingyu"] .msg-img-button img { border-radius: 8px; }
+
+/* 气泡不要小尾巴 */
+html[data-skin="qingyu"] .her-bubble::after,
+html[data-skin="qingyu"] .me-bubble::after { display: none; }
+
+/* ============================================================
+   完整聊天记录 / 通话：同一套纸与墨，通话是夜里的一盏灯
+   ============================================================ */
+html[data-skin="qingyu"] .ct-meta {
+  margin-top: 3px;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-ghost);
+}
+html[data-skin="qingyu"] .sr-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  width: 100%;
+  padding: 15px 0;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+  text-align: left;
+}
+html[data-skin="qingyu"] .sr-row:last-child { border-bottom: none; }
+html[data-skin="qingyu"] .sr-meta {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--ink-ghost);
+}
+html[data-skin="qingyu"] .sr-text {
+  font-size: 13.5px;
+  line-height: 1.85;
+  color: var(--ink);
+}
+html[data-skin="qingyu"] .sr-go {
+  margin-top: 2px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink-ghost);
+}
+html[data-skin="qingyu"] .sr-mark {
+  padding: 0 1px;
+  background: none;
+  color: var(--rose-deep);
+  border-bottom: 1px solid var(--rose);
+  font-weight: 600;
+}
+html[data-skin="qingyu"] .history-hint {
+  margin: 26px 0;
+  text-align: center;
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  color: var(--ink-ghost);
+}
+html[data-skin="qingyu"] .hist-more-s { display: block; margin-top: 4px; letter-spacing: 0.06em; }
+html[data-skin="qingyu"] .h-msg.h-hit .bubble {
+  box-shadow: inset 0 0 0 1px var(--rose-soft);
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: var(--rose-tint, rgba(204, 120, 92, 0.08));
+}
+html[data-skin="qingyu"] .date-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+html[data-skin="qingyu"] .date-chip {
+  padding: 8px 12px;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+html[data-skin="qingyu"] .date-chip:hover { border-color: var(--ink-ghost); }
+
+/* 通话样式单独在 qingyu-call.css，避免热更新残留 */

@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Android 11+ 默认看不见别的 App。不声明的话，系统听写/朗读会当成“没有这服务”。 -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+
+        <!--
+            ═══ 推送通知外观（2026/9/21）═══
+            Firebase 推通知时，如果没在这里指定图标和渠道，安卓会用系统兜底：
+            图标变成一个白方块、渠道名变成「其他」。三个键都是 FCM 的固定名字。
+              · default_notification_icon  —— 必须是单色剪影 PNG（@drawable/ic_notification）。
+                不能用自适应图标，FCM 会直接忽略并回落到白方块。
+              · default_notification_color —— 给剪影上色。
+              · default_notification_channel_id —— 没有它，通知会掉进系统兜底渠道。
+        -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notification" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_accent" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="ruobai_proactive" />
+
+        <!--
+            ═══ 后台守候（2026/9/21）═══
+            她主动消息的另一条通道：不经过谷歌，App 自己定时问服务器。
+            背景见 PushPollService.java 顶部说明。
+        -->
+        <service
+            android:name=".PushPollService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="remoteMessaging"
+            android:stopWithTask="false" />
+
+        <receiver
+            android:name=".PushPollBootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- 第二道保险：JobScheduler 由系统托管，划掉 App 后也能把守候拉回来 -->
+        <service
+            android:name=".PushPollJobService"
+            android:enabled="true"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+    </application>
+
+    <!-- Permissions -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- 后台守候需要用闹钟把自己按时叫醒；setAndAllowWhileIdle 不需要额外权限，
+         但开机自启需要 RECEIVE_BOOT_COMPLETED。 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
+    <!--
+        流体云 / 实时更新（Android 16）。这个权限类型是 normal|appop：
+        **不声明的话系统默认把 appop 设成 ignore**，于是
+        NotificationManager.canPostPromotedNotifications() 返回 false、
+        setRequestPromotedOngoing(true) 被丢掉 —— 表现就是"胶囊永远不出现"。
+        实测证据：声明前 `cmd appops get fun.lshl.ruobai` 显示
+        POST_PROMOTED_NOTIFICATIONS: ignore。
+    -->
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+</manifest>

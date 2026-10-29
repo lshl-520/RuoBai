@@ -1,0 +1,33 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+build/
+
+# 登录态与凭据（绝不进 Git）
+cookies.txt
+cookies_online.txt
+*_cookies.txt
+*.cookie
+
+# 环境变量
+.env
+.env.*
+# 但示例文件要提交：开源用户照着它建自己的 .env.local。
+# 少了这一行，仓库里就没有任何东西说明 App 侧要配 VITE_API_ORIGIN。
+!.env.example
+
+# 本地数据与备份
+local-data/
+*.sqlite
+*.sqlite3
+*.db
+
+# 日志
+*.log
+
+# 编辑器
+.vscode/
+.idea/
+.DS_Store

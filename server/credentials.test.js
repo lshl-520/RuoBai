@@ -1,0 +1,845 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import express from 'express';
+import { createCredentialsRouter } from './credentials.js';
+
+function createApp(router, userId = 7) {
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    req.userId = userId;
+    next();
+  });
+  app.use('/api/credentials', router);
+  app.use((error, _req, res, _next) => {
+    res.status(Number(error?.statusCode) || 500).json({ success: false, error: error.message });
+  });
+  return app;
+}
+
+async function withServer(app, run) {
+  const server = app.listen(0);
+  try {
+    const { port } = server.address();
+    await run(`http://127.0.0.1:${port}`);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+}
+
+test('GET /api/credentials returns current user credentials with masked key', async () => {
+  const router = createCredentialsRouter({
+    pool: {
+      query: async (sql, params) => {
+        assert.equal(params[0], 7);
+        assert.match(sql, /from credentials c/i);
+        return [[{
+          id: 3,
+          user_id: 7,
+          name: '饼干姐姐',
+          provider_type: 'openai',
+          api_base: 'https://ai98pro.xyz',
+          api_aux_base: '',
+          api_key: 'sk-1234567890abcd',
+          created_at: '2026-05-24 10:00:00',
+          models_count: 12
+        }]];
+      }
+    }
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials`);
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.success, true);
+    assert.equal(payload.items.length, 1);
+    assert.equal(payload.items[0].name, '饼干姐姐');
+    assert.equal(payload.items[0].models_count, 12);
+    assert.equal(payload.items[0].api_key_masked, 'sk-1…abcd');
+  });
+});
+
+test('POST /api/credentials creates a credential and PATCH updates only the current user credential', async () => {
+  const calls = [];
+  let created = {
+    id: 9,
+    user_id: 7,
+    name: '千问官方',
+    provider_type: 'openai-compatible',
+    api_base: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    api_aux_base: '',
+    api_key: 'sk-created',
+    created_at: '2026-05-24 11:00:00',
+    models_count: 0
+  };
+
+  const router = createCredentialsRouter({
+    pool: {
+      query: async (sql, params) => {
+        if (sql.includes('SELECT id FROM credentials WHERE user_id = ? AND name = ?')) {
+          assert.deepEqual(params, [7, '千问官方']);
+          return [[]];
+        }
+        throw new Error(`Unexpected pool query: ${sql}`);
+      }
+    },
+    withTransaction: async work => work({
+      query: async (sql, params) => {
+        calls.push({ sql, params });
+
+        if (sql.includes('FROM credentials WHERE user_id = ? AND api_base = ? AND api_key = ?')) {
+          return [[]];
+        }
+
+        if (sql.includes('INSERT INTO credentials')) {
+          assert.equal(params[0], 7);
+          assert.equal(params[1], '千问官方');
+          return [{ insertId: 9 }];
+        }
+
+        if (sql.includes('FROM credentials') && sql.includes('WHERE id = ? AND user_id = ?')) {
+          return [[created]];
+        }
+
+        if (sql.includes('UPDATE credentials SET')) {
+          assert.equal(params[params.length - 2], 9);
+          assert.equal(params[params.length - 1], 7);
+          created = {
+            ...created,
+            name: '千问新名字',
+            api_key: 'sk-updated'
+          };
+          return [{ affectedRows: 1 }];
+        }
+
+        throw new Error(`Unexpected query: ${sql}`);
+      }
+    })
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const createResponse = await fetch(`${baseUrl}/api/credentials`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: '千问官方',
+        api_base: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        api_key: 'sk-created'
+      })
+    });
+    const createPayload = await createResponse.json();
+
+    assert.equal(createResponse.status, 201);
+    assert.equal(createPayload.success, true);
+    assert.equal(createPayload.item.id, 9);
+
+    const updateResponse = await fetch(`${baseUrl}/api/credentials/9`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: '千问新名字',
+        api_key: 'sk-updated'
+      })
+    });
+    const updatePayload = await updateResponse.json();
+
+    assert.equal(updateResponse.status, 200);
+    assert.equal(updatePayload.success, true);
+    assert.equal(updatePayload.item.name, '千问新名字');
+    assert.equal(updatePayload.item.api_key_masked, 'sk-u…ated');
+    assert.ok(calls.some(call => call.sql.includes('INSERT INTO credentials')));
+    assert.ok(calls.some(call => call.sql.includes('UPDATE credentials SET')));
+  });
+});
+
+test('DELETE /api/credentials returns affected capabilities and respects user isolation for models list', async () => {
+  const router = createCredentialsRouter({
+    pool: {
+      query: async (sql, params) => {
+        if (sql.includes('FROM credentials') && sql.includes('WHERE id = ? AND user_id = ?')) {
+          assert.deepEqual(params, [22, 7]);
+          return [[]];
+        }
+
+        throw new Error(`Unexpected pool query: ${sql}`);
+      }
+    },
+    withTransaction: async work => work({
+      query: async (sql, params) => {
+        if (sql.includes('FROM credentials') && sql.includes('WHERE id = ? AND user_id = ?')) {
+          assert.deepEqual(params, [9, 7]);
+          return [[{
+            id: 9,
+            user_id: 7,
+            name: '饼干姐姐',
+            provider_type: 'openai',
+            api_base: 'https://ai98pro.xyz',
+            api_key: 'sk-delete',
+            created_at: '2026-05-24 10:00:00'
+          }]];
+        }
+
+        if (sql.includes('FROM capability_assignments') && sql.includes('credential_id = ? AND user_id = ?')) {
+          return [[
+            { capability: 'chat' },
+            { capability: 'vision' }
+          ]];
+        }
+
+        if (sql.includes('DELETE FROM credentials') && sql.includes('WHERE id = ? AND user_id = ?')) {
+          return [{ affectedRows: 1 }];
+        }
+
+        throw new Error(`Unexpected tx query: ${sql}`);
+      }
+    })
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const modelsResponse = await fetch(`${baseUrl}/api/credentials/22/models`);
+    const modelsPayload = await modelsResponse.json();
+
+    assert.equal(modelsResponse.status, 404);
+    assert.equal(modelsPayload.success, false);
+
+    const deleteResponse = await fetch(`${baseUrl}/api/credentials/9`, {
+      method: 'DELETE'
+    });
+    const deletePayload = await deleteResponse.json();
+
+    assert.equal(deleteResponse.status, 200);
+    assert.equal(deletePayload.success, true);
+    assert.deepEqual(deletePayload.disabled_capabilities, ['chat', 'vision']);
+  });
+});
+
+test('GET /api/credentials/:id/models marks assigned legacy models as assigned', async () => {
+  const router = createCredentialsRouter({
+    pool: {
+      query: async (sql, params) => {
+        if (sql.includes('FROM credentials') && sql.includes('WHERE id = ? AND user_id = ?')) {
+          assert.deepEqual(params, [18, 7]);
+          return [[{
+            id: 18,
+            user_id: 7,
+            name: 'luna渠道',
+            provider_type: 'openai-compatible',
+            api_base: 'https://models.example/v1',
+            api_aux_base: '',
+            api_key: 'sk-luna',
+            is_enabled: 1,
+            created_at: '2026-09-22 10:00:00'
+          }]];
+        }
+
+        if (sql.includes('INNER JOIN credential_models cm') && sql.includes('capability_assignments ca')) {
+          // ★ 回归（2026/9/25）：老库里 credential_models.model_id(utf8mb4_general_ci) 与
+          // capability_assignments.model_id(utf8mb4_unicode_ci) 排序规则不同，直接比较会
+          // 报 1267 ER_CANT_AGGREGATE_2COLLATIONS，整个模型列表接口 500。
+          // 必须按二进制值比较（与 capabilities.js 的既有修法一致）。
+          assert.match(sql, /BINARY ca\.model_id = BINARY cm\.model_id/);
+          assert.deepEqual(params, [18, 7]);
+          return [[
+            {
+              id: 81,
+              credential_id: 18,
+              model_id: 'gpt-5.6-luna',
+              capabilities: '["chat"]',
+              is_enabled: 0,
+              assigned: 1,
+              discovered_at: '2026-09-22 10:01:00'
+            },
+            {
+              id: 82,
+              credential_id: 18,
+              model_id: 'gpt-5.6-sol',
+              capabilities: '["chat"]',
+              is_enabled: 0,
+              assigned: 0,
+              discovered_at: '2026-09-22 10:01:00'
+            }
+          ]];
+        }
+
+        throw new Error('Unexpected query: ' + sql);
+      }
+    }
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(baseUrl + '/api/credentials/18/models');
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.success, true);
+    assert.deepEqual(payload.items.map(item => ({ model_id: item.model_id, is_enabled: item.is_enabled, assigned: item.assigned })), [
+      { model_id: 'gpt-5.6-luna', is_enabled: false, assigned: true },
+      { model_id: 'gpt-5.6-sol', is_enabled: false, assigned: false }
+    ]);
+  });
+});
+
+test('POST /api/credentials/:id/refresh-models infers capabilities and caches models', async () => {
+  const insertedModels = [];
+
+  const router = createCredentialsRouter({
+    fetchImpl: async (url, options) => {
+      assert.equal(url, 'https://api.x.ai/v1/models');
+      assert.equal(options.method, 'GET');
+      assert.equal(options.headers.Authorization, 'Bearer sk-refresh');
+      return {
+        ok: true,
+        text: async () => JSON.stringify({
+          data: [
+            { id: 'gpt-5.5' },
+            { id: 'gpt-4o' },
+            { id: 'qwen-tts' },
+            { id: 'doubao-seed-image' }
+          ]
+        })
+      };
+    },
+    pool: {
+      query: async (sql, params) => {
+        if (sql.includes('FROM credentials') && sql.includes('WHERE id = ? AND user_id = ?')) {
+          return [[{
+            id: 5,
+            user_id: 7,
+            name: '测试中转',
+            provider_type: 'openai',
+            api_base: 'https://api.x.ai',
+            api_aux_base: '',
+            api_key: 'sk-refresh',
+            created_at: '2026-05-24 10:00:00'
+          }]];
+        }
+
+        // ★ 2026/9/17：刷新前先读已有勾选状态
+        if (sql.includes('SELECT model_id, is_enabled FROM credential_models')) {
+          return [[{ model_id: 'gpt-5.5', is_enabled: 1 }]];
+        }
+        // ★ 刷新后统计已勾选数量
+        if (sql.includes('COUNT(*) AS n FROM credential_models')) {
+          return [[{ n: 1 }]];
+        }
+
+        throw new Error(`Unexpected pool query: ${sql}`);
+      }
+    },
+    withTransaction: async work => work({
+      query: async (sql, params) => {
+        // ★ 2026/9/17：现在是"删掉这次没再发现的"，SQL 带 NOT IN
+        if (sql.includes('DELETE FROM credential_models')) {
+          return [{ affectedRows: 2 }];
+        }
+
+        if (sql.includes('INSERT INTO credential_models')) {
+          insertedModels.push({
+            credential_id: params[0],
+            model_id: params[1],
+            capabilities: JSON.parse(params[2]),
+            // ★ 2026/9/17：第 4 个参数是"要不要启用"；新模型默认 0
+            is_enabled: Number(params[3])
+          });
+          return [{ insertId: insertedModels.length }];
+        }
+
+        throw new Error(`Unexpected tx query: ${sql}`);
+      }
+    })
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials/5/refresh-models`, {
+      method: 'POST'
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.success, true);
+    assert.equal(payload.items.length, 4);
+    assert.deepEqual(payload.summary.chat, ['gpt-5.5', 'gpt-4o']);
+    assert.deepEqual(payload.summary.vision, ['gpt-5.5', 'gpt-4o']);
+    assert.deepEqual(payload.summary.tts, ['qwen-tts']);
+    assert.deepEqual(payload.summary.image, ['doubao-seed-image']);
+    assert.equal(insertedModels.length, 4);
+    // ★ 2026/9/17 新行为：刷新**不再**把所有模型都启用
+    assert.equal(insertedModels.filter(m => m.is_enabled === 1).length, 1);
+    assert.equal(insertedModels.find(m => m.model_id === 'gpt-5.5').is_enabled, 1, '原本勾选的要保持启用');
+    assert.equal(insertedModels.find(m => m.model_id === 'gpt-4o').is_enabled, 0, '新发现的默认不启用，等用户自己勾');
+    assert.equal(payload.enabled_count, 1);
+  });
+});
+
+test('★ 勾选接口：只改 is_enabled，能保存"我要用哪几个模型"', async () => {
+  let updateAll = null;
+  let updatePicked = null;
+  const router = createCredentialsRouter({
+    pool: {
+      query: async (sql, params) => {
+        if (sql.includes('FROM credentials') && sql.includes('WHERE id = ? AND user_id = ?')) {
+          return [[{ id: 5, user_id: 7, name: 'gpt5x', provider_type: 'custom', api_base: 'https://vip.ai98pro.xyz', api_aux_base: '', api_key: 'sk', created_at: '2026-09-01 00:00:00' }]];
+        }
+        if (sql.includes('SELECT model_id, is_enabled FROM credential_models')) {
+          return [[
+            { model_id: 'gpt-5.6-sol', is_enabled: 1 },
+            { model_id: 'gpt-5.6-terra', is_enabled: 1 },
+            { model_id: 'gpt-6-astra', is_enabled: 1 },
+            { model_id: 'gpt-5.4', is_enabled: 0 }
+          ]];
+        }
+        throw new Error(`Unexpected pool query: ${sql}`);
+      }
+    },
+    withTransaction: async work => work({
+      query: async (sql, params) => {
+        if (sql.includes('SET is_enabled = 0')) { updateAll = params; return [{ affectedRows: 4 }]; }
+        if (sql.includes('SET is_enabled = 1')) { updatePicked = params; return [{ affectedRows: 3 }]; }
+        throw new Error(`Unexpected tx query: ${sql}`);
+      }
+    })
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials/5/enabled-models`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model_ids: ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra'] })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(payload.success, true);
+    assert.deepEqual(payload.enabled.sort(), ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra'].sort());
+    assert.deepEqual(updateAll, [5], '先把整个渠道关掉');
+    assert.deepEqual(updatePicked, [5, 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra'], '再只打开勾选的');
+  });
+});
+test('POST /api/credentials/:id/test checks /v1/models connectivity for the current user credential', async () => {
+  const router = createCredentialsRouter({
+    fetchImpl: async (url, options) => {
+      assert.equal(url, 'https://dashscope.aliyuncs.com/compatible-mode/v1/models');
+      assert.equal(options.method, 'GET');
+      assert.equal(options.headers.Authorization, 'Bearer sk-test');
+      return {
+        ok: true,
+        text: async () => JSON.stringify({ data: [{ id: 'qwen-max' }] })
+      };
+    },
+    pool: {
+      query: async (sql, params) => {
+        assert.deepEqual(params, [6, 7]);
+        return [[{
+          id: 6,
+          user_id: 7,
+          name: '千问',
+          provider_type: 'openai-compatible',
+          api_base: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+          api_aux_base: '',
+          api_key: 'sk-test',
+          created_at: '2026-05-24 10:00:00'
+        }]];
+      }
+    }
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials/6/test`, {
+      method: 'POST'
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.success, true);
+    assert.match(payload.message, /连接正常，已获取 1 个模型/);
+    assert.deepEqual(payload.models, ['qwen-max']);
+  });
+});
+
+
+test('task image credential can be created without a key and stores both addresses', async () => {
+  const insertedModels = [];
+  const created = {
+    id: 12,
+    user_id: 7,
+    name: '私人任务式图片',
+    provider_type: 'image-task-no-key',
+    api_base: 'https://submit.example.com',
+    api_key: '',
+    api_aux_base: 'https://tasks.example.com',
+    created_at: '2026-07-21 23:50:00'
+  };
+  const router = createCredentialsRouter({
+    pool: {
+      query: async (sql, params) => {
+        if (sql.includes('SELECT id FROM credentials WHERE user_id = ? AND name = ?')) {
+          assert.deepEqual(params, [7, '私人任务式图片']);
+          return [[]];
+        }
+        throw new Error(`Unexpected pool query: ${sql}`);
+      }
+    },
+    withTransaction: async work => work({
+      query: async (sql, params) => {
+        if (sql.includes('INSERT INTO credentials')) {
+          assert.deepEqual(params.slice(0, 6), [7, '私人任务式图片', 'image-task-no-key', 'https://submit.example.com', 'https://tasks.example.com', '']);
+          return [{ insertId: 12 }];
+        }
+        if (sql.includes('INSERT INTO credential_models')) {
+          insertedModels.push({ model: params[1], capabilities: JSON.parse(params[2]) });
+          return [{ insertId: 1 }];
+        }
+        if (sql.includes('FROM credentials') && sql.includes('WHERE id = ? AND user_id = ?')) {
+          return [[created]];
+        }
+        throw new Error(`Unexpected tx query: ${sql}`);
+      }
+    })
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: '私人任务式图片',
+        provider_type: 'image-task-no-key',
+        api_base: 'https://submit.example.com',
+        api_aux_base: 'https://tasks.example.com',
+        api_key: ''
+      })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 201);
+    assert.equal(payload.success, true);
+    assert.deepEqual(insertedModels, [{ model: 'task-image-default', capabilities: ['image', 'dynamic'] }]);
+  });
+});
+
+test('task image credentials require the task query address', async () => {
+  const router = createCredentialsRouter({ pool: { query: async () => { throw new Error('should not query'); } } });
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: '缺少查询地址',
+        provider_type: 'image-task-no-key',
+        api_base: 'https://submit.example.com',
+        api_key: ''
+      })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 400);
+    assert.match(payload.error, /任务查询/);
+  });
+});
+
+test('ordinary credentials still require an API key', async () => {
+  const router = createCredentialsRouter({ pool: { query: async () => { throw new Error('should not query'); } } });
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: '普通中转', provider_type: 'openai-compatible', api_base: 'https://example.com', api_key: '' })
+    });
+    assert.equal(response.status, 400);
+  });
+});
+
+test('task image refresh uses a fixed model and connectivity test uses the auxiliary base', async () => {
+  const requestedUrls = [];
+  const insertedModels = [];
+  const credential = {
+    id: 13,
+    user_id: 7,
+    name: '私人任务式图片',
+    provider_type: 'image-task-no-key',
+    api_base: 'https://submit.example.com',
+    api_aux_base: 'https://tasks.example.com',
+    api_key: ''
+  };
+  const router = createCredentialsRouter({
+    fetchImpl: async url => {
+      requestedUrls.push(url);
+      return { ok: true, status: 200, text: async () => JSON.stringify({ system: { os: 'linux' } }) };
+    },
+    pool: {
+      query: async (sql) => {
+        if (sql.includes('FROM credentials') && sql.includes('WHERE id = ? AND user_id = ?')) return [[credential]];
+        throw new Error(`Unexpected pool query: ${sql}`);
+      }
+    },
+    withTransaction: async work => work({
+      query: async (sql, params) => {
+        if (sql.includes('DELETE FROM credential_models')) return [{ affectedRows: 0 }];
+        if (sql.includes('INSERT INTO credential_models')) {
+          insertedModels.push({ model: params[1], capabilities: JSON.parse(params[2]) });
+          return [{ insertId: 1 }];
+        }
+        throw new Error(`Unexpected tx query: ${sql}`);
+      }
+    })
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const refreshResponse = await fetch(`${baseUrl}/api/credentials/13/refresh-models`, { method: 'POST' });
+    const refreshPayload = await refreshResponse.json();
+    assert.equal(refreshResponse.status, 200);
+    assert.deepEqual(refreshPayload.summary.image, ['task-image-default']);
+    assert.deepEqual(insertedModels, [{ model: 'task-image-default', capabilities: ['image', 'dynamic'] }]);
+
+    const testResponse = await fetch(`${baseUrl}/api/credentials/13/test`, { method: 'POST' });
+    assert.equal(testResponse.status, 200);
+    assert.deepEqual(requestedUrls, ['https://tasks.example.com/system_stats']);
+  });
+});
+
+
+test('doubao voice credential registers realtime and tts models with the same key', async () => {
+  const insertedModels = [];
+  const created = {
+    id: 21,
+    user_id: 7,
+    name: '豆包语音',
+    provider_type: 'volc-realtime',
+    api_base: 'wss://openspeech.bytedance.com/api/v3/realtime/dialogue',
+    api_aux_base: '',
+    api_key: 'volc-test-key',
+    created_at: '2026-07-22 10:00:00'
+  };
+  const router = createCredentialsRouter({
+    pool: {
+      query: async (sql, params) => {
+        if (sql.includes('SELECT id FROM credentials WHERE user_id = ? AND name = ?')) {
+          assert.deepEqual(params, [7, '豆包语音']);
+          return [[]];
+        }
+        throw new Error(`Unexpected pool query: ${sql}`);
+      }
+    },
+    withTransaction: async work => work({
+      query: async (sql, params) => {
+        if (sql.includes('FROM credentials WHERE user_id = ? AND api_base = ? AND api_key = ?')) return [[]];
+        if (sql.includes('INSERT INTO credentials')) return [{ insertId: 21 }];
+        if (sql.includes('INSERT INTO credential_models')) {
+          insertedModels.push({ model: params[1], capabilities: JSON.parse(params[2]) });
+          return [{ insertId: insertedModels.length }];
+        }
+        if (sql.includes('FROM credentials') && sql.includes('WHERE id = ? AND user_id = ?')) return [[created]];
+        throw new Error(`Unexpected tx query: ${sql}`);
+      }
+    })
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: '豆包语音',
+        provider_type: 'volc-realtime',
+        api_base: 'wss://openspeech.bytedance.com/api/v3/realtime/dialogue',
+        api_key: 'volc-test-key'
+      })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 201);
+    assert.equal(payload.success, true);
+    assert.deepEqual(insertedModels, [
+      { model: '2.2.0.0', capabilities: ['realtime'] },
+      { model: 'seed-tts-2.0', capabilities: ['tts'] }
+    ]);
+  });
+});
+
+
+test('POST /api/credentials/test-draft explains an invalid key in plain language', async () => {
+  const router = createCredentialsRouter({
+    fetchImpl: async () => ({ ok: false, status: 401, text: async () => 'unauthorized' })
+  });
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials/test-draft`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider_type: 'openai-compatible', api_base: 'https://example.com', api_key: 'bad-key' })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 400);
+    assert.equal(payload.code, 'auth_error');
+    assert.match(payload.error, /密钥不正确/);
+  });
+});
+
+test('POST /api/credentials/:id/apply saves selected model and switches selected capabilities', async () => {
+  const calls = [];
+  const router = createCredentialsRouter({
+    pool: {
+      query: async sql => {
+        if (sql.includes('FROM credentials') && sql.includes('WHERE id = ? AND user_id = ?')) {
+          return [[{ id: 8, user_id: 7, name: '中转', provider_type: 'openai-compatible', api_base: 'https://example.com', api_aux_base: '', api_key: 'key', is_enabled: 1 }]];
+        }
+        throw new Error(`Unexpected pool query: ${sql}`);
+      }
+    },
+    withTransaction: async work => work({
+      query: async (sql, params) => {
+        calls.push({ sql, params });
+        if (sql.includes('SELECT id, capabilities FROM credential_models')) return [[{ id: 30, capabilities: '["chat"]' }]];
+        if (sql.includes('SELECT id FROM capability_assignments')) return [[{ id: 40 }]];
+        if (sql.includes('UPDATE credential_models') || sql.includes('UPDATE capability_assignments')) return [{ affectedRows: 1 }];
+        throw new Error(`Unexpected tx query: ${sql}`);
+      }
+    })
+  });
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials/8/apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ purposes: ['chat', 'vision'], model_id: 'gpt-5.6-terra' })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(payload.applied.map(item => item.capability), ['chat', 'vision']);
+    assert.equal(calls.filter(call => call.sql.includes('UPDATE capability_assignments') && call.sql.includes('enabled = 1')).length, 2);
+    assert.ok(calls.some(call => call.sql.includes('UPDATE credential_models') && call.sql.includes('is_enabled = 1')));
+    assert.ok(calls.some(call => call.sql.includes('SET enabled = 0') && call.params?.includes('image')));
+    assert.ok(calls.some(call => String(call.params?.[0]).includes('vision')));
+  });
+});
+
+test('POST /api/credentials/:id/apply lets DeepSeek Flash cover chat and vision', async () => {
+  const calls = [];
+  const router = createCredentialsRouter({
+    pool: {
+      query: async sql => {
+        if (sql.includes('FROM credentials') && sql.includes('WHERE id = ? AND user_id = ?')) {
+          return [[{ id: 8, user_id: 7, name: 'dp', provider_type: 'deepseek', api_base: 'https://api.deepseek.com', api_aux_base: '', api_key: 'key', is_enabled: 1 }]];
+        }
+        throw new Error(`Unexpected pool query: ${sql}`);
+      }
+    },
+    withTransaction: async work => work({
+      query: async (sql, params) => {
+        calls.push({ sql, params });
+        if (sql.includes('SELECT id, capabilities FROM credential_models')) return [[{ id: 30, capabilities: '["chat"]' }]];
+        if (sql.includes('SELECT id FROM capability_assignments')) return [[{ id: 40 }]];
+        if (sql.includes('UPDATE credential_models') || sql.includes('UPDATE capability_assignments')) return [{ affectedRows: 1 }];
+        throw new Error(`Unexpected tx query: ${sql}`);
+      }
+    })
+  });
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials/8/apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ purposes: ['chat', 'vision'], model_id: 'deepseek-flash' })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(payload.applied.map(item => item.capability), ['chat', 'vision']);
+  });
+});
+
+test('POST /api/credentials/:id/apply saves dynamic as an independent image purpose', async () => {
+  const calls = [];
+  const router = createCredentialsRouter({
+    pool: {
+      query: async sql => {
+        if (sql.includes('FROM credentials') && sql.includes('WHERE id = ? AND user_id = ?')) {
+          return [[{ id: 8, user_id: 7, name: '图片渠道', provider_type: 'openai-compatible', api_base: 'https://example.com', api_aux_base: '', api_key: 'key', is_enabled: 1 }]];
+        }
+        throw new Error(`Unexpected pool query: ${sql}`);
+      }
+    },
+    withTransaction: async work => work({
+      query: async (sql, params) => {
+        calls.push({ sql, params });
+        if (sql.includes('SELECT id, capabilities FROM credential_models')) return [[{ id: 30, capabilities: '["image"]' }]];
+        if (sql.includes('SELECT id FROM capability_assignments')) return [[]];
+        if (sql.includes('INSERT INTO credential_models') || sql.includes('INSERT INTO capability_assignments')) return [{ insertId: 41 }];
+        if (sql.includes('UPDATE credential_models') || sql.includes('UPDATE capability_assignments')) return [{ affectedRows: 1 }];
+        throw new Error(`Unexpected tx query: ${sql}`);
+      }
+    })
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials/8/apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ purposes: ['image', 'dynamic'], model_id: 'gpt-image-2' })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(payload.applied.map(item => item.capability), ['image', 'dynamic']);
+    assert.ok(calls.some(call => call.sql.includes('INSERT INTO capability_assignments') && call.params?.[1] === 'dynamic'));
+  });
+});
+
+test('POST /api/credentials/:id/apply rejects Agnes for dynamic purpose', async () => {
+  const router = createCredentialsRouter({
+    pool: {
+      query: async sql => {
+        if (sql.includes('FROM credentials') && sql.includes('WHERE id = ? AND user_id = ?')) {
+          return [[{ id: 8, user_id: 7, name: '免费', provider_type: 'openai-compatible', api_base: 'https://example.com', api_aux_base: '', api_key: 'key', is_enabled: 1 }]];
+        }
+        throw new Error(`Unexpected pool query: ${sql}`);
+      }
+    },
+    withTransaction: async work => work({
+      query: async sql => {
+        if (sql.includes('SELECT id, capabilities FROM credential_models')) return [[{ id: 30, capabilities: '["image"]' }]];
+        if (sql.includes('SET enabled = 0')) return [{ affectedRows: 1 }];
+        throw new Error(`Unexpected tx query: ${sql}`);
+      }
+    })
+  });
+
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials/8/apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ purposes: ['dynamic'], model_id: 'agnes-image-2.1-flash' })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 400);
+    assert.match(payload.error, /九宫格/);
+  });
+});
+
+
+test('POST /api/credentials/test-draft tests edited address with the saved key', async () => {
+  let requestedUrl = '';
+  let authorization = '';
+  const router = createCredentialsRouter({
+    pool: {
+      query: async sql => {
+        if (sql.includes('FROM credentials') && sql.includes('WHERE id = ? AND user_id = ?')) {
+          return [[{ id: 8, user_id: 7, name: '旧渠道', provider_type: 'openai-compatible', api_base: 'https://old.example.com', api_aux_base: '', api_key: 'saved-key', is_enabled: 1 }]];
+        }
+        throw new Error(`Unexpected pool query: ${sql}`);
+      }
+    },
+    fetchImpl: async (url, options) => {
+      requestedUrl = url;
+      authorization = options.headers.Authorization;
+      return { ok: true, status: 200, text: async () => JSON.stringify({ data: [{ id: 'model-a' }] }) };
+    }
+  });
+  await withServer(createApp(router), async baseUrl => {
+    const response = await fetch(`${baseUrl}/api/credentials/test-draft`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential_id: 8, provider_type: 'openai-compatible', api_base: 'https://new.example.com/v1', api_key: '' })
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(payload.models_count, 1);
+    assert.deepEqual(payload.models, ['model-a']);
+    assert.equal(requestedUrl, 'https://new.example.com/v1/models');
+    assert.equal(authorization, 'Bearer saved-key');
+  });
+});

@@ -1,0 +1,396 @@
+import React, { useEffect, useRef, useState } from "react";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { Icon } from "./store.jsx";
+import { ShellV2 } from "./components/ShellV2.jsx";
+import { HomePage } from "./pages/HomePage.jsx";
+import { AuthScreen } from "./pages/auth.jsx";
+import { ChatListScreen, ChatRoom } from "./pages/chat.jsx";
+import { AgentsScreen, AgentEditor, CharacterDetail } from "./pages/agents.jsx";
+import { MomentsScreen } from "./pages/moments.jsx";
+import { MemoryScreen } from "./pages/memory.jsx";
+import { ProfileScreen, OnboardSheet } from "./pages/profile.jsx";
+import { UsageHealthScreen } from "./pages/usage.jsx";
+import { DEFAULT_USER_AVATAR } from "./lib/default-assets.js";
+import { bootNativePushIfPossible, isNativePushAvailable } from "./lib/push.js";
+import { consumePendingOpen, resumeBackgroundWatchIfEnabled } from "./lib/push-poll.js";
+import { recordDiagnostic, withDiagnosticId } from "./lib/diagnostics.js";
+import { checkForAndroidUpdate, downloadAndroidUpdate, snoozeAndroidUpdate } from "./lib/app-updater.js";
+import { flushPendingMessages } from "./lib/local-message-sync.js";
+import { flushPendingMomentActions } from "./lib/local-moment-sync.js";
+import { flushPendingMemoryActions } from "./lib/local-memory-sync.js";
+import { flushPendingProfileActions } from "./lib/local-profile-sync.js";
+import { flushPendingLifeEventActions } from "./lib/local-life-event-sync.js";
+
+const TABS = [
+  { key: "chat",    path: "/chat",       label: "聊天", icon: "chat" },
+  { key: "agents",  path: "/characters", label: "角色", icon: "agents" },
+  { key: "moments", path: "/moments",    label: "动态", icon: "moments" },
+  { key: "memory",  path: "/memory",     label: "记忆", icon: "book" },
+  { key: "me",      path: "/profile",    label: "我的", icon: "me" },
+];
+
+function AppToast({ toast, onClose }) {
+  if (!toast?.text) return null;
+
+  const isError = toast.type === "error";
+
+  return (
+    <div className="app-toast-stack" role={isError ? "alert" : "status"} aria-live={isError ? "assertive" : "polite"}>
+      <div className={"app-toast " + (isError ? "error" : "success")} key={toast.id}>
+        <span className="app-toast-icon"><Icon name={isError ? "alert" : "check"} /></span>
+        <span className="app-toast-text">{toast.text}</span>
+        <button className="app-toast-close" type="button" aria-label="关闭提示" onClick={onClose}>×</button>
+        <span className="app-toast-progress" />
+      </div>
+    </div>
+  );
+}
+
+function AppUpdateDialog({ update, onLater, onUpdate, busy, error }) {
+  if (!update) return null;
+  return (
+    <div className="update-dialog-mask" role="presentation">
+      <section className="update-dialog" role="dialog" aria-modal="true" aria-labelledby="update-title">
+        <div className="update-dialog-mark"><Icon name="download" /></div>
+        <h2 id="update-title">发现新版本 {update.versionName}</h2>
+        {update.releaseNotes && <p>{update.releaseNotes}</p>}
+        {error && <div className="update-dialog-error">{error}</div>}
+        <div className="update-dialog-actions">
+          {!update.required && <button type="button" className="pill" disabled={busy} onClick={onLater}>下次再说</button>}
+          <button type="button" className="pill pill-primary" disabled={busy} onClick={onUpdate}>{busy ? "正在开始下载…" : "更新"}</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function RuobaiApp({ authed, setAuthed }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  // 轻语（新骨架）已经是默认外观：?ui=classic 才切回旧的并记住。
+  const [shellV2] = useState(() => {
+    try {
+      const query = new URLSearchParams(window.location.search);
+      const want = query.get("ui");
+      if (want === "v2") { localStorage.setItem("ruobai_shell", "v2"); return true; }
+      if (want === "classic") { localStorage.setItem("ruobai_shell", "classic"); return false; }
+      return localStorage.getItem("ruobai_shell") !== "classic";
+    } catch { return true; }
+  });
+  const [agents, setAgents] = useState([]);
+  const [moments, setMoments] = useState([]);
+  const [memories, setMemories] = useState({});
+  const [chatAgent, setChatAgent] = useState(null);
+  const [detailAgent, setDetailAgent] = useState(null);
+  const [editAgent, setEditAgent] = useState(undefined);
+  const [onboardRole, setOnboardRole] = useState(null);
+
+  useEffect(() => {
+    bootNativePushIfPossible();
+    // 不依赖谷歌的那条通道：以前开过就自己接回来（见 lib/push-poll.js）。
+    resumeBackgroundWatchIfEnabled();
+    const flush = () => {
+      void flushPendingMessages().catch(() => {});
+      void flushPendingMomentActions().catch(() => {});
+      void flushPendingMemoryActions().catch(() => {});
+      void flushPendingProfileActions().catch(() => {});
+      void flushPendingLifeEventActions().catch(() => {});
+    };
+    flush();
+    window.addEventListener("online", flush);
+    return () => window.removeEventListener("online", flush);
+  }, []);
+
+  /**
+   * 从「她的消息」通知点进来时，直接落到对应角色的聊天室。
+   *
+   * 两条路都要接：
+   *   · 冷启动（App 没开）—— 原生侧先把目标存起来，这里等 roles 加载完主动取一次；
+   *   · 热启动（App 在后台）—— 原生侧敲 ruobai:open-target 事件，见下面的监听。
+   * 只在角色列表到位之后才找得到人，所以取的时候要带 agents 判断。
+   */
+  useEffect(() => {
+    if (!agents.length) return;
+    let cancelled = false;
+    const openPendingTarget = () => {
+      consumePendingOpen().then((target) => {
+        if (cancelled || !target.hasTarget) return;
+        const agent = agents.find((item) => Number(item.id) === Number(target.characterId));
+        if (!agent) return;
+        setDetailAgent(null);
+        setChatAgent(agent);
+      }).catch(() => {});
+    };
+    openPendingTarget();
+    // 热启动：原生侧点通知后会敲这个事件
+    window.addEventListener("ruobai:open-target", openPendingTarget);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("ruobai:open-target", openPendingTarget);
+    };
+  }, [agents]);
+
+  // 进聊天室时往浏览器历史塞一条记录，让手机系统返回键能正确退回聊天列表，
+  // 而不是把聊天室当透明、直接退到更早的页面（甚至退出 app）。
+  useEffect(() => {
+    if (!chatAgent) return;
+    window.history.pushState({ rbChat: true }, "");
+    const onPop = (event) => {
+      // Closing the fullscreen figure returns to this chat history entry.
+      if (event.state?.rbChat) return;
+      setChatAgent(null);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [chatAgent]);
+
+  const saveAgent = (data) => {
+    if (data.id) {
+      // 根据新 avatar 路径推算 cover（全屏立绘），修复"换立绘后英雄图/聊天室没更新"的 bug
+      let extraFields = {};
+      if (data.avatar) {
+        const m = String(data.avatar).match(/\/assets\/portraits\/(?:square|round)\/(\d+)\.png/);
+        if (m) {
+          extraFields.cover = `/assets/portraits/full/${m[1]}.png`;
+        } else if (!String(data.avatar).startsWith("/assets/portraits/")) {
+          extraFields.cover = data.avatar; // 自定义上传图，cover 用同一张
+        }
+      }
+      setAgents((p) => p.map((a) => a.id === data.id ? { ...a, ...data, ...extraFields } : a));
+      setDetailAgent((d) => d?.id === data.id ? { ...d, ...data, ...extraFields } : d);
+      // 立即派发自定义事件，让已挂载的 AgentsScreen/ChatListScreen 重新拉后端数据
+      window.dispatchEvent(new CustomEvent("ruobai:role-saved"));
+      setTimeout(() => window.dispatchEvent(new Event("focus")), 100);
+    } else {
+      const id = Date.now();
+      setAgents((p) => [...p, {
+        id, name: data.name || "新角色", handle: "新相遇", persona: data.persona || "", tagline: "",
+        cover: data.avatar, avatar: data.avatar, sprite: data.avatar, tags: [], intimacy: 10,
+        temp: 28.0, days: 0, autoMoments: data.autoMoments ?? true, rel: "新朋友",
+        lastMsg: "我们才刚认识呢。", lastTime: "刚刚", unread: 0, online: true,
+      }]);
+      setMemories((m) => ({ ...m, [id]: [] }));
+    }
+    setEditAgent(undefined);
+  };
+  const deleteAgent = async (id, options = {}) => {
+    try {
+      const { deleteRole } = await import("./lib/roles.js");
+      await deleteRole(id, options);
+      setAgents((p) => p.filter((a) => a.id !== id));
+      setMemories((m) => {
+        const next = { ...m };
+        delete next[id];
+        return next;
+      });
+      setDetailAgent(null);
+      setTimeout(() => window.dispatchEvent(new Event("focus")), 100);
+    } catch (err) {
+      const id = recordDiagnostic({ area: "role", action: "delete", error: err });
+      console.error("删除角色失败", err);
+      throw new Error(withDiagnosticId("删除角色失败，请稍后重试。", id));
+    }
+  };
+  const restoreAgent = () => {
+    // 角色恢复后触发列表刷新
+    setTimeout(() => window.dispatchEvent(new Event("focus")), 100);
+  };
+  const setMainCompanion = async (id) => {
+    try {
+      const { switchRole } = await import("./lib/roles.js");
+      await switchRole(id);
+      setAgents((p) => p.map((a) => ({ ...a, isDefault: a.id === id })));
+      setDetailAgent((d) => d ? { ...d, isDefault: d.id === id } : d);
+      setTimeout(() => window.dispatchEvent(new Event("focus")), 100);
+    } catch (err) {
+      const id = recordDiagnostic({ area: "role", action: "switch-primary", error: err });
+      console.error("切换主陪伴失败", err);
+      throw new Error(withDiagnosticId("设置主陪伴失败，请稍后重试。", id));
+    }
+  };
+  const saveMomentResponseSetting = (id, enabled) => {
+    const apply = (agent) => agent?.id === id
+      ? { ...agent, momentResponseEnabled: enabled, _raw: { ...(agent._raw || {}), moment_response_enabled: enabled ? 1 : 0 } }
+      : agent;
+    setAgents((current) => current.map(apply));
+    setDetailAgent((current) => apply(current));
+    window.dispatchEvent(new CustomEvent("ruobai:role-saved"));
+  };
+
+  const likeMoment = (id) => setMoments((p) => p.map((m) => m.id === id ? { ...m, liked: !m.liked, likes: m.likes + (m.liked ? -1 : 1) } : m));
+  const postMoment = (data) => {
+    const m = { id: Date.now(), who: "你", agentId: 0, avatar: DEFAULT_USER_AVATAR, tag: "我", tagType: "lav", time: "刚刚", content: data.content, mood: data.mood, images: [], likes: 0, liked: false, comments: [] };
+    setMoments((p) => [m, ...p]);
+  };
+
+  const addMemory = (aid, d) => setMemories((m) => ({ ...m, [aid]: [{ id: Date.now(), tag: d.tag || "未命名", content: d.content, category: d.category, isImportant: d.isImportant, dateText: "刚刚" }, ...(m[aid] || [])] }));
+  const updateMemory = (aid, d) => setMemories((m) => ({ ...m, [aid]: (m[aid] || []).map((x) => x.id === d.id ? { ...x, ...d } : x) }));
+  const deleteMemory = (aid, id) => setMemories((m) => ({ ...m, [aid]: (m[aid] || []).filter((x) => x.id !== id) }));
+  const pinMemory = (aid, mem) => setMemories((m) => ({ ...m, [aid]: (m[aid] || []).map((x) => x.id === mem.id ? { ...x, isImportant: !x.isImportant } : x) }));
+
+  if (!authed) return <Navigate to="/auth" replace />;
+
+  if (chatAgent) {
+    const roomViewport = <div className="viewport"><ChatRoom agent={chatAgent} onBack={() => window.history.back()} /></div>;
+    if (!shellV2) return <div className="rb-app">{roomViewport}</div>;
+    /* 轻语桌面把聊天室也放进三栏骨架：左边导航、右边她，中间才是对话 */
+    return (
+      <div className="rb-app" data-ui="v2">
+        <ShellV2 agents={agents} path="/chat" onNavigate={(next) => navigate(next)} onChat={openChat}>
+          {roomViewport}
+        </ShellV2>
+      </div>
+    );
+  }
+
+  function openChat(agent) {
+    setDetailAgent(null);
+    setChatAgent(agent);
+  }
+
+  const viewport = (
+    <div className="viewport">
+        <Routes>
+          <Route path="/chat" element={<ChatListScreen agents={agents} onOpen={openChat} />} />
+          <Route path="/characters" element={<AgentsScreen agents={agents} onChat={openChat} onDetail={setDetailAgent} onCreate={() => setEditAgent(null)} onRestore={restoreAgent} />} />
+          <Route path="/moments" element={<MomentsScreen onLike={likeMoment} onPost={postMoment} />} />
+          <Route path="/memory" element={<MemoryScreen agents={agents} memories={memories} onAdd={addMemory} onUpdate={updateMemory} onDelete={deleteMemory} onPin={pinMemory} />} />
+          <Route path="/profile" element={<ProfileScreen onGoMemory={() => navigate("/memory")} onGoUsage={() => navigate("/usage")} onLogout={() => { setAuthed(false); navigate("/auth"); }} />} />
+          <Route path="/usage" element={<UsageHealthScreen onBack={() => navigate("/profile")} />} />
+          <Route path="*" element={<Navigate to="/chat" replace />} />
+        </Routes>
+
+        {detailAgent && (
+          <CharacterDetail agent={detailAgent} memCount={(memories[detailAgent.id] || []).length}
+            onClose={() => setDetailAgent(null)} onChat={openChat}
+            onEdit={setEditAgent} onDelete={deleteAgent} onSetMain={setMainCompanion}
+            onMomentResponseSaved={saveMomentResponseSetting}
+            onOnboard={(a) => setOnboardRole(a._raw || a)} />
+        )}
+      </div>
+  );
+
+  return (
+    <div className="rb-app" data-ui={shellV2 ? "v2" : undefined}>
+      {shellV2 ? (
+        <ShellV2
+          agents={agents}
+          path={location.pathname}
+          onNavigate={(next) => { setDetailAgent(null); navigate(next); }}
+          onChat={openChat}
+        >
+          {viewport}
+        </ShellV2>
+      ) : viewport}
+
+      <nav className="tabbar">
+        {TABS.map((t) => (
+          <button key={t.key} className={location.pathname === t.path ? "tab active" : "tab"}
+            onClick={() => { setDetailAgent(null); navigate(t.path); }}>
+            <Icon name={t.icon} />
+            <span className="lbl">{t.label}</span>
+          </button>
+        ))}
+      </nav>
+
+      {editAgent !== undefined && <AgentEditor agent={editAgent} onClose={() => setEditAgent(undefined)} onSave={saveAgent} />}
+      {onboardRole && <OnboardSheet role={onboardRole} onClose={() => setOnboardRole(null)} onDone={() => setOnboardRole(null)} />}
+    </div>
+  );
+}
+
+import { clearSessionSnapshot, getSession, readSessionSnapshot } from "./lib/auth.js";
+
+function AppBootScreen() {
+  return (
+    <div
+      className="rb-app app-boot-screen"
+      aria-busy="true"
+      aria-live="polite"
+      style={{ minHeight: "100vh", display: "grid", placeContent: "center", justifyItems: "center", gap: 14, background: "var(--paper, #f8f1ed)", color: "var(--ink, #4a3940)" }}
+    >
+      <div style={{ fontFamily: 'Georgia, "Times New Roman", serif', fontSize: 32, letterSpacing: "0.12em" }}>若白</div>
+      <div style={{ width: 52, height: 3, borderRadius: 999, background: "var(--rose, #c16579)" }} />
+      <div style={{ color: "var(--muted, #a28f95)", fontSize: 13 }}>正在把她接回来…</div>
+    </div>
+  );
+}
+
+export default function App() {
+  const navigate = useNavigate();
+  const cachedSession = readSessionSnapshot();
+  const [authed, setAuthed] = useState(Boolean(cachedSession?.loggedIn));
+  const [checking, setChecking] = useState(!cachedSession);
+  const [toast, setToast] = useState(null);
+  const [appUpdate, setAppUpdate] = useState(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const [updateError, setUpdateError] = useState("");
+  const toastTimerRef = useRef(null);
+
+  function showToast(nextToast) {
+    const id = Date.now();
+    setToast({ id, ...nextToast });
+    window.clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast((current) => current?.id === id ? null : current);
+    }, 3000);
+  }
+
+  useEffect(() => {
+    try {
+      const t = localStorage.getItem("ruobai_theme");
+      if (t) document.documentElement.dataset.theme = t;
+    } catch {}
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 4000);
+    getSession({ signal: controller.signal }).then((data) => {
+      setAuthed(Boolean(data?.loggedIn));
+    }).catch(() => {
+      // 有缓存时继续让 App 可用；没有缓存才回到登录页。
+      if (!cachedSession) setAuthed(false);
+    }).finally(() => {
+      window.clearTimeout(timeout);
+      setChecking(false);
+    });
+    checkForAndroidUpdate().then(setAppUpdate).catch(() => {});
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeout);
+      window.clearTimeout(toastTimerRef.current);
+    };
+  }, []);
+
+  if (checking) return <AppBootScreen />;
+
+  return (
+    <>
+      <Routes>
+        <Route path="/" element={isNativePushAvailable() ? <Navigate to="/chat" replace /> : <HomePage />} />
+        <Route path="/auth" element={<AuthScreen notify={showToast} onEnter={() => { setAuthed(true); navigate("/chat", { replace: true }); }} />} />
+        <Route path="/*" element={<RuobaiApp authed={authed} setAuthed={(value) => { if (!value) clearSessionSnapshot(); setAuthed(value); }} />} />
+      </Routes>
+      <AppToast toast={toast} onClose={() => setToast(null)} />
+      <AppUpdateDialog
+        update={appUpdate}
+        busy={updateBusy}
+        error={updateError}
+        onLater={() => { snoozeAndroidUpdate(); setAppUpdate(null); }}
+        onUpdate={async () => {
+          setUpdateBusy(true);
+          setUpdateError("");
+          try {
+            await downloadAndroidUpdate(appUpdate);
+            setAppUpdate(null);
+            showToast({ text: "新版本正在下载，完成后会打开系统安装页。" });
+          } catch (error) {
+            setUpdateError(error instanceof Error ? error.message : "无法开始下载");
+          } finally {
+            setUpdateBusy(false);
+          }
+        }}
+      />
+    </>
+  );
+}
