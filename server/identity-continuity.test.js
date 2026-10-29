@@ -7,6 +7,7 @@ const character = {
   name: '小白',
   tag: '恋人',
   persona: '温柔、知道自己是 AI，也会主动问我真正想表达什么。',
+  rules: '先听完再给建议。',
   speech_style: 'natural',
   avatar: '/api/media/avatar-x.png',
   portrait_id: 0,
@@ -75,6 +76,7 @@ test('identity pack preserves identity, relationship, state and memories across 
   assert.equal(packFromModelB.dynamic_life.response_enabled, true);
   assert.equal(packFromModelB.identity.id, null);
   assert.equal(packFromModelB.identity.char_key, '');
+  assert.equal(packFromModelB.identity.rules, '先听完再给建议。');
 });
 
 test('model refusal rules do not replace the honest AI identity contract', () => {

@@ -310,6 +310,7 @@ function sanitizeCharacterPayload(body = {}) {
     name: String(body.name || '').trim(),
     tag: String(body.tag || '').trim(),
     persona: String(body.persona || '').trim(),
+    rules: String(body.rules || '').trim().slice(0, 10000),
     avatar: String(body.avatar || '').trim(),
     portrait_id: portraitId,
     portrait_custom_url: portraitId === 999 ? portraitCustomUrl : null,
@@ -444,7 +445,7 @@ async function loadRoles(userId, { includeDeleted = false } = {}, connection = p
 
   const [rows] = await connection.query(
     `
-      SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, visual_mode, visual_preview_url, live2d_asset_id, live2d_model_url, live2d_manifest, visual_frame_config, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
+      SELECT id, user_id, char_key, name, tag, persona, rules, avatar, portrait_id, portrait_custom_url, visual_mode, visual_preview_url, live2d_asset_id, live2d_model_url, live2d_manifest, visual_frame_config, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
              auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution, auto_moments_daily_min, auto_moments_daily_max,
              auto_moments_image_profile, auto_moments_templates,
              auto_moments_min_interval_hours, auto_moments_last_posted_at, moment_response_enabled, core_enabled, core_packs,
@@ -478,16 +479,7 @@ router.post('/', asyncHandler(async (req, res) => {
   if (!payload.name) {
     return res.status(400).json({ success: false, error: '角色名称不能为空' });
   }
-  /**
-   * ★ 2026/10/1 引导式新建：**人设可以是空的**。
-   *
-   * 产品要求：第二个角色可以极简 —— 只填名字，人设留空也行，她之后再靠记忆和
-   * 动态一点点长成自己的样子。没有 persona 时 buildSystemPrompt 会走"没有人设"
-   * 那一支：身份诚实 + 时间 + 语音事实 + 说话方式照旧，她仍然能聊；
-   * 人设以后在编辑页随时补。
-   *
-   * ⚠️ 只放宽**新建**：下面的 PATCH 仍然不许把人设清成空（那等于把她抹白）。
-   */
+  /** 名字必填；人设和自定义规则可空，后续也可以在编辑页清空或补充。 */
 
   const created = await withTransaction(async connection => {
     const charKey = await ensureUniqueCharacterKey(connection, req.userId, payload.char_key);
@@ -500,7 +492,7 @@ router.post('/', asyncHandler(async (req, res) => {
       `
         INSERT INTO characters
           (
-            user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, visual_mode, visual_preview_url, visual_frame_config, mood, intimacy,
+            user_id, char_key, name, tag, persona, rules, avatar, portrait_id, portrait_custom_url, visual_mode, visual_preview_url, visual_frame_config, mood, intimacy,
             speech_style,
             auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution, auto_moments_daily_min, auto_moments_daily_max,
             auto_moments_image_profile, auto_moments_templates,
@@ -510,7 +502,7 @@ router.post('/', asyncHandler(async (req, res) => {
             core_packs,
             is_active, is_deleted, delete_after, created_at
           )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NOW())
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NOW())
       `,
       [
         req.userId,
@@ -518,6 +510,7 @@ router.post('/', asyncHandler(async (req, res) => {
         payload.name,
         payload.tag,
         payload.persona,
+        payload.rules,
         payload.avatar,
         payload.portrait_id,
         payload.portrait_custom_url,
@@ -546,7 +539,7 @@ router.post('/', asyncHandler(async (req, res) => {
 
     const [rows] = await connection.query(
       `
-        SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, visual_mode, visual_preview_url, live2d_asset_id, live2d_model_url, live2d_manifest, visual_frame_config, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
+        SELECT id, user_id, char_key, name, tag, persona, rules, avatar, portrait_id, portrait_custom_url, visual_mode, visual_preview_url, live2d_asset_id, live2d_model_url, live2d_manifest, visual_frame_config, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
                auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution, auto_moments_daily_min, auto_moments_daily_max,
                auto_moments_image_profile, auto_moments_templates,
                auto_moments_min_interval_hours, auto_moments_last_posted_at, moment_response_enabled, core_enabled, core_packs,
@@ -576,9 +569,6 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   }
   if (req.body?.name !== undefined && !payload.name) {
     return res.status(400).json({ success: false, error: '角色名称不能为空' });
-  }
-  if (req.body?.persona !== undefined && !payload.persona) {
-    return res.status(400).json({ success: false, error: '角色人设不能为空' });
   }
 
   const deleteAfterProvided = Object.prototype.hasOwnProperty.call(req.body || {}, 'delete_after');
@@ -672,6 +662,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
           name = COALESCE(?, name),
           tag = COALESCE(?, tag),
           persona = COALESCE(?, persona),
+          rules = COALESCE(?, rules),
           avatar = COALESCE(?, avatar),
           portrait_id = CASE WHEN ? = 1 THEN ? ELSE portrait_id END,
           portrait_custom_url = CASE WHEN ? = 1 THEN ? ELSE portrait_custom_url END,
@@ -703,6 +694,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
         req.body?.name !== undefined ? payload.name : null,
         req.body?.tag !== undefined ? payload.tag : null,
         req.body?.persona !== undefined ? payload.persona : null,
+        req.body?.rules !== undefined ? payload.rules : null,
         req.body?.avatar !== undefined ? payload.avatar : null,
         (req.body?.portrait_id !== undefined || req.body?.portraitId !== undefined) ? 1 : 0,
         payload.portrait_id,
@@ -768,7 +760,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
 
     const [updatedRows] = await connection.query(
       `
-        SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, visual_mode, visual_preview_url, live2d_asset_id, live2d_model_url, live2d_manifest, visual_frame_config, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
+        SELECT id, user_id, char_key, name, tag, persona, rules, avatar, portrait_id, portrait_custom_url, visual_mode, visual_preview_url, live2d_asset_id, live2d_model_url, live2d_manifest, visual_frame_config, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
                auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution, auto_moments_daily_min, auto_moments_daily_max,
                auto_moments_image_profile, auto_moments_templates,
                auto_moments_min_interval_hours, auto_moments_last_posted_at, moment_response_enabled, core_enabled, core_packs,
@@ -792,7 +784,7 @@ router.get('/:id/identity-pack', asyncHandler(async (req, res) => {
 
   const [characterRows] = await pool.query(
     `
-      SELECT id, user_id, name, tag, persona, avatar, speech_style, portrait_id, portrait_custom_url, visual_mode, visual_preview_url, live2d_model_url, live2d_manifest, visual_frame_config,
+      SELECT id, user_id, name, tag, persona, rules, avatar, speech_style, portrait_id, portrait_custom_url, visual_mode, visual_preview_url, live2d_model_url, live2d_manifest, visual_frame_config,
              mood, intimacy, auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution,
              auto_moments_image_profile, auto_moments_templates,
              auto_moments_daily_min, auto_moments_daily_max, auto_moments_min_interval_hours, moment_response_enabled, core_enabled, core_packs
@@ -1087,7 +1079,7 @@ router.post('/:id/restore', asyncHandler(async (req, res) => {
 
     const [updatedRows] = await connection.query(
       `
-        SELECT id, user_id, char_key, name, tag, persona, avatar, portrait_id, portrait_custom_url, visual_mode, visual_preview_url, live2d_asset_id, live2d_model_url, live2d_manifest, visual_frame_config, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
+        SELECT id, user_id, char_key, name, tag, persona, rules, avatar, portrait_id, portrait_custom_url, visual_mode, visual_preview_url, live2d_asset_id, live2d_model_url, live2d_manifest, visual_frame_config, mood, intimacy, speech_style, chat_credential_id, chat_model_id, chat_thinking_level, first_chat_at,
                auto_moments_enabled, auto_moments_images_enabled, auto_moments_image_resolution, auto_moments_daily_min, auto_moments_daily_max,
                auto_moments_min_interval_hours, auto_moments_last_posted_at, moment_response_enabled, core_enabled, core_packs,
                is_active, is_deleted, delete_after, created_at

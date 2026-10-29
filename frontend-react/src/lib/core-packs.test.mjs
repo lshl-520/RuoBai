@@ -95,6 +95,13 @@ test('★ buildRolePayload：新建角色只要求名字（人设可以留空）
   assert.equal(ok.error, undefined);
   assert.equal(ok.name, '小满');
   assert.equal(ok.persona, '');
+  assert.equal(ok.rules, '');
+});
+
+test('buildRolePayload trims optional persona and rules independently', () => {
+  const p = buildRolePayload({ name: '小满', persona: '  温柔  ', rules: '  先听她说完  ' });
+  assert.equal(p.persona, '温柔');
+  assert.equal(p.rules, '先听她说完');
 });
 
 test('★ buildRolePayload：没名字要报错', () => {
@@ -125,6 +132,7 @@ test('★ buildRoleUpdatePayload：改角色同样带上 core_packs', () => {
   assert.equal(p.core_enabled, true);
   assert.equal(p.intimacy, 70, '不该覆盖已有的亲密度');
   assert.equal(p.mood, 60);
+  assert.equal(p.rules, '');
 });
 
 test('★ core_packs 必须是对象而不是数组 —— 后端明确拒绝数组', () => {

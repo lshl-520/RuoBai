@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import { requireAuth } from './middleware.js';
-import { buildAnthropicMessagesUrl, buildResponsesUrl, buildSystemPrompt, createChatRouter, dropJustSavedCurrentTurn, buildGapHint, isXiaobaiCharacter, sanitizeHistoricalVoiceContent, VOICE_PLACEHOLDER_NO_TRANSCRIPT, looksLikeUpstreamRefusal, gateDecision, resolveCorePacks } from './chat.js';
+import { buildAnthropicMessagesUrl, buildResponsesUrl, buildSystemPrompt, createChatRouter, dropJustSavedCurrentTurn, buildGapHint, isXiaobaiCharacter, sanitizeHistoricalVoiceContent, VOICE_PLACEHOLDER_NO_TRANSCRIPT, looksLikeUpstreamRefusal, gateDecision, resolveCorePacks, shouldBuildCorePlan, coreStickersAllowed } from './chat.js';
 
 function createApp({ router, sessionUser = { userId: 1, username: 'user-1', role: 'user' } }) {
   const app = express();
@@ -1874,6 +1874,13 @@ test('★ 语音去毒：带 persona 的角色也吃同一条规则', () => {
   const prompt = buildSystemPrompt({ name: '小林', persona: '你很安静。', speech_style: 'natural' });
   assert.match(prompt, /关于他发的语音/, '新建角色同样不能被旧占位话带偏');
 });
+
+test('buildSystemPrompt appends optional custom role rules and ignores blanks', () => {
+  const prompt = buildSystemPrompt({ name: '小林', persona: '', rules: '先回答问题，再补充背景。' });
+  assert.match(prompt, /【补充规则】\n先回答问题，再补充背景。/);
+  const blank = buildSystemPrompt({ name: '小林', persona: '', rules: '   ' });
+  assert.doesNotMatch(blank, /【补充规则】/);
+});
 /* ══════════════════════════════════════════════════════════════════
  * 「他隔了多久才回来」（2026/9/16 新增）
  *
@@ -1984,6 +1991,28 @@ test('★ resolveCorePacks：null / undefined / 非对象一律安全返回全�
     assert.doesNotThrow(() => resolveCorePacks(bad));
     assert.deepEqual(resolveCorePacks(bad), { shield: false, companion: false, nickname: false, xiaobai_state: false, local_time: false });
   }
+});
+
+
+test('★ 只勾护身符也要真的算 Core 计划（2026/10/30 修的 bug）', () => {
+  // 以前主链只在 xiaobai_state || nickname 时调 planReply()，于是「只勾护身符」
+  // 的角色虽然 pack 层测试是绿的，实际一条规则也拿不到。
+  assert.equal(shouldBuildCorePlan({ shield: true }), true);
+  assert.equal(shouldBuildCorePlan({ nickname: true }), true);
+  assert.equal(shouldBuildCorePlan({ xiaobai_state: true }), true);
+  assert.equal(shouldBuildCorePlan({ companion: true }), false);
+  assert.equal(shouldBuildCorePlan({ local_time: true }), false);
+  assert.equal(shouldBuildCorePlan({}), false);
+  assert.equal(shouldBuildCorePlan(null), false);
+  // 从角色记录一路推过去：只勾护身符的新角色，必须触发计划
+  assert.equal(shouldBuildCorePlan(resolveCorePacks({ core_packs: { shield: true } })), true);
+});
+
+test('★ 贴纸口径不变：只勾护身符不发表情', () => {
+  assert.equal(coreStickersAllowed({ shield: true }), false);
+  assert.equal(coreStickersAllowed({ nickname: true }), true);
+  assert.equal(coreStickersAllowed({ xiaobai_state: true }), true);
+  assert.equal(coreStickersAllowed({}), false);
 });
 
 test('★ resolveCorePacks：返回值 5 个键永远都在，且都是布尔', () => {

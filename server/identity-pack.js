@@ -1,6 +1,6 @@
 import { isConfirmedMemory } from './memory-review.js';
 
-const IDENTITY_PACK_VERSION = '1.1.0';
+const IDENTITY_PACK_VERSION = '1.2.0';
 
 function parseJson(value, fallback = {}) {
   if (!value) return fallback;
@@ -25,6 +25,7 @@ export function buildIdentityPack({ character = {}, runtime = {}, memories = [] 
       char_key: String(character.char_key || '').trim(),
       name: String(character.name || '').trim(),
       persona: String(character.persona || '').trim(),
+      rules: String(character.rules || '').trim(),
       tag: String(character.tag || '').trim(),
       speech_style: String(character.speech_style || 'natural'),
       portrait: {

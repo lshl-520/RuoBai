@@ -37,20 +37,28 @@ RuoBai 是一个私人 AI 伴侣项目，重点不是做一个万能聊天框，
 
 ## 第一次部署
 
-最省事的方式是 Docker 一条命令部署。先在服务器装好 Docker，然后把域名换成你自己的：
+最省事的方式是 Docker 部署。先在服务器装好 Docker，然后：
 
 ```bash
-DOMAIN=ruobai.example.com bash -c "$(curl -fsSL https://raw.githubusercontent.com/lshl-520/RuoBai/main/scripts/install-docker.sh)"
+git clone https://github.com/lshl-520/RuoBai.git
+cd RuoBai
+DOMAIN=你的域名 bash scripts/install-docker.sh
 ```
 
-脚本会自动拉代码、生成配置、启动数据库和网站容器，并打印后台地址和默认管理员账号。
+脚本会把项目再拉到 `/www/wwwroot/ruobai` 并在那里构建（`INSTALL_DIR=` 可改；需要 root）。
+
+脚本会自动拉代码、生成配置、启动数据库和网站容器，并打印后台地址和管理员初始密码（安装时随机生成，只显示一次，也写在 `deploy/.env` 里）。
 默认后台入口是 `https://你的域名/admin`，会自动进入真正的后台页面。
-Docker 模式以后更新代码，也重新运行这条命令。
+Docker 模式以后更新代码，也重新运行同一条命令。
+
+> **国内网络注意**：`raw.githubusercontent.com` 经常打不开，所以这里不用“curl 一条命令”的写法；
+> Docker Hub 直连也可能拉不动镜像，先在宝塔 / 1Panel / 阿里云给 Docker 配好镜像加速器。
+> 详见 [docs/部署指南.md](./docs/部署指南.md) 的「国内网络常见问题」。
 
 如果同一台服务器要测试第二套安装，先换安装目录、端口和容器项目名，避免碰到正在用的站点：
 
 ```bash
-COMPOSE_PROJECT_NAME=ruobai_test INSTALL_DIR=/www/wwwroot/ruobai-test APP_PORT=3001 DOMAIN=test.example.com bash -c "$(curl -fsSL https://raw.githubusercontent.com/lshl-520/RuoBai/main/scripts/install-docker.sh)"
+COMPOSE_PROJECT_NAME=ruobai_test INSTALL_DIR=/www/wwwroot/ruobai-test APP_PORT=3001 DOMAIN=test.example.com bash scripts/install-docker.sh
 ```
 
 如果不用 Docker，也可以按下面的手动流程部署。
@@ -81,6 +89,9 @@ PORT=3000
 CORS_ORIGINS=https://你的域名,https://www.你的域名
 BETA_REGISTRATION_ENABLED=true
 OPEN_SOURCE_SINGLE_USER=false
+# 可选：首次初始化时创建的管理员（不填会随机生成，并在日志里只显示一次）
+ADMIN_INITIAL_USERNAME=admin
+ADMIN_INITIAL_PASSWORD=
 ```
 
 初始化数据库：

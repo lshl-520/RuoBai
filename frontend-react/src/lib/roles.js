@@ -314,17 +314,12 @@ export function buildRolePayload(values = {}) {
   const name = String(values.name ?? "").trim();
   const tag = String(values.tag ?? "").trim();
   const persona = String(values.persona ?? "").trim();
+  const rules = String(values.rules ?? "").trim();
   const portraitId =
     values.portraitId === null || values.portraitId === undefined || values.portraitId === ""
       ? null
       : Number(values.portraitId);
-  /**
-   * ★ 2026/10/6：新建角色**只有名字是必填**。
-   *
-   * 部署方要求：把规则全部列出来、勾选才加载；不勾选就只用用户填的人设。
-   * 想要的流程是「先建一个，再慢慢养」—— 逼着先写一段人设，等于把最早的一步变成负担。
-   * 所以人设可以是空的；空人设的角色就吃通用说话风格 + 他勾的规则包。
-   */
+  /** 名字必填；人设和自定义规则可空，留空时保留应用基础提示。 */
   if (!name) {
     return { error: "先给她起个名字吧。" };
   }
@@ -335,6 +330,7 @@ export function buildRolePayload(values = {}) {
     name,
     tag,
     persona,
+    rules,
     avatar: String(values.avatar ?? "").trim(),
     portrait_id: Number.isFinite(portraitId) ? portraitId : null,
     portrait_custom_url:
@@ -362,6 +358,7 @@ export function buildRoleUpdatePayload(values = {}, currentRole = {}) {
   const name = String(values.name ?? "").trim();
   const tag = String(values.tag ?? "").trim();
   const persona = String(values.persona ?? "").trim();
+  const rules = String(values.rules ?? "").trim();
   const portraitId =
     values.portraitId === null || values.portraitId === undefined || values.portraitId === ""
       ? null
@@ -377,6 +374,7 @@ export function buildRoleUpdatePayload(values = {}, currentRole = {}) {
     name,
     tag,
     persona,
+    rules,
     avatar: String(values.avatar ?? "").trim(),
     portrait_id: Number.isFinite(portraitId) ? portraitId : null,
     portrait_custom_url:

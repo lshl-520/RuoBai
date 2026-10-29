@@ -1,10 +1,24 @@
+import { randomBytes } from 'node:crypto';
 import { ensureDatabaseExists, pool } from './db.js';
 import bcrypt from 'bcryptjs';
 import { DEFAULT_CHARACTERS, DEFAULT_MODEL_CONFIG } from './defaults.js';
 import { runCredentialMigration } from './migrate-credentials-2026.js';
 
-const DEFAULT_ADMIN_USERNAME = 'admin';
-const DEFAULT_ADMIN_PASSWORD = '123456';
+/**
+ * ★ 2026/10/30：管理员初始密码不再写死 123456。
+ *
+ * 原因：仓库是公开的，写死的初始密码等于把后台公开；旧版安装脚本还会把它打印出来。
+ * 现在的口径：
+ *   ① 环境变量 ADMIN_INITIAL_PASSWORD 有值 → 用它（Docker 安装脚本会自动生成并写进 deploy/.env）；
+ *   ② 没有 → 随机生成一个，并在初始化日志里只显示这一次。
+ * 只在「库里还没有管理员」时才会创建，已有管理员的环境不受影响。
+ */
+const DEFAULT_ADMIN_USERNAME = String(process.env.ADMIN_INITIAL_USERNAME || '').trim() || 'admin';
+const ADMIN_INITIAL_PASSWORD = String(process.env.ADMIN_INITIAL_PASSWORD || '').trim();
+
+function generateInitialPassword() {
+  return randomBytes(12).toString('base64url');
+}
 
 const statements = [
   `
@@ -29,6 +43,7 @@ const statements = [
       name VARCHAR(100) NOT NULL,
       tag VARCHAR(50) DEFAULT '恋人',
       persona TEXT,
+      rules TEXT,
       avatar VARCHAR(500) DEFAULT '',
       portrait_id INT DEFAULT NULL,
       portrait_custom_url VARCHAR(255) DEFAULT NULL,
@@ -649,7 +664,8 @@ async function init() {
     );
 
     if (adminRows.length === 0) {
-      const hash = await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, 12);
+      const initialPassword = ADMIN_INITIAL_PASSWORD || generateInitialPassword();
+      const hash = await bcrypt.hash(initialPassword, 12);
       const [result] = await pool.query(
         `INSERT INTO users (username, password_hash, role, is_enabled, daily_chat_used, created_at)
          VALUES (?, ?, 'owner', 1, 0, NOW())`,
@@ -685,8 +701,8 @@ async function init() {
 
       console.log(`\n  默认管理员账号已创建：`);
       console.log(`  用户名：${DEFAULT_ADMIN_USERNAME}`);
-      console.log(`  密码：${DEFAULT_ADMIN_PASSWORD}`);
-      console.log(`  ⚠️  请尽快登录后台更改账号密码\n`);
+      console.log(`  密码：${initialPassword}`);
+      console.log(`  ⚠️  这个密码只显示这一次，请立刻记下；登录后台后马上改成你自己的密码。\n`);
     }
 
     await runCredentialMigration({

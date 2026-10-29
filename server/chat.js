@@ -736,6 +736,28 @@ export function resolveCorePacks(character) {
 }
 
 /**
+ * ═══ 规则包 → 要不要算 Core 计划 / 能不能发贴纸（2026/10/30 修）═══
+ *
+ * 真实 bug：shield（护身符）虽然是独立包，但主链里原来只在
+ * xiaobai_state || nickname 时才调 planReply() —— 于是「只勾护身符」的角色
+ * 一条规则也拿不到，跟 xiaobai-core.js 里写的「哪怕一个别的包都不勾，
+ * 只勾这一条，也照样生效」正好相反。
+ *
+ * 贴纸是另一件事：给前端发哪组表情本来只属于开了 xiaobai_state / nickname
+ * 的角色。所以这里把「算不算计划」和「发不发贴纸」分开，只修前者，
+ * 避免只勾护身符的新角色突然开始发表情。
+ */
+export function shouldBuildCorePlan(corePacks) {
+  const packs = corePacks || {};
+  return Boolean(packs.shield || packs.nickname || packs.xiaobai_state);
+}
+
+export function coreStickersAllowed(corePacks) {
+  const packs = corePacks || {};
+  return Boolean(packs.nickname || packs.xiaobai_state);
+}
+
+/**
  * ═══ 谁才算「小白本人」（2026/9/17 新增）═══
  *
  * 背景：小白 Core（称呼、亲密场景、惦记的事、状态机）原本对**所有角色**
@@ -942,10 +964,11 @@ export function buildSystemPrompt(character, options = {}) {
   const includeLocalTime = options?.includeLocalTime !== false;
   const timeBlock = includeLocalTime ? `${timeInfo}\n\n` : '';
 
-  if (persona) {
-    return `${identityGuard}\n\n${timeBlock}${persona}\n\n${voiceInputRules}${relationshipBlock}\n\n${pacingRules}\n\n${styleRules}`;
-  }
-  return `${identityGuard}\n\n${timeBlock}${voiceInputRules}${relationshipBlock}\n\n${pacingRules}\n\n${styleRules}`;
+  const basePrompt = persona
+    ? `${identityGuard}\n\n${timeBlock}${persona}\n\n${voiceInputRules}${relationshipBlock}\n\n${pacingRules}\n\n${styleRules}`
+    : `${identityGuard}\n\n${timeBlock}${voiceInputRules}${relationshipBlock}\n\n${pacingRules}\n\n${styleRules}`;
+  const rules = String(character?.rules || '').trim().slice(0, 10000);
+  return rules ? `${basePrompt}\n\n【补充规则】\n${rules}` : basePrompt;
 }
 
 export function buildMemoryPromptBlock(memories = []) {
@@ -2297,7 +2320,7 @@ export function createChatRouter({
        *   的时候才调用 `planReply()`（省一次无用计算），然后用各自的口径裁剪。
        */
       const corePacks = resolveCorePacks(character);
-      const usesXiaobaiCore = corePacks.xiaobai_state || corePacks.nickname;
+      const usesXiaobaiCore = shouldBuildCorePlan(corePacks);
       const corePlan = usesXiaobaiCore
         ? planReply({
             content,
@@ -2863,7 +2886,7 @@ export function createChatRouter({
            *   用户还反馈过"消息和表情包看着像一起发来的"，人的习惯是**分两条、有先后**。
            *   所以落库和显示都交给前端，在她说完之后延迟一下再做（见 chat.jsx 的 onSticker）。
            */
-          if (corePlan?.stickerGroup && streamedContent.trim()) {
+          if (coreStickersAllowed(corePacks) && corePlan?.stickerGroup && streamedContent.trim()) {
             try {
               const stickerUrl = pickStickerUrl(corePlan.stickerGroup);
               if (stickerUrl) {

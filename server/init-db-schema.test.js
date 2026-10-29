@@ -3,6 +3,30 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 
 const initDbSource = await fs.readFile(new URL('./init-db.js', import.meta.url), 'utf8');
+const serverSource = await fs.readFile(new URL('./server.js', import.meta.url), 'utf8');
+const composeSource = await fs.readFile(new URL('../deploy/docker-compose.yml', import.meta.url), 'utf8');
+const installScriptSource = await fs.readFile(new URL('../scripts/install-docker.sh', import.meta.url), 'utf8');
+const readmeSource = await fs.readFile(new URL('../README.md', import.meta.url), 'utf8');
+
+test('★ 管理员初始密码不再写死（公开仓库安全底线）', () => {
+  // 2026/10/30：旧版写死 admin/123456，仓库公开后等于后台没锁。
+  assert.doesNotMatch(initDbSource, /DEFAULT_ADMIN_PASSWORD/);
+  assert.doesNotMatch(initDbSource, /'123456'/);
+  assert.match(initDbSource, /ADMIN_INITIAL_PASSWORD/);
+  assert.match(initDbSource, /randomBytes/);
+  assert.doesNotMatch(serverSource, /123456/, '启动横幅不许再打印写死的初始密码');
+});
+
+test('★ Docker 部署把管理员初始密码从安装脚本传进容器', () => {
+  assert.match(composeSource, /ADMIN_INITIAL_PASSWORD/);
+  assert.match(installScriptSource, /ADMIN_INITIAL_PASSWORD=/);
+  assert.doesNotMatch(installScriptSource, /DEFAULT_ADMIN_PASSWORD/);
+  assert.doesNotMatch(installScriptSource, /123456/);
+});
+
+test('★ 部署文档的首选命令是 git clone + 本地脚本（raw 在国内打不开）', () => {
+  assert.match(readmeSource, /bash scripts\/install-docker\.sh/);
+});
 
 test('init-db schema avoids MySQL TEXT columns with DEFAULT values', () => {
   assert.doesNotMatch(initDbSource, /\bTEXT\s+DEFAULT\b/i);

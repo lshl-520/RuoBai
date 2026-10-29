@@ -1,5 +1,10 @@
 const CHARACTER_RUNTIME_COLUMNS = [
   {
+    name: 'rules',
+    definition: 'TEXT',
+    after: 'persona'
+  },
+  {
     name: 'portrait_id',
     definition: 'INT DEFAULT NULL',
     after: 'avatar'

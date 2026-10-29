@@ -33,6 +33,7 @@ function toAgent(role) {
     tag: role.tag || "",
     tagline: role.persona ? role.persona.slice(0, 30) + "…" : "",
     persona: role.persona || "",
+    rules: role.rules || "",
     tags: role.tag ? [role.tag] : [],
     online: Boolean(role.is_active),
     isDefault: Boolean(role.is_active),
@@ -578,6 +579,7 @@ function AgentEditor({ agent, onClose, onSave }) {
   const editing = !!agent;
   const [name, setName] = useStateA(agent?.name || "");
   const [persona, setPersona] = useStateA(agent?.persona || "");
+  const [rules, setRules] = useStateA(agent?.rules || "");
   const [tagline, setTagline] = useStateA(agent?.tagline || "");
   const [portrait, setPortrait] = useStateA(agent?.avatar || PORTRAIT_OPTIONS[0]);
   const [uploads, setUploads] = useStateA([]); // 用户上传的自定义头像(dataURL)
@@ -758,9 +760,7 @@ function AgentEditor({ agent, onClose, onSave }) {
         </div>
 
         <div className="sheet-body">
-          {/* ★ 2026/10/1 引导式新建（用户要求）：新建时只留"她是谁 + 怎么陪你说话 +
-              她的核心"，一眼看懂。立绘、形象模式、Live2D 和立绘范围保存后在「编辑」里
-              随时能改；把几十个控件堆在新建第一步，正是最容易让人看不懂的地方。 */}
+          {/* 新建只显示名字、人设和规则；外观、动态及兼容旧角色的预设规则留在编辑页。 */}
           {editing && <>
           <label className="field-label">形象 / 立绘</label>
           <div className="portrait-row">
@@ -846,22 +846,28 @@ function AgentEditor({ agent, onClose, onSave }) {
           </div>
           </>}
 
-          {!editing && <div className="route-note" style={{ marginBottom: 2 }}>先给她一个名字和一句话人设就够了。立绘、形象和动态这些，保存后在「编辑」里随时能改。</div>}
 
-          <label className="field-label">名字</label>
+          <label className="field-label">名字 <span className="lbl-hint">必填</span></label>
           <input className="fld" value={name} onChange={(e) => setName(e.target.value)} placeholder="她叫什么" />
 
+           {editing && <>
           <label className="field-label">一句话签名</label>
           <input className="fld" value={tagline} onChange={(e) => setTagline(e.target.value)} placeholder="她最想对你说的一句" />
+           </>}
 
-          <label className="field-label">人设 · 她是什么样的人</label>
-          <textarea className="fld area" value={persona} onChange={(e) => setPersona(e.target.value)} placeholder="写她的性格、怎么陪你说话、在意什么。写得越细,她越像她。从零开始也没关系——把别处的人设复制进来就行。" />
+          <label className="field-label">人设 <span className="lbl-hint">选填</span></label>
+          <textarea className="fld area" value={persona} onChange={(e) => setPersona(e.target.value)} placeholder="写她的性格、经历和偏好；不填也可以。" />
 
+           <label className="field-label">规则 <span className="lbl-hint">选填</span></label>
+           <textarea className="fld area" value={rules} onChange={(e) => setRules(e.target.value)} maxLength={10000} placeholder="补充希望她遵守的规则" />
+
+           {editing && <>
           <label className="field-label">性格标签 <span className="lbl-hint">空格分隔</span></label>
           <input className="fld" value={tagsStr} onChange={(e) => setTagsStr(e.target.value)} placeholder="温柔 清醒 深夜在线" />
           <div className="chip-preview">
             {tagsStr.split(/\s+/).filter(Boolean).map((t, i) => <span key={i} className="micro-tag">{t}</span>)}
           </div>
+           </>}
 
           {editing && <>
           <div className="switch-row">
@@ -927,6 +933,7 @@ function AgentEditor({ agent, onClose, onSave }) {
             {momentTest?.message && !momentTest.loading && <div className="route-note" style={{ marginTop: 8 }}>{momentTest.message}</div>}
           </>}
 
+           {editing && <>
           <div className="field-label" style={{ marginTop: 16 }}>怎么陪你说话</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
             {[
@@ -948,6 +955,7 @@ function AgentEditor({ agent, onClose, onSave }) {
               ? "允许用（动作）写肢体语言，每次回复不长，她始终是角色本人。"
               : "一条一个意思，像连发微信：你随便聊一句她就能短短回；她想多说就自然多几条。"}
           </div>
+           </>}
 
           {/**
             * ═══ 「她的核心」拆成可单独勾选的规则包（2026/10/6）═══
@@ -961,6 +969,7 @@ function AgentEditor({ agent, onClose, onSave }) {
             * 交互保持极简：一行一个包，点哪行勾哪行，勾了马上生效（保存后）。
             * 每个包下面一句话说清"打开会怎样"，不写实现细节。
             */}
+           {editing && <>
           <div className="field-label" style={{ marginTop: 18 }}>她的核心</div>
           <div className="route-note" style={{ marginBottom: 10 }}>
             这些是"她怎么对待你"的规则。勾上就加载，不勾就只有你自己写的人设。全都不勾，她就是一个干净的新人。
@@ -1013,18 +1022,17 @@ function AgentEditor({ agent, onClose, onSave }) {
               onClick={() => setCorePacks(noCorePacks())}
             >
               全取消
-            </button>
-          </div>
-        </div>
+             </button>
+           </div>
+           </>}
+         </div>
 
         <div className="sheet-foot">
           {error && <div className="chat-error" style={{marginBottom:10}} onClick={() => setError("")}>{error} 点击关闭</div>}
           <button className="pill pill-primary grow" disabled={busy} onClick={async () => {
-            // ★ 2026/10/1 引导式新建：只要求名字 —— 人设可以是空的，
-            //   她先以一个干净的新人存在，之后靠记忆 / 动态慢慢长出来。
-            //   编辑时仍不许把人设清空（那等于把她抹白），交给后端兜底。
+            // 名字必填；人设与自定义规则在新建和编辑时都可留空。
             if (!name.trim()) { setError("先给她一个名字"); return; }
-            if (editing && !persona.trim()) { setError("人设不能留空，可以改但别清掉"); return; }
+
             setBusy(true); setError("");
             try {
               // 从立绘路径提取 portrait_id，让后端知道选的是哪个预设立绘
@@ -1041,6 +1049,7 @@ function AgentEditor({ agent, onClose, onSave }) {
               const payload = {
                 name: name.trim(),
                 persona: persona.trim(),
+                 rules: rules.trim(),
                 tag: tagsStr.split(/\s+/).filter(Boolean)[0] || "",
                 avatar: isLive2D ? (String(agent?._raw?.avatar || "").trim() || portrait) : portrait,
                 portrait_id: portraitId,
@@ -1067,7 +1076,7 @@ function AgentEditor({ agent, onClose, onSave }) {
               } else {
                 await createRole(payload);
               }
-              onSave({ id: agent?.id, name, persona, tagline, avatar: isLive2D ? (live2dPreviewUrl || portrait) : portrait, tags: tagsStr.split(/\s+/).filter(Boolean), autoMoments: auto, autoMomentsImages: auto && autoImages, visualMode, visualPreviewUrl: live2dPreviewUrl, live2dModelUrl: agent?.live2dModelUrl || "", live2dManifest: live2dAsset, visualFrame, auto_moments_image_resolution: auto && autoImages ? imageResolution : "channel", auto_moments_image_profile: auto ? imageProfile : null, auto_moments_templates: auto ? momentTemplates : null,
+              onSave({ id: agent?.id, name, persona, rules, tagline, avatar: isLive2D ? (live2dPreviewUrl || portrait) : portrait, tags: tagsStr.split(/\s+/).filter(Boolean), autoMoments: auto, autoMomentsImages: auto && autoImages, visualMode, visualPreviewUrl: live2dPreviewUrl, live2dModelUrl: agent?.live2dModelUrl || "", live2dManifest: live2dAsset, visualFrame, auto_moments_image_resolution: auto && autoImages ? imageResolution : "channel", auto_moments_image_profile: auto ? imageProfile : null, auto_moments_templates: auto ? momentTemplates : null,
                 // ★ 2026/10/1：把「她的核心」和说话方式一起带回列表状态，免得再打开编辑时看到旧值
                 // ★ 2026/10/6：核心已拆成规则包；这里把新的 5 个勾选一起带回去
                 corePacks,
@@ -1076,7 +1085,8 @@ function AgentEditor({ agent, onClose, onSave }) {
                   ...(agent?._raw || {}),
                   core_packs: corePacks,
                   core_enabled: CORE_PACKS.some((pack) => corePacks[pack.id]) ? 1 : 0,
-                  speech_style: speakStyle === "roleplay" ? "roleplay" : "natural"
+                  speech_style: speakStyle === "roleplay" ? "roleplay" : "natural",
+                  rules: rules.trim(),
                 } });
             } catch (err) {
               setError(err instanceof Error ? err.message : "保存失败");

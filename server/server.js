@@ -290,9 +290,9 @@ async function start() {
         console.log(`  React 开发：http://127.0.0.1:4175/`);
         console.log(`  管理后台：http://localhost:${port}/admin.html`);
         console.log(`  ─────────────────────────────────`);
-        console.log(`  默认管理员账号：admin`);
-        console.log(`  默认管理员密码：123456`);
-        console.log(`  ⚠️  请尽快登录后台更改账号密码`);
+        console.log(`  管理员账号：${process.env.ADMIN_INITIAL_USERNAME || 'admin'}`);
+        console.log(`  初始密码：只在首次初始化时显示一次（Docker 部署见 deploy/.env 的 ADMIN_INITIAL_PASSWORD）`);
+        console.log(`  ⚠️  登录后台后请尽快改成你自己的密码`);
         console.log(`  ─────────────────────────────────\n`);
         startDailyBackupScheduler(updateService);
         startProactiveScheduler({ pool, sendPush: fcmSender });

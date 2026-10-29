@@ -10,8 +10,7 @@ APP_PORT="${APP_PORT:-3000}"
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-ruobai}"
 ENABLE_VECTOR="${ENABLE_VECTOR:-0}"
 
-DEFAULT_ADMIN_USERNAME="admin"
-DEFAULT_ADMIN_PASSWORD="123456"
+ADMIN_USERNAME="${ADMIN_INITIAL_USERNAME:-admin}"
 SPONSOR_GATEWAY_DOMAIN="maolaoapi.com"
 
 log() {
@@ -85,6 +84,8 @@ else
   log "生成 Docker 部署配置"
   MYSQL_ROOT_PASSWORD="$(gen_secret)"
   SESSION_SECRET="$(gen_secret)"
+  # 管理员初始密码：随机生成，写进 deploy/.env，并在这里显示一次。
+  ADMIN_INITIAL_PASSWORD="$(gen_secret | cut -c1-16)"
   CORS_ORIGINS="$(make_cors_origins)"
 
   cat > "$ENV_FILE" <<EOF
@@ -95,6 +96,8 @@ APP_PORT=$APP_PORT
 MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASSWORD
 DB_NAME=ruobai
 SESSION_SECRET=$SESSION_SECRET
+ADMIN_INITIAL_USERNAME=$ADMIN_USERNAME
+ADMIN_INITIAL_PASSWORD=$ADMIN_INITIAL_PASSWORD
 CORS_ORIGINS=$CORS_ORIGINS
 BETA_REGISTRATION_ENABLED=true
 OPEN_SOURCE_SINGLE_USER=false
@@ -103,6 +106,12 @@ VECTOR_EMBEDDING_URL=http://embedding:80
 VECTOR_EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
 VECTOR_COLLECTION=ruobai_memories
 EOF
+fi
+
+# 显示用的初始密码：从 deploy/.env 里读（旧版本生成的 .env 没有这一项，给个兜底提示）
+ADMIN_PASSWORD_DISPLAY="$(grep -E '^ADMIN_INITIAL_PASSWORD=' "$ENV_FILE" 2>/dev/null | head -n1 | cut -d= -f2- || true)"
+if [ -z "$ADMIN_PASSWORD_DISPLAY" ]; then
+  ADMIN_PASSWORD_DISPLAY="见首次初始化日志，或 deploy/.env 的 ADMIN_INITIAL_PASSWORD"
 fi
 
 log "启动 Docker 服务"
@@ -138,13 +147,15 @@ cat <<EOF
   $SITE_URL/admin
   （会自动进入 $SITE_URL/admin.html；未登录时打开后台登录）
 
-默认管理员：
-  用户名：$DEFAULT_ADMIN_USERNAME
-  密码：$DEFAULT_ADMIN_PASSWORD
+管理员账号：
+  用户名：$ADMIN_USERNAME
+  初始密码：$ADMIN_PASSWORD_DISPLAY
+  （安装时随机生成，只在这里和首次初始化日志里出现一次；
+    也保存在 deploy/.env 的 ADMIN_INITIAL_PASSWORD。你改过密码后以你改的为准。）
 
 第一次登录后必须马上做：
   1. 进入后台 → 系统/管理员账号
-  2. 把默认密码改掉
+  2. 把初始密码改掉
   3. 再去前台“我的 → 接口渠道”填写自己的模型接口
 
 接口填写示例：

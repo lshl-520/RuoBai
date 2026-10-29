@@ -143,7 +143,7 @@ test('GET /api/roles/:id/identity-pack exports role identity without credentials
   const router = createRolesRouter({
     pool: {
       query: async (sql, params) => {
-        if (sql.includes('SELECT id, user_id, name, tag, persona, avatar, speech_style')) {
+        if (sql.includes('SELECT id, user_id, name, tag, persona, rules, avatar, speech_style')) {
           assert.deepEqual(params, [6, 1]);
           return [[{
             id: 6,
@@ -151,6 +151,7 @@ test('GET /api/roles/:id/identity-pack exports role identity without credentials
             name: '小白',
             tag: '陪伴',
             persona: '温柔、清醒',
+            rules: '先听完再回答。',
             speech_style: 'natural',
             avatar: '/api/media/avatar-x.png',
             portrait_id: 0,
@@ -191,7 +192,8 @@ test('GET /api/roles/:id/identity-pack exports role identity without credentials
     assert.equal(response.status, 200);
     assert.equal(payload.success, true);
     assert.equal(payload.item.identity.name, '小白');
-    assert.equal(payload.item.version, '1.1.0');
+    assert.equal(payload.item.version, '1.2.0');
+    assert.equal(payload.item.identity.rules, '先听完再回答。');
     assert.equal(payload.item.identity.avatar, '/api/media/avatar-x.png');
     assert.deepEqual(payload.item.current, { mood: 76, intimacy: 88 });
     assert.equal(payload.item.dynamic_life.enabled, true);
@@ -464,9 +466,9 @@ test('PATCH /api/roles/:id allows clearing relationship tag', async () => {
   });
 });
 
-test('POST /api/roles 只填名字就能创建，人设可以留空（引导式新建 2026/10/1）', async () => {
+test('POST /api/roles allows optional persona and saves custom rules', async () => {
   const created = {
-    id: 99, user_id: 1, char_key: 'role-selftest', name: '核心开关自测', tag: '', persona: '',
+    id: 99, user_id: 1, char_key: 'role-selftest', name: '核心开关自测', tag: '', persona: '', rules: '先直接回应问题。',
     avatar: '', mood: 80, intimacy: 50, speech_style: 'natural', core_enabled: 1,
     is_active: 1, is_deleted: 0, delete_after: null, created_at: '2026-10-01 23:00:00'
   };
@@ -490,30 +492,32 @@ test('POST /api/roles 只填名字就能创建，人设可以留空（引导式�
     const response = await fetch(`${baseUrl}/api/roles`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: '核心开关自测', core_enabled: true })
+      body: JSON.stringify({ name: '核心开关自测', core_enabled: true, rules: '先直接回应问题。' })
     });
     const payload = await response.json();
 
-    assert.equal(response.status, 201, '只填名字必须能创建');
+    assert.equal(response.status, 201, '名字必填，人设和规则为选填');
     assert.equal(payload.item.name, '核心开关自测');
+    assert.equal(payload.item.rules, '先直接回应问题。');
     assert.equal(payload.item.core_enabled, 1, '开关要能存进去');
   });
 
-  // 列顺序：… moment_response_enabled, core_enabled, core_packs, is_active
+  // 列顺序：… persona, rules, avatar … moment_response_enabled, core_enabled, core_packs, is_active
   // （2026/10/6 在 core_enabled 之后插入了 core_packs，所以 is_active 的下标往后挪了一位）
   assert.ok(insertParams, 'INSERT 要真的跑过');
-  assert.equal(insertParams[23], 1, 'core_enabled 要以 1 落库');
+  assert.equal(insertParams[24], 1, 'core_enabled 要以 1 落库');
   assert.equal(insertParams[4], '', '人设留空就该是空字符串');
+  assert.equal(insertParams[5], '先直接回应问题。', '自定义规则应单独保存');
   /**
    * ★ 2026/10/6：只传 core_enabled（老前端）时，必须**全勾** 5 个规则包 ——
    * 等价于改动前的行为，绝不能因为新增了 core_packs 就把她的规则静默丢掉。
    */
   assert.deepEqual(
-    JSON.parse(insertParams[24]),
+    JSON.parse(insertParams[25]),
     { shield: true, companion: true, nickname: true, xiaobai_state: true, local_time: true },
     '只传 core_enabled=true 时要回退成"全勾"，行为与改动前一致'
   );
-  assert.equal(insertParams[25], 1, '库里还没有角色时，新建的她就是当前角色');
+  assert.equal(insertParams[26], 1, '库里还没有角色时，新建的她就是当前角色');
 });
 
 test('POST /api/roles/:id/portrait stores uploaded portrait image for current user', async () => {
